@@ -1,0 +1,92 @@
+{
+  "appName": "Khabardar",
+  "tagline": "Report corruption. Stay anonymous.",
+  "onboarding": {
+    "title": "You are anonymous here",
+    "explainer": "Khabardar never asks for your name, phone number, or email. A random identity key is created on this device and never leaves it. Reports are anchored to a public blockchain as anonymous fingerprints — the content itself stays encrypted.",
+    "createIdentity": "Create anonymous identity",
+    "creating": "Creating identity…",
+    "yourCodename": "Your codename",
+    "continue": "Continue"
+  },
+  "home": {
+    "title": "Reports",
+    "empty": "No reports yet. Anything you compose stays encrypted on this device until you submit it.",
+    "newReport": "New report",
+    "karma": "Karma",
+    "codename": "Codename"
+  },
+  "compose": {
+    "title": "New report",
+    "categoryLabel": "Category",
+    "bodyLabel": "What happened?",
+    "bodyPlaceholder": "Describe the incident. Do not include your own name or details that identify you.",
+    "locationLabel": "Area (coarse)",
+    "locationPlaceholder": "e.g. tsj9 — a 4-character geohash, city level only",
+    "locationHelp": "Only a coarse area code is recorded — never your precise location.",
+    "evidenceLabel": "Evidence",
+    "addPhoto": "Add photo",
+    "evidenceNote": "Metadata (EXIF, GPS, device info) is stripped and the file is encrypted before it is stored.",
+    "saveDraft": "Save draft",
+    "review": "Review & submit"
+  },
+  "review": {
+    "title": "Review & submit",
+    "warningTitle": "Before you submit",
+    "warning": "Re-read your report. Remove anything that could identify you: names of colleagues only you work with, dates only you know, document numbers assigned to you.",
+    "hashNote": "Only an encrypted fingerprint (hash) of this report goes on the blockchain. The report text and evidence never leave this device unencrypted.",
+    "gasNote": "Submission is free — gas is sponsored. You do not need any cryptocurrency.",
+    "submit": "Submit anonymously",
+    "submitting": "Anchoring on Linea…"
+  },
+  "status": {
+    "title": "Report status",
+    "draft": "Draft — stored encrypted on this device",
+    "submitting": "Submitting…",
+    "anchored": "Anchored on-chain",
+    "failed": "Submission failed",
+    "txHash": "Transaction",
+    "reportHash": "Report fingerprint",
+    "onChainId": "On-chain ID",
+    "viewOnExplorer": "View on Lineascan",
+    "retry": "Retry submission"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "english": "English",
+    "hindi": "हिन्दी",
+    "dangerZone": "Danger zone",
+    "panicTitle": "Panic delete",
+    "panicExplainer": "Immediately and permanently erases all drafts, evidence files, and your identity key from this device. On-chain fingerprints cannot be deleted, but nothing links them to this device once local data is gone.",
+    "panicButton": "Erase everything now",
+    "panicConfirmTitle": "Erase everything?",
+    "panicConfirmBody": "This cannot be undone. All drafts, evidence, and your identity will be destroyed.",
+    "panicConfirmYes": "Erase",
+    "panicConfirmNo": "Cancel",
+    "panicDone": "All local data erased."
+  },
+  "moderation": {
+    "title": "Moderation",
+    "stub": "Moderation & verification workflow (v0 stub). Moderators will review anchored reports, cross-check evidence, and mark them credible — raising the reporter's karma on-chain. Planned: karma-weighted community juries instead of a single moderator."
+  },
+  "tips": {
+    "title": "Tip channel",
+    "stub": "End-to-end encrypted tip channel to journalists and NGOs (v0 stub). Planned: recipients publish a public key; tips are sealed to that key on-device, relayed over an anonymising transport (Tor / mixnet), and readable only by the recipient."
+  },
+  "category": {
+    "bribery": "Bribery",
+    "embezzlement": "Embezzlement",
+    "nepotism": "Nepotism",
+    "procurementFraud": "Procurement fraud",
+    "abuseOfPower": "Abuse of power",
+    "other": "Other"
+  },
+  "common": {
+    "back": "Back",
+    "settings": "Settings",
+    "moderation": "Moderation",
+    "tips": "Tip channel",
+    "error": "Something went wrong"
+  }
+}

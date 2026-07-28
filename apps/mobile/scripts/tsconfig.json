@@ -1,0 +1,12 @@
+{
+  "//": "Standalone tsconfig for headless node scripts (ts-node). The app's own",
+  "//2": "tsconfig targets react-native/jsx, which ts-node can't run directly.",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "target": "ES2020",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "strict": false
+  }
+}

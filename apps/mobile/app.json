@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Khabardar",
+    "slug": "khabardar",
+    "version": "0.1.0",
+    "scheme": "khabardar",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "org.khabardar.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Attach photo evidence to a report. Photos are stripped of metadata and encrypted on this device before anything leaves it.",
+        "NSPhotoLibraryUsageDescription": "Attach photo evidence to a report. Photos are stripped of metadata and encrypted on this device before anything leaves it.",
+        "NSMicrophoneUsageDescription": "Record audio evidence. Recordings are encrypted on this device."
+      }
+    },
+    "android": {
+      "package": "org.khabardar.app",
+      "blockedPermissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-localization"],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
