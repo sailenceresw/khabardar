@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { AnonymousReport } from "@khabardar/shared";
-import { REPORT_CATEGORY_KEYS } from "@khabardar/shared";
+import { REPORT_CATEGORY_KEYS, VISIBILITY_KEYS } from "@khabardar/shared";
 import { useApp } from "../../src/state/AppContext";
 import { loadReport } from "../../src/drafts";
-import { submitReportOnChain } from "../../src/submitReport";
+import { publishReport } from "../../src/submitReport";
 import { Body, Button, Card, Screen, Title } from "../../src/ui";
 import { colors } from "../../src/theme";
 import { t } from "../../src/i18n";
@@ -33,11 +33,12 @@ export default function ReviewScreen() {
     await upsertReport(submittingReport);
 
     try {
-      const { reportHash, relay } = await submitReportOnChain(report);
+      const { reportHash, cid, relay } = await publishReport(report);
       const anchored: AnonymousReport = {
         ...report,
         status: "anchored",
         reportHash,
+        cid,
         txHash: relay.txHash,
         onChainReportId: relay.onChainReportId,
         anchoredAt: Date.now(),
@@ -72,6 +73,8 @@ export default function ReviewScreen() {
         <Body dim>
           {t("compose.evidenceLabel")}: {report.evidence.length}
         </Body>
+        <Body dim>{t("compose.visibilityLabel")}</Body>
+        <Body>{t(VISIBILITY_KEYS[report.visibility])}</Body>
       </Card>
 
       <Card>

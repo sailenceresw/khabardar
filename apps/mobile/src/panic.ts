@@ -2,6 +2,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { destroyIdentity } from "./identity";
 import { deleteAllReports } from "./drafts";
 import { deleteAllEvidence } from "./evidence";
+import { clearMirror } from "./feed/localChainMirror";
+import { clearModerationLog } from "./moderation";
+import { deleteAllTips } from "./tips";
 
 /**
  * Panic delete: irreversibly wipe every trace of Khabardar from this device —
@@ -16,6 +19,9 @@ import { deleteAllEvidence } from "./evidence";
 export async function panicDelete(): Promise<void> {
   await deleteAllEvidence();
   await deleteAllReports();
+  await deleteAllTips();
+  await clearModerationLog();
+  await clearMirror();
   await destroyIdentity();
 
   const remaining = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith("khabardar."));

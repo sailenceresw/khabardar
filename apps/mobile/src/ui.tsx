@@ -8,7 +8,9 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
+import { VerificationTier } from "@khabardar/shared";
 import { colors, radius, spacing } from "./theme";
+import { t } from "./i18n";
 
 export function Screen({ children, scroll = true }: { children: React.ReactNode; scroll?: boolean }) {
   if (!scroll) return <View style={styles.screen}>{children}</View>;
@@ -71,6 +73,23 @@ export function Button({
       )}
     </Pressable>
   );
+}
+
+/**
+ * Verification tier badge. The visual weight deliberately tracks credibility:
+ * an unverified report must never read as endorsed, and a disputed one must be
+ * unmistakable.
+ */
+export function TierBadge({ tier }: { tier: VerificationTier }) {
+  const map: Record<VerificationTier, { tone: "dim" | "info" | "success" | "danger"; key: string }> = {
+    [VerificationTier.Unverified]: { tone: "dim", key: "tier.unverified" },
+    [VerificationTier.UnderReview]: { tone: "info", key: "tier.underReview" },
+    [VerificationTier.CommunityCorroborated]: { tone: "info", key: "tier.corroborated" },
+    [VerificationTier.Verified]: { tone: "success", key: "tier.verified" },
+    [VerificationTier.Disputed]: { tone: "danger", key: "tier.disputed" },
+  };
+  const { tone, key } = map[tier] ?? map[VerificationTier.Unverified];
+  return <Badge label={t(key)} tone={tone} />;
 }
 
 export function Badge({ label, tone }: { label: string; tone: "success" | "info" | "danger" | "dim" }) {

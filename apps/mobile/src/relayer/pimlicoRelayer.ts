@@ -1,5 +1,4 @@
 import { http, createPublicClient, type Hex } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import { lineaSepolia } from "viem/chains";
 import { ACTIVE_CHAIN, ENTRYPOINT_V07 } from "@khabardar/shared";
 import { encodeSubmitReportCall } from "./encoding";
@@ -44,11 +43,14 @@ export class PimlicoRelayer implements GaslessRelayer {
   ) {}
 
   async submitReport(params: SubmitReportParams): Promise<RelayResult> {
-    const owner = privateKeyToAccount(params.privateKey);
+    const owner = params.signer;
     const callData = encodeSubmitReportCall(
       params.reportHash,
+      params.cid,
       params.category,
-      params.coarseGeohash
+      params.visibility,
+      params.coarseGeohash,
+      params.entityTag
     );
 
     const publicClient = createPublicClient({
@@ -75,9 +77,7 @@ export class PimlicoRelayer implements GaslessRelayer {
 
     // -- Integration point 3: sign userOpHash with the device key -----------
     const userOpHash = sponsorship?.userOpHash as Hex | undefined;
-    const signature = await owner.signMessage({
-      message: { raw: userOpHash ?? callData },
-    });
+    const signature = await owner.signMessage({ raw: userOpHash ?? callData });
 
     // -- Integration point 4: submit to the bundler -------------------------
     const submittedHash = (await this.rpc(this.withKey(this.config.bundlerUrl), "eth_sendUserOperation", [

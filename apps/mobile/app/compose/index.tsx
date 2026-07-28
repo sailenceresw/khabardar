@@ -1,7 +1,14 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, Alert, Platform } from "react-native";
 import { useRouter } from "expo-router";
-import { ReportCategory, REPORT_CATEGORY_KEYS, type AnonymousReport, type EvidenceItem } from "@khabardar/shared";
+import {
+  ReportCategory,
+  REPORT_CATEGORY_KEYS,
+  VISIBILITY_KEYS,
+  Visibility,
+  type AnonymousReport,
+  type EvidenceItem,
+} from "@khabardar/shared";
 import { useApp } from "../../src/state/AppContext";
 import { pickAndSecurePhoto, deleteEvidence } from "../../src/evidence";
 import { isValidCoarseGeohash, truncateGeohash } from "../../src/geo";
@@ -18,7 +25,9 @@ export default function ComposeScreen() {
   const { upsertReport } = useApp();
 
   const [category, setCategory] = useState<ReportCategory>(ReportCategory.Bribery);
+  const [visibility, setVisibility] = useState<Visibility>(Visibility.Public);
   const [body, setBody] = useState("");
+  const [entityName, setEntityName] = useState("");
   const [geohash, setGeohash] = useState("");
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -50,6 +59,8 @@ export default function ComposeScreen() {
       coarseGeohash: truncateGeohash(geohash.trim()),
       evidence,
       createdAt: Date.now(),
+      visibility,
+      entityName: entityName.trim() || undefined,
     };
   }
 
@@ -84,6 +95,26 @@ export default function ComposeScreen() {
       </Card>
 
       <Card>
+        <Body dim>{t("compose.visibilityLabel")}</Body>
+        <View style={styles.chips}>
+          {[Visibility.Public, Visibility.JournalistsOnly].map((v) => (
+            <Pressable key={v} onPress={() => setVisibility(v)}>
+              <View style={[styles.chip, visibility === v && styles.chipActive]}>
+                <Text style={[styles.chipText, visibility === v && styles.chipTextActive]}>
+                  {t(VISIBILITY_KEYS[v])}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+        <Body dim>
+          {visibility === Visibility.Public
+            ? t("compose.visibilityPublicHelp")
+            : t("compose.visibilityJournalistsHelp")}
+        </Body>
+      </Card>
+
+      <Card>
         <Body dim>{t("compose.bodyLabel")}</Body>
         <TextInput
           style={styles.textArea}
@@ -94,6 +125,18 @@ export default function ComposeScreen() {
           value={body}
           onChangeText={setBody}
         />
+      </Card>
+
+      <Card>
+        <Body dim>{t("compose.entityLabel")}</Body>
+        <TextInput
+          style={styles.input}
+          placeholder={t("compose.entityPlaceholder")}
+          placeholderTextColor={colors.textDim}
+          value={entityName}
+          onChangeText={setEntityName}
+        />
+        <Body dim>{t("compose.entityHelp")}</Body>
       </Card>
 
       <Card>

@@ -10,6 +10,7 @@ import {
   bytesToUtf8,
   type EncryptedBlob,
 } from "./cryptoUtils";
+import { safeJsonParse } from "./safeJson";
 
 // Report bodies are encrypted at rest with a device-local key held in the
 // secure keystore; AsyncStorage only ever sees ciphertext.
@@ -53,7 +54,8 @@ export async function saveReport(report: AnonymousReport): Promise<void> {
 export async function loadReport(id: string): Promise<AnonymousReport | null> {
   const raw = await AsyncStorage.getItem(DRAFT_PREFIX + id);
   if (!raw) return null;
-  const stored = JSON.parse(raw) as StoredReport;
+  const stored = safeJsonParse<StoredReport>(raw);
+  if (!stored) return null;
   const key = await getDraftKey();
   const { encryptedBody, ...rest } = stored;
   return { ...rest, body: bytesToUtf8(decrypt(encryptedBody, key)) };
@@ -73,7 +75,7 @@ export async function deleteReport(id: string): Promise<void> {
 
 async function getReportIds(): Promise<string[]> {
   const raw = await AsyncStorage.getItem(DRAFTS_INDEX);
-  return raw ? (JSON.parse(raw) as string[]) : [];
+  return safeJsonParse<string[]>(raw) ?? [];
 }
 
 export async function deleteAllReports(): Promise<void> {

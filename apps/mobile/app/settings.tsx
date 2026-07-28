@@ -60,6 +60,24 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
+      <Card>
+        <Body dim>{t("recovery.title")}</Body>
+        <Button
+          label={t("recovery.open")}
+          variant="secondary"
+          onPress={() => router.push("/recovery")}
+        />
+      </Card>
+
+      <Card>
+        <Body dim>{t("wallet.title")}</Body>
+        <Button
+          label={t("wallet.open")}
+          variant="secondary"
+          onPress={() => router.push("/wallet")}
+        />
+      </Card>
+
       <Card style={{ borderColor: colors.danger }}>
         <Title>{t("settings.panicTitle")}</Title>
         <Body dim>{t("settings.panicExplainer")}</Body>

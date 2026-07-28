@@ -3,7 +3,9 @@ import * as ImageManipulator from "expo-image-manipulator";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { EvidenceItem } from "@khabardar/shared";
 import { encrypt, sha256Hex, type EncryptedBlob } from "./cryptoUtils";
+import { getContentStore } from "./content";
 import { getEvidenceKey } from "./drafts";
+import { safeJsonParse } from "./safeJson";
 
 const EVIDENCE_PREFIX = "khabardar.evidence.";
 
@@ -54,13 +56,47 @@ export async function pickAndSecurePhoto(): Promise<EvidenceItem | null> {
   };
 }
 
+/**
+ * Push an encrypted evidence blob to the decentralized content layer and
+ * return its CID.
+ *
+ * The blob is already ciphertext before it gets here, and it is encrypted
+ * under the device evidence key — which is deliberately NOT shipped to the
+ * content layer. So an evidence CID is useless to anyone who fetches it unless
+ * the reporter also shares the key (a public report publishes it; a restricted
+ * one wraps it to named recipients).
+ *
+ * This is what removes the assumption of a centralized backend: evidence lives
+ * wherever the content store points, and the chain only ever holds a hash.
+ */
+export async function uploadEvidence(item: EvidenceItem): Promise<EvidenceItem> {
+  if (item.cid) return item;
+
+  const blob = await loadEvidenceBlob(item);
+  if (!blob) throw new Error(`Evidence ${item.id} missing locally`);
+
+  // Evidence reuses the report's keyring rather than carrying its own, so the
+  // stored keyring here is a placeholder that grants nothing on its own.
+  const put = await getContentStore().put({
+    v: 1,
+    blob,
+    keyring: { mode: "wrapped", recipients: [] },
+  });
+
+  return { ...item, cid: put.cid };
+}
+
+export async function uploadAllEvidence(items: EvidenceItem[]): Promise<EvidenceItem[]> {
+  return Promise.all(items.map(uploadEvidence));
+}
+
 export async function deleteEvidence(item: EvidenceItem): Promise<void> {
   await AsyncStorage.removeItem(item.encryptedUri);
 }
 
 export async function loadEvidenceBlob(item: EvidenceItem): Promise<EncryptedBlob | null> {
   const raw = await AsyncStorage.getItem(item.encryptedUri);
-  return raw ? (JSON.parse(raw) as EncryptedBlob) : null;
+  return safeJsonParse<EncryptedBlob>(raw);
 }
 
 export async function deleteAllEvidence(): Promise<void> {

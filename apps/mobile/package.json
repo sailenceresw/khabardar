@@ -14,7 +14,11 @@
   "dependencies": {
     "@khabardar/shared": "*",
     "@noble/ciphers": "^1.0.0",
+    "@noble/curves": "^1.6.0",
+    "@noble/hashes": "^1.5.0",
     "@react-native-async-storage/async-storage": "1.23.1",
+    "@scure/bip39": "^1.4.0",
+    "@walletconnect/sign-client": "^2.23.10",
     "expo": "~52.0.0",
     "expo-constants": "~17.0.3",
     "expo-crypto": "~14.0.1",

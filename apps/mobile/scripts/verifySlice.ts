@@ -49,6 +49,7 @@ const {
 } = require("../src/cryptoUtils");
 const { encodeSubmitReportCall } = require("../src/relayer/encoding");
 const { MockRelayer } = require("../src/relayer/mockRelayer");
+const { entityTagFor, normalizeEntityName, ZERO_TAG } = require("../src/entityTag");
 const { ACTIVE_CHAIN } = require("@khabardar/shared");
 const { generatePrivateKey, privateKeyToAccount } = require("viem/accounts");
 
@@ -99,19 +100,53 @@ async function main() {
   assert(reportHash === reportHash2, "report hash must be deterministic");
   console.log("   deterministic                 : OK");
 
-  // 5. ABI-encoded submitReport() calldata (what the UserOp will carry)
-  const calldata = encodeSubmitReportCall(reportHash, category, coarseGeohash);
-  assert(calldata.startsWith("0x"), "calldata must be hex");
-  // selector(4) + 3 * 32-byte words = 4 + 96 bytes = 200 hex chars + 0x
-  assert(calldata.length === 2 + (4 + 96) * 2, "calldata must be selector + 3 words");
-  console.log("5. submitReport() calldata       :", calldata.slice(0, 34) + "…", `(${(calldata.length - 2) / 2} bytes)`);
+  // 5. Blinded entity tag — same office must produce the same tag, and the
+  // office name must never appear in the tag itself.
+  const entityTag = entityTagFor("Block Development Office, Sitapur");
+  const entityTagVariant = entityTagFor("  block development office   sitapur ");
+  assert(entityTag === entityTagVariant, "entity tag must be stable across spelling variance");
+  assert(entityTagFor("") === ZERO_TAG, "empty entity name must yield the zero tag");
+  assert(
+    !entityTag.toLowerCase().includes(Buffer.from("sitapur").toString("hex")),
+    "entity tag must not embed the plaintext name"
+  );
+  console.log("5. blinded entity tag            :", entityTag);
+  console.log("   stable across variants        : OK");
 
-  // 6. Gasless submit via the mock relayer (real signing, fabricated tx hash)
-  const relay = await new MockRelayer().submitReport({ reportHash, category, coarseGeohash, privateKey });
+  const cid = "bafymockcontentidentifier0000000000000000000000000001";
+
+  // 6. ABI-encoded submitReport() calldata (what the UserOp will carry)
+  const calldata = encodeSubmitReportCall(
+    reportHash,
+    cid,
+    category,
+    0 /* Visibility.Public */,
+    coarseGeohash,
+    entityTag
+  );
+  assert(calldata.startsWith("0x"), "calldata must be hex");
+  assert(calldata.length > 2 + 4 * 2, "calldata must carry a selector plus args");
+  console.log("6. submitReport() calldata       :", calldata.slice(0, 34) + "…", `(${(calldata.length - 2) / 2} bytes)`);
+
+  // 7. Gasless submit via the mock relayer (real signing, fabricated tx hash)
+  const signer = {
+    address: account.address,
+    kind: "device" as const,
+    signMessage: (message: { raw: `0x${string}` }) => account.signMessage({ message }),
+  };
+  const relay = await new MockRelayer().submitReport({
+    reportHash,
+    cid,
+    category,
+    visibility: 0,
+    coarseGeohash,
+    entityTag,
+    signer,
+  });
   assert(/^0x[0-9a-f]{64}$/.test(relay.txHash), "relay txHash must be 32-byte hex");
   assert(relay.simulated === true, "mock relay must be flagged simulated");
   assert(relay.explorerUrl.includes(relay.txHash), "explorer URL must reference tx hash");
-  console.log("6. gasless relay result          :");
+  console.log("7. gasless relay result          :");
   console.log("     txHash                       :", relay.txHash);
   console.log("     onChainReportId              :", relay.onChainReportId);
   console.log("     explorerUrl                  :", relay.explorerUrl);

@@ -5,9 +5,12 @@ tamper-proof fingerprint of it on the Linea blockchain — without revealing who
 without holding any cryptocurrency, and without the app ever learning your name, phone
 number, or email.
 
-> **Status: v0 scaffold.** The app shell, anonymity primitives, contracts, and one
-> end-to-end slice (compose → encrypt/hash → gasless submit) are wired. Several
-> features are deliberate stubs — see [Roadmap](#roadmap--current-stubs).
+> **Status: v0.** Working end-to-end: compose → encrypt → upload to the content layer →
+> anchor hash + CID via a gasless transaction → read back in a public feed with an
+> integrity check. Also wired: entity clustering, a moderation review queue, an
+> encrypted tip channel, BIP-39 recovery, and an optional WalletConnect identity.
+> The relayer and content store default to local mocks so everything runs with **no
+> credentials**. See [Roadmap](#roadmap--current-stubs) for what is still missing.
 
 ---
 
@@ -17,8 +20,13 @@ number, or email.
 khabardar/
 ├── apps/
 │   └── mobile/            # Expo (React Native) app — iOS, Android, web preview
-│       ├── app/           # expo-router screens
-│       └── src/           # identity, crypto, evidence, relayer, i18n
+│       ├── app/           # expo-router screens (feed, compose, moderation, tips, …)
+│       └── src/
+│           ├── content/   # encrypted blob store (IPFS/mock) + ECIES key wrapping
+│           ├── feed/      # network index, demo seed, fetch+decrypt+integrity check
+│           ├── relayer/    # gasless submission (mock / Pimlico)
+│           ├── wallet/     # optional WalletConnect v2
+│           └── …          # identity, recovery, crypto, evidence, moderation, tips, i18n
 ├── packages/
 │   ├── contracts/         # Hardhat + Solidity (ReportRegistry.sol) → Linea
 │   └── shared/            # chain config, ABI, TypeScript types shared app↔contracts
@@ -82,9 +90,79 @@ Concrete guarantees in this scaffold:
   - **RLN-style rate limiting:** planned — sybil-resistant per-epoch submission limits
     to keep a gasless endpoint spam-free (see Roadmap).
 - **`ReportRegistry.sol`** stores per report: `reportHash` (fingerprint of the encrypted
-  bundle), category, coarse geohash, timestamp, pseudonymous reporter address. A
-  moderator role (v0: single address; later: karma-weighted jury) marks reports
-  credible, adjusting reporter karma.
+  bundle), `cid` (pointer to that bundle in the content layer), category, visibility,
+  verification tier, coarse geohash, blinded `entityTag`, timestamp, and the
+  pseudonymous reporter address. A moderator role (v0: single address; later:
+  karma-weighted jury) sets the tier, adjusting reporter karma.
+
+### Content layer — how reports become readable
+
+The chain holds a hash and a pointer; the bytes live elsewhere. Without this, a report
+is a diary entry nobody else can read.
+
+| Layer | Holds |
+|---|---|
+| Device | plaintext, only while composing |
+| Content store (IPFS/Arweave) | the **encrypted** bundle + evidence blobs |
+| Chain | `reportHash` + `cid` + coarse metadata |
+
+Each report gets a **fresh content key**. What happens to that key is the whole
+visibility model:
+
+- **Public** — the key is published in the bundle's keyring, so anyone can read it.
+- **Journalists only** — the key is wrapped per recipient with **ECIES**
+  (ephemeral secp256k1 ECDH → HKDF-SHA256 → AES-256-GCM). Only a listed private key
+  opens it; everyone else sees the report as locked.
+
+Because `reportHash` covers the *encrypted* bundle, any reader can recompute it and
+compare against the chain. The feed does this on every fetch and shows
+`⚠️ Content does NOT match the on-chain fingerprint` when it fails — so a hostile
+gateway that swaps or edits a bundle is detected rather than believed. Malformed
+responses degrade to "unavailable" instead of throwing, so a bad gateway cannot crash
+the reader either.
+
+`EXPO_PUBLIC_CONTENT_STORE` selects `mock` (default, local, no credentials) or `ipfs`.
+
+### Linking reports without deanonymizing anyone
+
+Several people reporting the same office is the strongest signal the system has. Doing
+that naively means publishing the accused entity's name on-chain.
+
+Instead, the entity name **stays on the device** and only
+`keccak256("khabardar/entity-tag/v1" | normalized(name))` is published. Identical
+entities produce identical tags, so reports cluster (`reportsForEntity`), while the tag
+itself carries nothing about who filed it. Normalization is aggressive, so
+`"Block Development Office, Sitapur"` and `"block development office sitapur"` collide.
+
+**Honest limit:** this is not hiding the entity from a determined observer — the set of
+public offices is enumerable, so tags are reversible by dictionary attack. That is an
+accepted trade-off: *the accused is not the secret, the reporter is.* What it does buy
+is keeping entity names out of restricted reports entirely and out of casual chain
+scraping.
+
+Separately, `corroborate(reportId)` lets a witness back a report; the contract blocks
+self-corroboration and double-voting, and auto-promotes to `CommunityCorroborated` at
+3 independent corroborations. **This is only as sybil-resistant as the caller set** —
+production must gate it behind proof-of-personhood (RLN / anonymous credentials).
+
+### Identity: three options, one default
+
+| Mode | How | Anonymity |
+|---|---|---|
+| **Device key** (default) | secp256k1 key generated on-device from a BIP-39 phrase | Strongest — tied to nothing else |
+| **Recovery phrase** | Same key, restorable on a new device from 12 words | Same as above |
+| **WalletConnect** (opt-in) | Sign with an external wallet | **Weaker** — see below |
+
+There is deliberately **no email/phone login**. An auth provider is one subpoena away
+from deanonymizing every reporter; a BIP-39 phrase gives the same "don't lose
+everything with your phone" benefit with nothing held by anyone but the user.
+
+**WalletConnect** is available for people who already manage keys, but it is never the
+default and never required. The screen shows an unmissable warning *above* the connect
+control, because a reused wallet carries a public history — exchange withdrawals tie it
+to KYC, and reusing it later can retroactively expose past reports. Requires
+`EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID`; without it the screen says so and the device key
+keeps working.
 
 ### Gasless flow (nobody holds ETH)
 
@@ -171,29 +249,84 @@ English + Hindi (`apps/mobile/src/i18n/`). Locale auto-detects from the device a
 be switched in Settings. All UI strings go through `t()` — add a language by dropping a
 new JSON file.
 
+## Verification & moderation
+
+Reports move through explicit tiers, and **nothing is presented as credible until it
+has moved past `Unverified`**:
+
+`Unverified → UnderReview → CommunityCorroborated → Verified` (or `Disputed`)
+
+The review queue (`/moderation`) lists everything not yet adjudicated, oldest first,
+with each report's integrity-check result. A moderator can change a report's **tier**
+but can **never edit or delete the report** — the content is anchored on-chain, so
+moderation adds judgement on top of an immutable record rather than rewriting it. Every
+decision is logged with a reason.
+
+Two things about this are deliberately unfinished and should not be glossed over:
+
+- The in-app "moderator mode" toggle is a **local dev affordance**. The real gate is the
+  contract's `onlyModerator` check; the toggle grants nothing on-chain.
+- The decision log is **on-device only**. Production must publish decisions (or their
+  hashes) so moderators are auditable by the same public being asked to trust them. A
+  moderation system nobody can audit is just censorship with extra steps.
+
+On detecting AI-generated reports: **do not ship a naive AI-text detector.** They have
+high false-positive rates on second-language English writers, which describes a large
+share of the intended users — it would systematically silence exactly the people this
+exists for. The defensible stack is provenance (C2PA capture signatures), personhood
+(RLN / anonymous credentials), and corroboration. AI belongs in triage, never as judge.
+
+## Tip channel
+
+`/tips` sends an end-to-end encrypted message to a named journalist or NGO. Unlike a
+report, a tip is **never anchored on-chain** — it is a private message, not a public
+record. Sealing uses the same ECIES construction as restricted bundles, so only the
+recipient's private key opens it, and only a short preview + digest stay on the device.
+
+Three gaps to close before anyone relies on it, all documented in `src/tips.ts`:
+
+- **Transport.** Tips are sealed but not delivered over an anonymising transport yet.
+  Network metadata is what deanonymizes people, not ciphertext.
+- **Padding.** Message length currently leaks; tips should be padded to fixed buckets.
+- **Forward secrecy.** A recipient key compromise retroactively opens past tips.
+
+Recipient keys in `src/content/recipients.ts` are **demo placeholders**. Production must
+publish them somewhere independently verifiable (DNS TXT, a well-known URI on the
+organisation's own domain, or an on-chain registry) and pin them in-app, so a compromised
+backend cannot silently swap in its own key and read every restricted report.
+
 ## Roadmap / current stubs
 
-- **Moderation workflow** — screen stub; contract has single-moderator `verifyReport`.
-  Next: karma-weighted jury, moderator dashboard reading `ReportSubmitted` events.
-- **Tip channel to journalists/NGOs** — screen stub. Next: recipients publish an
-  X25519 public key; tips sealed on-device, delivered over anonymising transport.
-- **Tor/onion transport** — not yet wired. Next: route relayer + RPC traffic through
-  Tor (Arti has mobile bindings) or an onion-routed proxy; SecureDrop treats this as
-  non-negotiable and so should we before any mainnet launch.
-- **RLN rate limiting** — borrow Status Network's Rate-Limiting Nullifier pattern so
-  one device can't flood the sponsored endpoint (protects the paymaster budget and
-  feed quality without identifying users).
-- **Evidence storage** — v0 keeps encrypted blobs in AsyncStorage; production should
-  use expo-file-system streaming encryption + upload of encrypted bundles to
-  operator-run storage (the on-chain hash commits to the bundle either way).
+- **Tor/onion transport** — not yet wired, and the largest remaining gap. Route relayer,
+  RPC, and content-store traffic through Tor (Arti has mobile bindings). SecureDrop
+  treats this as non-negotiable and so should we before any mainnet launch.
+- **RLN rate limiting / proof-of-personhood** — needed to make corroboration and karma
+  actually sybil-resistant, and to keep a gasless endpoint from being drained.
+- **Karma-weighted jury** — replace the single moderator address; stake karma on
+  verdicts so bad reviewers lose standing.
+- **Real indexer** — `ChainNetworkIndex` scans `eth_getLogs`, which will not survive
+  real volume. Swap for Ponder/subgraph behind the same `NetworkIndex` interface.
+- **Counterfactual smart account** — `PimlicoRelayer` still uses the owner EOA as
+  `sender`; the SimpleAccount factory derivation is marked as integration point 1.
+- **Evidence at scale** — blobs are encrypted and uploaded, but large files need
+  expo-file-system streaming rather than AsyncStorage + base64.
 - **Audio/document evidence** — photo pipeline is wired; audio/docs follow the same
-  strip → encrypt → hash path.
-- **Offline drafts** — drafts already work offline (local encrypted storage);
-  submission queueing/retry on reconnect is not yet automatic.
+  strip → encrypt → hash → upload path.
+- **Offline drafts** — drafts work offline already; submission queueing/retry on
+  reconnect is not yet automatic.
+- **Stealth mode** — disguise UI, duress PIN, screenshot blocking. A recognisable
+  anti-corruption app on a seized phone is itself evidence against its user.
 
 ## Security & threat-model caveats (v0)
 
 - The web build's SecureStore fallback is localStorage — **dev preview only**.
-- `MockRelayer` fabricates tx hashes; nothing is on-chain until a real relayer is configured.
+- `MockRelayer` fabricates tx hashes and `MockContentStore` writes locally; nothing is
+  on-chain or on IPFS until real providers are configured.
+- **No anonymising transport yet.** Network-level metadata (your IP contacting a relayer,
+  a gateway, or an RPC) is currently the weakest link in the whole design and would
+  deanonymize a targeted user regardless of how good the cryptography is.
+- Corroboration is only as sybil-resistant as the caller set until RLN lands.
+- Entity tags are reversible by dictionary attack — see the trade-off note above.
 - A single moderator address is a centralization point — acceptable for testnet only.
+- Demo recipient keys and sample feed rows must be removed before any real deployment.
 - No security audit has been performed. Do not use for real reports yet.

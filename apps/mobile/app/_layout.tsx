@@ -25,6 +25,10 @@ function RootStack() {
       <Stack.Screen name="settings" options={{ title: t("settings.title") }} />
       <Stack.Screen name="moderation" options={{ title: t("moderation.title") }} />
       <Stack.Screen name="tips" options={{ title: t("tips.title") }} />
+      <Stack.Screen name="feed/index" options={{ title: t("feed.title") }} />
+      <Stack.Screen name="feed/[id]" options={{ title: t("feed.reportTitle") }} />
+      <Stack.Screen name="recovery" options={{ title: t("recovery.title") }} />
+      <Stack.Screen name="wallet" options={{ title: t("wallet.title") }} />
     </Stack>
   );
 }

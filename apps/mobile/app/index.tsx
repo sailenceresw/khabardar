@@ -38,6 +38,7 @@ export default function HomeScreen() {
       </Card>
 
       <Button label={t("home.newReport")} onPress={() => router.push("/compose")} />
+      <Button label={t("feed.open")} onPress={() => router.push("/feed")} variant="secondary" />
 
       {reports.length === 0 ? (
         <Card>
