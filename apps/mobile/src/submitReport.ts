@@ -1,4 +1,4 @@
-import type { AnonymousReport, ReportBundle } from "@khabardar/shared";
+import type { AnonymousReport, EvidenceItem, ReportBundle } from "@khabardar/shared";
 import { VerificationTier, Visibility } from "@khabardar/shared";
 import { computeReportHash, encrypt, randomKey, utf8ToBytes } from "./cryptoUtils";
 import { getContentStore } from "./content";
@@ -16,6 +16,12 @@ export interface PublishResult {
   reportHash: `0x${string}`;
   cid: string;
   entityTag: `0x${string}`;
+  /**
+   * Evidence items with their content-layer CIDs filled in. The caller must
+   * persist these back onto the stored report — otherwise the uploads happen
+   * but the device forgets where they went.
+   */
+  evidence: EvidenceItem[];
   relay: RelayResult;
   /** True when the bundle went to the local mock store, not a real network. */
   contentSimulated: boolean;
@@ -132,6 +138,7 @@ export async function publishReport(report: AnonymousReport): Promise<PublishRes
     reportHash,
     cid: put.cid,
     entityTag,
+    evidence,
     relay,
     contentSimulated: put.simulated,
     signerKind: signer.kind,

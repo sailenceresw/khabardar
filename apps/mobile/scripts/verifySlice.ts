@@ -32,9 +32,37 @@ const cryptoStub = {
     return h.buffer.slice(h.byteOffset, h.byteOffset + h.byteLength);
   },
 };
+// ---- React Native / Expo module shims --------------------------------------
+// The evidence + content modules pull in native modules that do not exist off
+// device. These stand-ins are faithful enough to exercise the real logic:
+// AsyncStorage becomes an in-memory Map, SecureStore delegates to it, and the
+// image modules are never called on this path (no picker involved).
+const memStore = new Map<string, string>();
+const asyncStorageStub = {
+  getItem: async (k: string) => (memStore.has(k) ? memStore.get(k)! : null),
+  setItem: async (k: string, v: string) => void memStore.set(k, v),
+  removeItem: async (k: string) => void memStore.delete(k),
+  getAllKeys: async () => [...memStore.keys()],
+  multiRemove: async (keys: string[]) => keys.forEach((k) => memStore.delete(k)),
+};
+const secureStoreStub = {
+  getItemAsync: async (k: string) => asyncStorageStub.getItem(k),
+  setItemAsync: async (k: string, v: string) => asyncStorageStub.setItem(k, v),
+  deleteItemAsync: async (k: string) => asyncStorageStub.removeItem(k),
+};
+
+const SHIMS: Record<string, unknown> = {
+  "expo-crypto": cryptoStub,
+  "@react-native-async-storage/async-storage": { default: asyncStorageStub, ...asyncStorageStub },
+  "expo-secure-store": secureStoreStub,
+  "expo-image-picker": { launchImageLibraryAsync: async () => ({ canceled: true, assets: [] }), MediaTypeOptions: { Images: "Images" } },
+  "expo-image-manipulator": { manipulateAsync: async () => ({ base64: "" }), SaveFormat: { JPEG: "jpeg" } },
+  "react-native": { Platform: { OS: "web" } },
+};
+
 const origLoad = Module._load;
 Module._load = function (request: string, ...rest: unknown[]) {
-  if (request === "expo-crypto") return cryptoStub;
+  if (request in SHIMS) return SHIMS[request];
   return origLoad.call(this, request, ...rest);
 };
 
@@ -50,6 +78,8 @@ const {
 const { encodeSubmitReportCall } = require("../src/relayer/encoding");
 const { MockRelayer } = require("../src/relayer/mockRelayer");
 const { entityTagFor, normalizeEntityName, ZERO_TAG } = require("../src/entityTag");
+const { uploadAllEvidence } = require("../src/evidence");
+const { getContentStore } = require("../src/content");
 const { ACTIVE_CHAIN } = require("@khabardar/shared");
 const { generatePrivateKey, privateKeyToAccount } = require("viem/accounts");
 
@@ -112,6 +142,42 @@ async function main() {
   );
   console.log("5. blinded entity tag            :", entityTag);
   console.log("   stable across variants        : OK");
+
+  // 5b. Evidence upload — encrypted blobs go to the content layer and come
+  // back with CIDs, so the bundle can point at them instead of assuming a
+  // centralized backend.
+  const store = getContentStore();
+  const evBlob = encrypt(fakeEncryptedEvidence, draftKey);
+  await asyncStorageStub.setItem("khabardar.evidence.ev_test", JSON.stringify(evBlob));
+
+  const uploaded = await uploadAllEvidence([
+    {
+      id: "ev_test",
+      kind: "photo",
+      encryptedUri: "khabardar.evidence.ev_test",
+      sha256: evSha,
+      sizeBytes: fakeEncryptedEvidence.length,
+      addedAt: Date.now(),
+    },
+  ]);
+  assert(uploaded.length === 1, "evidence upload must return one item");
+  assert(!!uploaded[0].cid, "uploaded evidence must carry a CID");
+  assert(uploaded[0].sha256 === evSha, "upload must not alter the evidence hash");
+
+  // The CID must actually resolve, and to ciphertext.
+  const fetched = await store.get(uploaded[0].cid);
+  assert(!!fetched, "evidence CID must resolve in the content store");
+  assert(
+    fetched.blob.ciphertext === evBlob.ciphertext,
+    "content store must return the same ciphertext that was uploaded"
+  );
+  console.log("5b. evidence CID                 :", uploaded[0].cid);
+  console.log("    resolves to same ciphertext  : OK");
+
+  // Idempotence: re-uploading an item that already has a CID is a no-op.
+  const again = await uploadAllEvidence(uploaded);
+  assert(again[0].cid === uploaded[0].cid, "re-upload must not mint a new CID");
+  console.log("    re-upload is idempotent      : OK");
 
   const cid = "bafymockcontentidentifier0000000000000000000000000001";
 

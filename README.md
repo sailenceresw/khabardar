@@ -251,21 +251,46 @@ npm install                    # installs all workspaces
 
 # Contracts
 npm run contracts:compile
-npm run contracts:test         # 5 passing
+npm run contracts:test         # 23 passing
 
 # Mobile app (mock relayer — no credentials needed)
-npm run mobile:web             # web preview in browser
+npm run mobile:web             # dev server with hot reload
 npm run mobile:start           # QR code for Expo Go on a device
+
+# Static web build — no file watcher, always starts (see Troubleshooting)
+npm run web:export  --workspace apps/mobile
+npm run web:static  --workspace apps/mobile   # serves dist/ on :8085
 
 # Headless smoke test of the whole submission slice (no simulator/Metro needed)
 npm run verify:slice --workspace apps/mobile
 ```
 
-`verify:slice` runs the real `cryptoUtils` / `encoding` / `MockRelayer` modules
-under Node (with `expo-crypto` shimmed to Node's `crypto`) and asserts the full
-path: encrypt → decrypt round-trip → deterministic keccak256 fingerprint →
-ABI-encoded `submitReport()` calldata → device-key signature → relay result.
-It's the fastest way to confirm the chain-facing logic still works, and is CI-safe.
+`verify:slice` runs the real `cryptoUtils` / `encoding` / `evidence` / `content` /
+`MockRelayer` modules under Node (with `expo-crypto`, AsyncStorage, SecureStore and
+the image modules shimmed) and asserts the full path: encrypt → decrypt round-trip →
+deterministic keccak256 fingerprint → blinded entity tag → evidence upload returning a
+resolvable CID → ABI-encoded `submitReport()` calldata → device-key signature → relay
+result. It's the fastest way to confirm the chain-facing logic still works, and is
+CI-safe.
+
+### Troubleshooting: Metro hangs on Windows
+
+On Windows **without Watchman**, Metro falls back to a recursive `fs.watch` watcher
+that intermittently never finishes starting, failing after a 240-second timeout with:
+
+```
+Failed to construct transformer: Error: Failed to start watch mode.
+```
+
+This is not a project misconfiguration — `watchFolders` is already minimal (only
+`packages/shared`; resolution uses `resolver.nodeModulesPaths`, which is not watched).
+Two fixes, either works:
+
+1. **Install Watchman** (recommended, what React Native expects):
+   `winget install facebook.watchman`, then restart your shell so it lands on `PATH`.
+   `.watchmanconfig` files at each watch root are already committed.
+2. **Skip the watcher entirely** with `web:export` + `web:static` above. No hot reload,
+   but it always starts — this is the reliable path for verification and screenshots.
 
 Try the end-to-end slice: create identity → New report → fill category/body/area →
 Review & submit → watch it "anchor" (simulated tx via MockRelayer) → status screen

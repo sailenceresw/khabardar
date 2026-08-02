@@ -11,6 +11,7 @@ npm-debug.log*
 # Expo / React Native
 apps/mobile/.expo/
 apps/mobile/dist/
+apps/mobile/.watchman-cookie-*
 apps/mobile/web-build/
 apps/mobile/ios/
 apps/mobile/android/

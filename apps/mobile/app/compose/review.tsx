@@ -34,13 +34,16 @@ export default function ReviewScreen() {
     await upsertReport(submittingReport);
 
     try {
-      const { reportHash, cid, relay, sponsorName } = await publishReport(report);
+      const { reportHash, cid, relay, sponsorName, evidence } = await publishReport(report);
       setSponsor(sponsorName);
       const anchored: AnonymousReport = {
         ...report,
         status: "anchored",
         reportHash,
         cid,
+        // Persist the evidence CIDs returned by the upload, otherwise the
+        // blobs are on the content layer but the device forgets where.
+        evidence,
         txHash: relay.txHash,
         onChainReportId: relay.onChainReportId,
         anchoredAt: Date.now(),

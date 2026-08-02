@@ -3,9 +3,20 @@
   "configurations": [
     {
       "name": "khabardar-web",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "web", "--workspace", "apps/mobile", "--", "--port", "8081"],
+      "//": "Dev server with hot reload. Watchman is prepended to PATH because Metro's Windows fallback watcher (recursive fs.watch) hangs and times out after 240s. Adjust the path if watchman lives elsewhere; drop it on macOS/Linux.",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set \"PATH=%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\facebook.watchman_Microsoft.Winget.Source_8wekyb3d8bbwe\\watchman-v2025.02.24.00-windows\\bin;%PATH%\" && npm run web --workspace apps/mobile -- --port 8081"
+      ],
       "port": 8081
+    },
+    {
+      "name": "khabardar-static",
+      "//": "Serves the exported static build (npm run web:export first). No file watcher, so this always starts — the reliable path for verification and screenshots on Windows.",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "web:static", "--workspace", "apps/mobile"],
+      "port": 8085
     }
   ]
 }

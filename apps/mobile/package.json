@@ -9,7 +9,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "verify:slice": "ts-node --transpile-only -P scripts/tsconfig.json scripts/verifySlice.ts"
+    "verify:slice": "ts-node --transpile-only -P scripts/tsconfig.json scripts/verifySlice.ts",
+    "web:export": "expo export --platform web",
+    "web:static": "node scripts/serveDist.js"
   },
   "dependencies": {
     "@khabardar/shared": "*",

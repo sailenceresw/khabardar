@@ -56,7 +56,10 @@
     "reportHash": "Report fingerprint",
     "onChainId": "On-chain ID",
     "viewOnExplorer": "View on Lineascan",
-    "retry": "Retry submission"
+    "retry": "Retry submission",
+    "bundleCid": "Encrypted bundle (content ID)",
+    "evidenceNotUploaded": "not uploaded yet",
+    "evidenceNote": "Evidence is uploaded encrypted. These IDs point at ciphertext — useless without the report's content key."
   },
   "settings": {
     "title": "Settings",

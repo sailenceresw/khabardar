@@ -56,6 +56,30 @@ export default function ReportStatusScreen() {
         </Card>
       ) : null}
 
+      {report.cid ? (
+        <Card>
+          <Body dim>{t("status.bundleCid")}</Body>
+          <Mono>{report.cid}</Mono>
+        </Card>
+      ) : null}
+
+      {report.evidence.length > 0 ? (
+        <Card>
+          <Body dim>
+            {t("compose.evidenceLabel")}: {report.evidence.length}
+          </Body>
+          {report.evidence.map((e) => (
+            <React.Fragment key={e.id}>
+              <Body dim>
+                {e.kind} · {(e.sizeBytes / 1024).toFixed(0)} KB
+              </Body>
+              <Mono>{e.cid ?? t("status.evidenceNotUploaded")}</Mono>
+            </React.Fragment>
+          ))}
+          <Body dim>{t("status.evidenceNote")}</Body>
+        </Card>
+      ) : null}
+
       {report.status === "failed" || report.status === "draft" ? (
         <Button
           label={t("status.retry")}
