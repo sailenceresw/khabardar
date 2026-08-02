@@ -4,7 +4,9 @@ import { deleteAllReports } from "./drafts";
 import { deleteAllEvidence } from "./evidence";
 import { clearMirror } from "./feed/localChainMirror";
 import { clearModerationLog } from "./moderation";
+import { signOutOrg } from "./org";
 import { deleteAllTips } from "./tips";
+import { disconnectWallet } from "./wallet";
 
 /**
  * Panic delete: irreversibly wipe every trace of Khabardar from this device —
@@ -22,6 +24,13 @@ export async function panicDelete(): Promise<void> {
   await deleteAllTips();
   await clearModerationLog();
   await clearMirror();
+
+  // An org account and a connected wallet are both identifying, so a duress
+  // wipe must take them too. Cleared explicitly rather than leaving it to the
+  // prefix sweep below: the sweep is a backstop, not the contract.
+  await signOutOrg();
+  await disconnectWallet();
+
   await destroyIdentity();
 
   const remaining = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith("khabardar."));

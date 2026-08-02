@@ -43,7 +43,8 @@
     "hashNote": "Only an encrypted fingerprint (hash) of this report goes on the blockchain. The report text and evidence never leave this device unencrypted.",
     "gasNote": "Submission is free — gas is sponsored. You do not need any cryptocurrency.",
     "submit": "Submit anonymously",
-    "submitting": "Anchoring on Linea…"
+    "submitting": "Anchoring on Linea…",
+    "sponsoredBy": "Gas for reports in this area is sponsored by %{name}."
   },
   "status": {
     "title": "Report status",
@@ -158,6 +159,55 @@
   "visibility": {
     "public": "Public",
     "journalists": "Journalists only"
+  },
+  "org": {
+    "title": "Organization workspace",
+    "separationWarning": "This is a named, accountable account for newsrooms, NGOs, oversight bodies and funders. It is completely separate from anonymous reporting. If you also want to report something, do it from a different device or install — never from an account that identifies you.",
+    "registerTitle": "Register your organization",
+    "namePlaceholder": "Organization name",
+    "emailPlaceholder": "Contact email (billing and accreditation only)",
+    "kindLabel": "Type",
+    "planLabel": "Plan",
+    "free": "Free",
+    "register": "Register organization",
+    "signedInAs": "Signed in as",
+    "accredited": "Accredited",
+    "pendingAccreditation": "Pending accreditation",
+    "accreditationNote": "Until a human verifies your organization, only Community features are available. Analytics over a whistleblower corpus is not self-serve by design.",
+    "entitlements": "Your plan includes",
+    "seats": "Seats",
+    "apiCalls": "API calls/day",
+    "exportFeature": "Corpus export",
+    "analyticsFeature": "Analytics",
+    "caseFeature": "Case management",
+    "exportTitle": "Export verified corpus",
+    "exportNote": "Exports only reports you can already read. Restricted reports and reporter addresses are never included.",
+    "export": "Export as CSV",
+    "exportDone": "Exported %{count} reports.",
+    "exportNotEntitled": "Export requires an accredited Pro or Institutional plan.",
+    "devAccreditNote": "Local development affordance: toggles accreditation so paid surfaces are explorable without a billing backend. Grants nothing on a real deployment.",
+    "devAccredit": "Mark accredited (dev)",
+    "devUnaccredit": "Remove accreditation (dev)",
+    "signOut": "Sign out of organization",
+    "poolsTitle": "Sponsored gas pools",
+    "poolScope": "Scope: %{region}",
+    "nationwide": "nationwide",
+    "poolFunded": "%{count} submissions funded",
+    "poolRemaining": "~%{count} reports remaining",
+    "poolsAttributionNote": "Sponsors receive aggregate counts only. No sponsor is ever recorded against an individual report, because a narrow sponsor scope would shrink a reporter's anonymity set.",
+    "kind": {
+      "newsroom": "Newsroom",
+      "ngo": "NGO",
+      "oversight": "Oversight body",
+      "research": "Research",
+      "sponsor": "Sponsor"
+    },
+    "plan": {
+      "community": "Community",
+      "pro": "Pro",
+      "institutional": "Institutional"
+    },
+    "open": "Organization workspace"
   },
   "wallet": {
     "title": "Connect a wallet (optional)",

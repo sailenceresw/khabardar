@@ -12,6 +12,12 @@ export interface SubmitReportParams {
   /** Blinded tag for the accused entity, or the zero tag when none named. */
   entityTag: `0x${string}`;
   /**
+   * Which funded pool should reimburse the paymaster. Passed to the sponsorship
+   * request for accounting only — it is deliberately NOT part of the on-chain
+   * calldata, so no report carries a sponsor marker.
+   */
+  sponsorPoolId?: string;
+  /**
    * Whoever is authorised to sign — the device key by default, or a connected
    * external wallet if the user opted into one.
    */

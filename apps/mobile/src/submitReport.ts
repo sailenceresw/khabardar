@@ -10,6 +10,7 @@ import { uploadAllEvidence } from "./evidence";
 import { appendMirrorRow } from "./feed/localChainMirror";
 import { getRelayer, type RelayResult } from "./relayer";
 import { getActiveSigner } from "./signer";
+import { recordSponsoredSubmission, resolveSponsor } from "./sponsorPools";
 
 export interface PublishResult {
   reportHash: `0x${string}`;
@@ -20,6 +21,11 @@ export interface PublishResult {
   contentSimulated: boolean;
   /** Which key actually signed — "device" for the anonymous default. */
   signerKind: "device" | "wallet";
+  /**
+   * Sponsor to credit in the UI, or null when gas came from an unnamed or
+   * too-small pool. Never tied to this report anywhere but this return value.
+   */
+  sponsorName: string | null;
 }
 
 /**
@@ -87,6 +93,10 @@ export async function publishReport(report: AnonymousReport): Promise<PublishRes
   // The entity name itself never leaves the device — only its blinded tag.
   const entityTag = entityTagFor(report.entityName);
 
+  // Which funded pool covers this submission. The reporter is never asked and
+  // never pays either way — this only decides who reimburses the paymaster.
+  const sponsor = await resolveSponsor(report.coarseGeohash, report.category);
+
   const relay = await getRelayer().submitReport({
     reportHash,
     cid: put.cid,
@@ -94,8 +104,11 @@ export async function publishReport(report: AnonymousReport): Promise<PublishRes
     visibility: report.visibility,
     coarseGeohash: report.coarseGeohash,
     entityTag,
+    sponsorPoolId: sponsor?.poolId,
     signer,
   });
+
+  if (sponsor) await recordSponsoredSubmission(sponsor.poolId);
 
   // While the mock relayer is active there is no chain to read back from, so
   // mirror the row locally to keep the feed behaving identically.
@@ -122,6 +135,7 @@ export async function publishReport(report: AnonymousReport): Promise<PublishRes
     relay,
     contentSimulated: put.simulated,
     signerKind: signer.kind,
+    sponsorName: sponsor?.displayName ?? null,
   };
 }
 

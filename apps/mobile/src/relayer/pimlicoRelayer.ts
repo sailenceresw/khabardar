@@ -65,6 +65,9 @@ export class PimlicoRelayer implements GaslessRelayer {
     const sender = owner.address; // placeholder until factory wiring is enabled
 
     // -- Integration point 2: sponsorship (pm_sponsorUserOperation) ---------
+    // `sponsorPoolId` rides along as sponsorship-policy context so the correct
+    // funded pool is debited. It is accounting metadata only and never enters
+    // callData — no report carries a sponsor marker on-chain.
     const sponsorship = await this.rpc(this.withKey(this.config.paymasterUrl), "pm_sponsorUserOperation", [
       {
         sender,
@@ -73,6 +76,7 @@ export class PimlicoRelayer implements GaslessRelayer {
         // gas fields are filled in by the paymaster response
       },
       ENTRYPOINT_V07,
+      ...(params.sponsorPoolId ? [{ sponsorshipPolicyId: params.sponsorPoolId }] : []),
     ]);
 
     // -- Integration point 3: sign userOpHash with the device key -----------

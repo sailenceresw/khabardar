@@ -211,6 +211,37 @@ submitting client). Since calldata is only ever a hash + category + coarse geoha
 content stays private, but **network-level anonymity (Tor) is required before mainnet**
 to prevent IP↔pseudonym linkage by relayer infrastructure.
 
+### Sponsored gas pools and attribution
+
+Organizations can fund submission gas for a region or category
+(`packages/shared/src/sponsor.ts`, `apps/mobile/src/sponsorPools.ts`). Reporters never
+see a payment step; the pool only decides who reimburses the paymaster.
+
+**Attribution is aggregate only, by design.** A per-report sponsor tag would be a side
+channel: a narrowly-scoped sponsor would shrink a report's anonymity set below what the
+reporter consented to by publishing a coarse geohash. So `sponsorPoolId` travels as
+paymaster accounting context and is deliberately *excluded from calldata*, sponsors
+receive counts rather than per-report ledgers, and any pool below `MIN_SCOPE_REPORTS`
+(50) goes unnamed in the UI even though it still pays.
+
+### Organizations — the accountable side
+
+`Organization` (`packages/shared/src/org.ts`, `apps/mobile/src/org.ts`) is a **named**
+account for newsrooms, NGOs, oversight bodies, researchers, and funders. It is stored
+under separate keys, with a separate lifecycle, from reporter identity, and the two are
+never returned together — an org account is billable and contactable, a reporter account
+is a device key and nothing else. Joining them would break the product's central
+guarantee.
+
+Accreditation is not self-serve: a new org gets Community entitlements regardless of
+selected plan until a human verifies it, because analytics over a whistleblower corpus
+should never be one signup form away. Plans and entitlements gate corpus export
+(`apps/mobile/src/export.ts`), which excludes restricted reports and never exports
+reporter addresses.
+
+See [BUSINESS.md](./BUSINESS.md) for the revenue model, unit economics, and a
+completed / in-progress / not-started status breakdown.
+
 ## Getting started
 
 Prereqs: Node 20 (`.nvmrc`), npm 10.
@@ -316,6 +347,12 @@ backend cannot silently swap in its own key and read every restricted report.
   reconnect is not yet automatic.
 - **Stealth mode** — disguise UI, duress PIN, screenshot blocking. A recognisable
   anti-corruption app on a seized phone is itself evidence against its user.
+- **Org accreditation + billing backend** — accreditation is currently a local flag with
+  a dev toggle, and there is no billing, seat management, or API-key issuance. The paid
+  surfaces (analytics, case management, public API) are declared in the entitlement model
+  but not built.
+- **Evidence upload wiring** — `uploadEvidence` returns CIDs but is not yet called from
+  the compose flow; evidence still resolves locally.
 
 ## Security & threat-model caveats (v0)
 
@@ -328,5 +365,8 @@ backend cannot silently swap in its own key and read every restricted report.
 - Corroboration is only as sybil-resistant as the caller set until RLN lands.
 - Entity tags are reversible by dictionary attack — see the trade-off note above.
 - A single moderator address is a centralization point — acceptable for testnet only.
-- Demo recipient keys and sample feed rows must be removed before any real deployment.
+- Demo recipient keys, sample feed rows, and demo sponsor pools must be removed before
+  any real deployment.
+- Org accreditation is a local flag; the dev toggle grants nothing on a real deployment,
+  where accreditation belongs server-side next to the billing relationship.
 - No security audit has been performed. Do not use for real reports yet.

@@ -17,6 +17,7 @@ export default function ReviewScreen() {
   const [report, setReport] = useState<AnonymousReport | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sponsor, setSponsor] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) loadReport(id).then(setReport);
@@ -33,7 +34,8 @@ export default function ReviewScreen() {
     await upsertReport(submittingReport);
 
     try {
-      const { reportHash, cid, relay } = await publishReport(report);
+      const { reportHash, cid, relay, sponsorName } = await publishReport(report);
+      setSponsor(sponsorName);
       const anchored: AnonymousReport = {
         ...report,
         status: "anchored",
@@ -80,6 +82,7 @@ export default function ReviewScreen() {
       <Card>
         <Body dim>{t("review.hashNote")}</Body>
         <Body dim>{t("review.gasNote")}</Body>
+        {sponsor ? <Body dim>{t("review.sponsoredBy", { name: sponsor })}</Body> : null}
       </Card>
 
       {error ? (

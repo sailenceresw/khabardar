@@ -64,6 +64,7 @@ export default function HomeScreen() {
         <FooterLink label={t("common.settings")} onPress={() => router.push("/settings")} />
         <FooterLink label={t("common.moderation")} onPress={() => router.push("/moderation")} />
         <FooterLink label={t("common.tips")} onPress={() => router.push("/tips")} />
+        <FooterLink label={t("org.open")} onPress={() => router.push("/org")} />
       </View>
     </Screen>
   );
