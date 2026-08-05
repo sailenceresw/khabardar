@@ -1,3 +1,4 @@
+import { netFetch } from "../net/transport";
 import { safeJsonParse } from "../safeJson";
 import type { ContentStore, PutResult, StoredBundle } from "./types";
 
@@ -36,14 +37,18 @@ export class IpfsContentStore implements ContentStore {
   async put(bundle: StoredBundle): Promise<PutResult> {
     const body = JSON.stringify(bundle);
 
-    const res = await fetch(this.config.apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.config.apiToken}`,
+    const res = await netFetch(
+      this.config.apiUrl,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.config.apiToken}`,
+        },
+        body,
       },
-      body,
-    });
+      "content-store:pin"
+    );
 
     if (!res.ok) {
       throw new Error(`IPFS put failed: ${res.status} ${await res.text()}`);
@@ -58,7 +63,7 @@ export class IpfsContentStore implements ContentStore {
   }
 
   async get(cid: string): Promise<StoredBundle | null> {
-    const res = await fetch(`${this.config.gatewayUrl}/${cid}`);
+    const res = await netFetch(`${this.config.gatewayUrl}/${cid}`, undefined, "content-store:fetch");
     if (res.status === 404) return null;
     if (!res.ok) return null;
 

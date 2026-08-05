@@ -16,50 +16,64 @@ measurable governance outcome, the numbers below are defensible.
 
 ## 1. Status: what is actually built
 
-Verified as of this commit: mobile typecheck clean, 23/23 contract tests passing,
-headless end-to-end slice passing, full UI walkthrough exercised in-browser.
+Verified as of this commit: mobile typecheck clean, 48/48 contract tests passing,
+headless end-to-end slice passing, web bundle builds.
 
 ### Completed and verified
 
 | Area | What works |
 |---|---|
-| **Anonymity core** | Device-bound secp256k1 identity, no PII anywhere. Codename derived from address. AES-256-GCM encryption of bodies and evidence. EXIF/GPS stripped via re-encode before storage. Coarse geohash only (4 chars, district level). Panic delete wipes drafts, evidence, tips, moderation log, chain mirror, org account, wallet session, and identity. |
+| **Anonymity core** | Device-bound secp256k1 identity, no PII anywhere. Codename derived from address. AES-256-GCM encryption of bodies and evidence. EXIF/GPS stripped via re-encode before storage. Coarse geohash only (4 chars, district level). Panic delete wipes drafts, evidence, tips, jury log, chain mirror, submission queue, egress log, cases, org account, wallet session, stealth secrets, at-rest keys, and identity. |
 | **Identity recovery** | BIP-39 12-word phrase, standard Ethereum derivation path, restore-on-new-device. Deliberately replaces login rather than complementing it. |
-| **Chain layer** | `ReportRegistry.sol` on Linea (59144 / 59141). Anchors hash + CID + category + visibility + coarse geohash + blinded entity tag. Non-transferable karma. Corroboration with self-corroboration and double-vote blocking, auto-promotion at threshold. Five-state verification tier. Entity clustering. 23 tests. |
+| **Chain layer** | `ReportRegistry.sol` on Linea (59144 / 59141). Anchors hash + CID + category + visibility + coarse geohash + blinded entity tag. Non-transferable karma. Corroboration with self-corroboration and double-vote blocking, auto-promotion at threshold. Five-state verification tier. Entity clustering. Per-epoch submission rate limiting. 48 tests. |
+| **Moderation by jury** | Karma-weighted jury replaces the single moderator; there is no admin path to a verdict. Quorum of 3 weight, individual weight capped at 2, dissent costs more karma than agreement earns. Every vote publishes its reason on-chain via `JuryVoteCast` **before the outcome is known**, so moderators are auditable from an RPC endpoint alone. |
+| **Sybil resistance** | `IPersonhoodGate` gates corroboration, with `AllowlistPersonhoodGate` as a working implementation. Deliberately **not** applied to `submitReport` — reporting stays open to any address. Submission flooding is handled by rate limiting instead. |
 | **Content layer** | Encrypted bundles to a `ContentStore` (mock + real IPFS pinning implementation). Per-report content key. ECIES key wrapping (secp256k1 ECDH → HKDF-SHA256 → AES-GCM) for journalist-restricted reports. Integrity check recomputes the hash against the on-chain anchor on every read. |
-| **Public feed** | Browse, read, and verify others' reports. Filters: category, verification tier, region prefix, date range. Free-text search over readable bodies. Locked-report handling for restricted bundles. Clearly-labelled fictional sample rows. |
-| **Moderation** | Working review queue, oldest-first. Start review / verify / reject with mandatory reason, local audit log. Moderators can change status but can never edit or delete a report. |
-| **Tip channel** | Real ECIES sealing to a chosen journalist/NGO public key, sealed payload to content store, sent-tips list with digests. |
-| **Gasless** | `GaslessRelayer` abstraction. Mock relayer (default, no credentials) performs real encoding and signing. Pimlico ERC-4337 relayer with every integration point wired and documented. |
+| **Public feed** | Browse, read, and verify others' reports. Filters: category, verification tier, region prefix, date range, entity cluster. Free-text search over readable bodies. Locked-report handling. Three interchangeable sources: mock, direct chain (chunked log scan), and a real indexer over HTTP. |
+| **Evidence** | Photo (EXIF-stripped by re-encode), document, and audio, all through one strip → encrypt → hash → upload path. Plaintext audio deleted from cache after encryption. Metadata warnings surfaced before the picker opens, not after. |
+| **Stealth** | PIN lock, duress PIN that wipes and then opens the app indistinguishably from a first launch, working-calculator disguise, screenshot and app-switcher blocking. |
+| **Network** | Single egress seam for all traffic. Fail-closed switch that refuses unprotected requests rather than leaking. Per-host egress log surfaced to the user. |
+| **Tor** | Arti compiled into the app (`modules/expo-tor`, Rust + JNI + Swift), exposing a loopback SOCKS5 proxy that OkHttp and URLSession route through. No DNS leak — hostnames are resolved by the exit, not locally. Fresh circuit per report submission, so two submissions cannot be linked by a shared exit relay. 12 protocol tests. |
+| **Offline** | Failed submissions queue and retry on app resume — never on a background timer, so the reporter chooses when their IP touches the relayer. |
+| **Tip channel** | Real ECIES sealing to a chosen journalist/NGO public key, padded to fixed length buckets so ciphertext size does not leak message length. |
+| **Gasless** | `GaslessRelayer` abstraction. Mock relayer (default, no credentials) performs real encoding and signing. Pimlico ERC-4337 relayer with counterfactual SimpleAccount derivation (pinned on first use), paymaster sponsorship, gas estimation, and receipt polling that reads the report id from the event. |
 | **Wallet option** | WalletConnect v2 as an explicitly non-default alternative signer, behind an unmissable anonymity-tradeoff warning and an acknowledgement gate. |
-| **Monetization scaffolding** | Organization account type (kind, plan, entitlements, accreditation) stored entirely separately from reporter identity. Sponsored gas pools with aggregate-only attribution. Entitlement-gated CSV/JSON corpus export. |
-| **i18n** | Full English + Hindi across every screen. |
+| **Monetization** | Org accounts stored entirely separately from reporter identity. Seats with roles and non-destructive revocation. API keys stored as hash + prefix only. Billing state with a 30-day grace period that removes capability, never data. Entitlement-gated CSV/JSON export, k-anonymous analytics, and case management with outcome tracking. Sponsored gas pools with aggregate-only attribution. |
+| **i18n** | Full English + Hindi across every screen, verified by a key-coverage check. |
 
 ### In progress / partially real
 
 | Area | Honest state |
 |---|---|
-| **Real chain submission** | Mock relayer is the default. Pimlico path is wired but has never run against live Sepolia — needs an API key and a funded sponsorship policy. `PimlicoRelayer` still uses the owner EOA as `sender`; counterfactual smart-account derivation is marked as integration point 1 and is unfinished. |
+| **Real chain submission** | Mock relayer is the default. The Pimlico path is now complete — counterfactual account, sponsorship, estimation, receipt polling — but has **never run against live Sepolia**. Untested code against a real bundler should be assumed broken until proven otherwise. |
 | **Real content storage** | `IpfsContentStore` is written against a standard pin API but untested against a live provider. Mock store is the default. |
-| **Evidence to IPFS** | `uploadEvidence` exists and returns CIDs but is not yet called from the compose flow — evidence still resolves locally. |
-| **Feed at scale** | `ChainNetworkIndex` reads via `eth_getLogs`, which will not survive real volume. Needs a proper indexer. |
-| **Moderation authority** | Single moderator address on-chain; the in-app moderator toggle is a local dev affordance that grants nothing. Audit log is device-local, which is insufficient. |
-| **Org accreditation & billing** | Accreditation is a local flag with a dev toggle. No billing backend, no seat management, no API key issuance. |
+| **Indexer** | `IndexerNetworkIndex` and its endpoint contract exist; no indexer has been deployed against it. The direct-chain fallback now chunks log ranges so it works against public RPCs, and still does not scale. |
+| **Personhood** | The gate interface, the enforcement point, and an allowlist implementation are real. The allowlist is **not anonymous** — fine for a closed pilot, unacceptable where a corroborator faces risk. RLN needs a zk verifier and prover that are not here. |
+| **Org accreditation & billing** | The client-side model is complete. There is no server: no payment processing, no API to serve, no server-side key verification. Accreditation remains a local flag with a dev toggle. |
+| **Evidence at scale** | Three evidence types work, capped at 8 MB through `AsyncStorage` + base64. Video needs chunked reads and streaming encryption. |
 
 ### Not started
 
-Proof-of-personhood (RLN / anonymous credentials) — the single biggest gap, since
-corroboration and karma are only as sybil-resistant as the account set. C2PA evidence
-provenance. Tor/onion transport (tips currently leak network metadata even though
-contents are sealed). Padding and forward secrecy for tips. Stealth/disguise mode and
-duress PIN. Voice-first reporting and languages beyond Hindi/English. RTI filing
-integration and outcome tracking. Public API. Analytics and case-management surfaces
-that the paid tiers nominally sell. Independent security audit and threat model review.
+Bridges and pluggable transports for Tor — plain Tor is blocked in several of the places
+this app is for, and without obfs4 support bootstrap simply fails there. **This is now the
+largest gap in the anonymity story**, and it is a smaller job than the transport itself
+was. Forward secrecy for tips. C2PA evidence provenance. Voice-first reporting. Languages
+beyond Hindi/English (deliberately not machine-translated — mistranslated safety copy is
+worse than English). RTI filing integration. A public API server. Independent security
+audit and threat model review.
 
 **Read that list honestly: the product is a working, verifiable prototype with a real
 cryptographic core, not a deployable service.** Nothing here has protected a real
-whistleblower yet, and it should not be asked to until at minimum personhood proofs,
-anonymising transport, and an external audit are done.
+whistleblower yet.
+
+On Tor specifically, resist the temptation to over-read the tick in the table above. The
+transport compiles, its SOCKS layer is tested, and it is wired end to end — and **no report
+has yet travelled over the live Tor network from a device.** The gap between "builds and
+passes its tests" and "works on a phone in the field" is exactly where this class of
+software fails. What remains before this should be trusted with a real report: a device
+test, bridge support, a non-allowlist personhood gate, and an external audit. The last one
+cannot be self-served — it needs funding and a counterparty, which is why it stays a
+prerequisite rather than a roadmap item.
 
 ---
 
@@ -92,9 +106,23 @@ Pricing is anchored on Sayari at ~$1,000/month for comparable investigative data
 tooling — the willingness-to-pay band demonstrably exists at this level. Pro sits
 deliberately below it to be reachable by an Indian regional newsroom.
 
-Implemented: `packages/shared/src/org.ts` (plans, entitlements, accreditation gate),
-`apps/mobile/src/org.ts` (storage, hard-separated from reporter identity),
-`apps/mobile/src/export.ts` (entitlement-gated export).
+Implemented: `packages/shared/src/org.ts` (plans, entitlements, accreditation gate, seats,
+API key records, billing state), `apps/mobile/src/org.ts` (storage hard-separated from
+reporter identity, seat management, key issuance), `apps/mobile/src/export.ts`
+(entitlement-gated export), `apps/mobile/src/analytics.ts` (k-anonymous aggregates),
+`apps/mobile/src/cases.ts` (case management with outcome tracking).
+
+Two constraints in that implementation are worth surfacing to a buyer, because they are
+the reason this is sellable at all:
+
+- **Analytics suppress any bucket below 5 reports.** Not rounded — withheld. Small counts
+  over a small area are a targeting tool wearing a dashboard's clothes, and a caveat next
+  to the number does not stop anyone reading it. Suppression is itself reported, so an
+  analyst can tell "withheld" from "clean".
+- **Non-payment removes capability, never data.** A lapsed account drops to Community
+  entitlements after 30 days of grace and keeps everything. Cutting a newsroom off from
+  its case notes mid-investigation is a way to get a source hurt, and no amount of
+  revenue protection justifies it.
 
 ### Secondary: sponsored gas pools
 
@@ -196,9 +224,12 @@ not SaaS.
 
 1. **Trust is the whole asset and it is binary.** One deanonymization incident — one
    reporter identified and harmed because of this app — ends the project permanently.
-   No amount of product quality recovers from it. This is why the unfinished list above
-   (personhood proofs, Tor transport, external audit) is a *funding prerequisite*, not
-   a roadmap item.
+   No amount of product quality recovers from it. The gap has narrowed considerably: the
+   egress seam, the fail-closed switch, the personhood enforcement point, and now a real
+   embedded Tor transport with per-submission circuit isolation all exist. What remains is
+   a device test on the live network, bridge support for censored networks, and an
+   external audit. The audit in particular is a *funding prerequisite* rather than a
+   roadmap item — it needs money and a counterparty, not more code.
 2. **Regulatory and legal exposure.** India's IT Rules 2021 traceability requirements
    are in direct tension with the product's core guarantee, and India retains criminal
    defamation. An operating entity inside that jurisdiction can be compelled in ways
@@ -208,8 +239,11 @@ not SaaS.
    Distribution partnerships and a visible outcome loop are the mitigation, and both
    are unbuilt.
 4. **Moderation cost scales with volume, revenue does not.** Success makes the
-   dominant cost line grow faster than the revenue line. Karma-weighted community
-   juries are the intended answer and are unbuilt.
+   dominant cost line grow faster than the revenue line. The karma-weighted jury is now
+   built, which converts moderation from a salaried line into a community one — but that
+   only helps if jurors actually show up, and recruiting and retaining an independent
+   jury is an unsolved organizational problem, not a solved technical one. Budget for
+   paid moderation until a volunteer jury demonstrably works.
 5. **Grant dependency** (see above) — concentration risk in the single largest revenue
    line.
 

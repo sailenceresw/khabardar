@@ -9,7 +9,11 @@ import {
   type FeedReport,
 } from "@khabardar/shared";
 import { getNetworkIndex, resolveFeedReport } from "../../src/feed";
-import { updateMirrorRow } from "../../src/feed/localChainMirror";
+import {
+  hasCorroboratedLocally,
+  markCorroboratedLocally,
+  updateMirrorRow,
+} from "../../src/feed/localChainMirror";
 import { useApp } from "../../src/state/AppContext";
 import { Body, Button, Card, Mono, Screen, TierBadge, Title } from "../../src/ui";
 import { colors, spacing } from "../../src/theme";
@@ -23,10 +27,12 @@ export default function FeedReportScreen() {
   const [report, setReport] = useState<FeedReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [alreadyCorroborated, setAlreadyCorroborated] = useState(false);
 
   async function load() {
     const row = await getNetworkIndex().get(Number(id));
     setReport(row ? await resolveFeedReport(row) : null);
+    setAlreadyCorroborated(await hasCorroboratedLocally(Number(id)));
   }
 
   useEffect(() => {
@@ -51,6 +57,12 @@ export default function FeedReportScreen() {
    */
   async function corroborate() {
     if (!report) return;
+    // Mirrors the contract's one-corroboration-per-account rule. Without it the
+    // button can be tapped until any report crosses the promotion threshold.
+    if (await hasCorroboratedLocally(report.onChainReportId)) {
+      setAlreadyCorroborated(true);
+      return;
+    }
     setBusy(true);
     try {
       const next = report.corroborations + 1;
@@ -60,6 +72,7 @@ export default function FeedReportScreen() {
           : report.tier;
 
       await updateMirrorRow(report.onChainReportId, { corroborations: next, tier: promoted });
+      await markCorroboratedLocally(report.onChainReportId);
       await load();
       setNote(t("feed.corroborateThanks"));
     } finally {
@@ -133,10 +146,11 @@ export default function FeedReportScreen() {
           label={t("feed.corroborate")}
           onPress={corroborate}
           loading={busy}
-          disabled={isOwn || report.demo}
+          disabled={isOwn || report.demo || alreadyCorroborated}
           variant="secondary"
         />
         {isOwn ? <Body dim>{t("feed.cannotCorroborateOwn")}</Body> : null}
+        {!isOwn && alreadyCorroborated ? <Body dim>{t("feed.alreadyCorroborated")}</Body> : null}
       </Card>
 
       <Button label={t("feed.backToFeed")} onPress={() => router.push("/feed")} variant="secondary" />

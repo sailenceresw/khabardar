@@ -22,6 +22,18 @@ apps/mobile/android/
 *.mobileprovision
 *.orig.*
 
+# Embedded Tor (modules/expo-tor)
+# Rust build artifacts, and the compiled Arti binaries. Not committed: they are
+# ~7.5 MB per ABI, they are reproducible from source with `npm run
+# tor:build:android` / `tor:build:ios`, and a binary blob in the tree of an
+# anonymity tool is exactly the thing nobody can audit.
+modules/expo-tor/rust/target/
+modules/expo-tor/android/src/main/jniLibs/
+modules/expo-tor/android/.gradle/
+modules/expo-tor/android/build/
+modules/expo-tor/ios/lib/
+modules/expo-tor/ios/Pods/
+
 # Hardhat
 packages/contracts/cache/
 packages/contracts/artifacts/

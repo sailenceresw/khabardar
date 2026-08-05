@@ -1,11 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { destroyIdentity } from "./identity";
-import { deleteAllReports } from "./drafts";
+import { deleteAllReports, destroyLocalKeys } from "./drafts";
 import { deleteAllEvidence } from "./evidence";
 import { clearMirror } from "./feed/localChainMirror";
 import { clearModerationLog } from "./moderation";
+import { clearCases } from "./cases";
 import { signOutOrg } from "./org";
+import { clearQueue } from "./submissionQueue";
+import { clearStealth } from "./stealth";
 import { deleteAllTips } from "./tips";
+import { clearEgressLog } from "./net/transport";
 import { disconnectWallet } from "./wallet";
 
 /**
@@ -24,13 +28,23 @@ export async function panicDelete(): Promise<void> {
   await deleteAllTips();
   await clearModerationLog();
   await clearMirror();
+  await clearQueue();
+  // The egress log is a record of which hosts this device contacted and when —
+  // useful to the user, and equally useful to whoever seizes the phone.
+  await clearEgressLog();
 
   // An org account and a connected wallet are both identifying, so a duress
   // wipe must take them too. Cleared explicitly rather than leaving it to the
   // prefix sweep below: the sweep is a backstop, not the contract.
   await signOutOrg();
+  await clearCases();
   await disconnectWallet();
 
+  // Keys last, and only after every blob they protect is already gone.
+  // On native these live in the keystore, which the AsyncStorage sweep below
+  // cannot see, so they have to be named explicitly.
+  await clearStealth();
+  await destroyLocalKeys();
   await destroyIdentity();
 
   const remaining = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith("khabardar."));

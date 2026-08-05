@@ -1,0 +1,55 @@
+[package]
+name = "khabardar-tor"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Embedded Arti (Tor) client exposing a loopback SOCKS5 proxy to the Khabardar app"
+license = "MIT"
+
+[lib]
+# cdylib for Android (loaded via System.loadLibrary) and iOS (staticlib in the
+# XCFramework). rlib so the integration tests can link against it directly.
+crate-type = ["cdylib", "staticlib", "rlib"]
+name = "khabardar_tor"
+
+[dependencies]
+arti-client = { version = "0.45", default-features = false, features = [
+    "tokio",
+    "rustls",
+    "compression",
+    "onion-service-client",
+] }
+tor-rtcompat = { version = "0.45", default-features = false, features = ["tokio", "rustls"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros"] }
+futures = "0.3"
+
+# Arti caches the directory consensus in SQLite (via tor-dirmgr → rusqlite).
+# Declared directly, with `bundled`, so SQLite is compiled from source and
+# statically linked rather than resolved against whatever the platform happens
+# to ship. On Android and iOS the system SQLite version varies by OS release,
+# and a directory cache that works on one device and not another is a miserable
+# class of bug; on Windows there is no system sqlite3.lib to link at all.
+rusqlite = { version = "0.39", features = ["bundled"] }
+tracing = "0.1"
+once_cell = "1"
+thiserror = "2"
+
+# Android only: JNI bridge + logcat output.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+android_logger = "0.14"
+# `log` directly rather than via `tracing::log`, which only exists when
+# tracing's "log" feature is enabled — a dependency we do not control.
+log = "0.4"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
+[profile.release]
+# Mobile binaries: optimise for size, and strip symbols. A Tor client that
+# doubles the app download is a Tor client people turn off.
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

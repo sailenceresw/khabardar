@@ -33,7 +33,13 @@ export function bytesToUtf8(b: Uint8Array): string {
 }
 
 export async function sha256Hex(data: Uint8Array): Promise<string> {
-  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, data.buffer as ArrayBuffer);
+  // Hash the view, not its backing store: a Uint8Array produced by subarray()
+  // or by a base64 decoder that over-allocates shares a larger ArrayBuffer, and
+  // passing `.buffer` straight through would fingerprint the neighbouring bytes
+  // too. Evidence hashes are compared against the on-chain anchor, so an
+  // off-by-a-few-bytes digest is a silent integrity failure.
+  const bytes = data.slice();
+  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes.buffer as ArrayBuffer);
   return bytesToHex(new Uint8Array(digest));
 }
 

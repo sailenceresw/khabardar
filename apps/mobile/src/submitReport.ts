@@ -8,6 +8,7 @@ import type { StoredBundle } from "./content/types";
 import { entityTagFor } from "./entityTag";
 import { uploadAllEvidence } from "./evidence";
 import { appendMirrorRow } from "./feed/localChainMirror";
+import { isolateNextRequests } from "./net/transport";
 import { getRelayer, type RelayResult } from "./relayer";
 import { getActiveSigner } from "./signer";
 import { recordSponsoredSubmission, resolveSponsor } from "./sponsorPools";
@@ -49,6 +50,12 @@ export interface PublishResult {
  */
 export async function publishReport(report: AnonymousReport): Promise<PublishResult> {
   const signer = await getActiveSigner();
+
+  // 0. Fresh Tor circuits for this submission, before any byte leaves.
+  // Two reports that share a circuit share an exit relay and a timing pattern,
+  // which links them even though each is individually anonymous. No-op when Tor
+  // is off — the return value says which happened.
+  await isolateNextRequests();
 
   // 1. Push encrypted evidence blobs to the content layer first, so the bundle
   // can point at them. Their bytes were already ciphertext before this call.

@@ -7,16 +7,32 @@ import {
   OrgKind,
   OrgPlan,
   PLAN_PRICE_USD_MONTH,
+  SeatRole,
   entitlementsFor,
   estimatedRemainingReports,
+  seatsRemaining,
+  type ApiKeyRecord,
   type Organization,
+  type OrgSeat,
   type SponsorPool,
 } from "@khabardar/shared";
-import { devSetAccredited, getOrg, registerOrg, signOutOrg } from "../src/org";
+import {
+  addSeat,
+  devSetAccredited,
+  getOrg,
+  issueApiKey,
+  listApiKeys,
+  listSeats,
+  registerOrg,
+  revokeApiKey,
+  revokeSeat,
+  SeatLimitReached,
+  signOutOrg,
+} from "../src/org";
 import { listPools } from "../src/sponsorPools";
 import { getNetworkIndex, resolveFeedReports } from "../src/feed";
 import { exportCsv, ExportNotEntitledError } from "../src/export";
-import { Body, Button, Card, Screen, Title } from "../src/ui";
+import { Body, Button, Card, Mono, Screen, Title } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
@@ -35,10 +51,19 @@ export default function OrgScreen() {
   const [kind, setKind] = useState<OrgKind>(OrgKind.Newsroom);
   const [plan, setPlan] = useState<OrgPlan>(OrgPlan.Community);
 
+  const [seats, setSeats] = useState<OrgSeat[]>([]);
+  const [seatEmail, setSeatEmail] = useState("");
+  const [seatRole, setSeatRole] = useState<SeatRole>(SeatRole.Member);
+  const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
+  const [keyLabel, setKeyLabel] = useState("");
+  const [newKey, setNewKey] = useState<string | null>(null);
+
   const load = useCallback(async () => {
-    const [o, p] = await Promise.all([getOrg(), listPools()]);
+    const [o, p, s, k] = await Promise.all([getOrg(), listPools(), listSeats(), listApiKeys()]);
     setOrg(o);
     setPools(p);
+    setSeats(s);
+    setApiKeys(k);
   }, []);
 
   useFocusEffect(
@@ -169,6 +194,116 @@ export default function OrgScreen() {
             <Button label={t("org.export")} onPress={doExport} loading={busy} variant="secondary" />
           </Card>
 
+          <Card>
+            <Body dim>{t("org.surfacesTitle")}</Body>
+            <Button
+              label={t("analytics.title")}
+              variant="secondary"
+              onPress={() => router.push("/analytics")}
+            />
+            <Button
+              label={t("cases.title")}
+              variant="secondary"
+              onPress={() => router.push("/cases")}
+            />
+          </Card>
+
+          <Card>
+            <Body dim>{t("org.seatsTitle")}</Body>
+            <Body dim>{t("org.seatsRemaining", { count: seatsRemaining(org) })}</Body>
+            {seats.map((s) => (
+              <View key={s.id} style={styles.seatRow}>
+                <Body dim>
+                  {s.email} · {s.role}
+                </Body>
+                <Pressable
+                  onPress={async () => {
+                    await revokeSeat(s.id);
+                    await load();
+                  }}
+                >
+                  <Text style={{ color: colors.danger }}>✕</Text>
+                </Pressable>
+              </View>
+            ))}
+            <TextInput
+              style={styles.input}
+              placeholder={t("org.seatEmailPlaceholder")}
+              placeholderTextColor={colors.textDim}
+              autoCapitalize="none"
+              value={seatEmail}
+              onChangeText={setSeatEmail}
+            />
+            <View style={styles.chips}>
+              {[SeatRole.Admin, SeatRole.Member, SeatRole.Viewer].map((r) => (
+                <Chip key={r} label={r} active={seatRole === r} onPress={() => setSeatRole(r)} />
+              ))}
+            </View>
+            <Button
+              label={t("org.addSeat")}
+              variant="secondary"
+              disabled={!seatEmail.trim()}
+              onPress={async () => {
+                try {
+                  await addSeat(seatEmail, seatRole);
+                  setSeatEmail("");
+                  await load();
+                } catch (e) {
+                  setNote(
+                    e instanceof SeatLimitReached ? t("org.seatLimit") : t("common.error")
+                  );
+                }
+              }}
+            />
+            <Body dim>{t("org.seatRevokeNote")}</Body>
+          </Card>
+
+          {entitlements.api ? (
+            <Card>
+              <Body dim>{t("org.apiTitle")}</Body>
+              <Body dim>{t("org.apiNote")}</Body>
+              {newKey ? (
+                <>
+                  <Body>{t("org.apiKeyOnce")}</Body>
+                  <Mono>{newKey}</Mono>
+                </>
+              ) : null}
+              {apiKeys.map((k) => (
+                <View key={k.id} style={styles.seatRow}>
+                  <Body dim>
+                    {k.label} · {k.prefix}…
+                  </Body>
+                  <Pressable
+                    onPress={async () => {
+                      await revokeApiKey(k.id);
+                      setNewKey(null);
+                      await load();
+                    }}
+                  >
+                    <Text style={{ color: colors.danger }}>✕</Text>
+                  </Pressable>
+                </View>
+              ))}
+              <TextInput
+                style={styles.input}
+                placeholder={t("org.apiLabelPlaceholder")}
+                placeholderTextColor={colors.textDim}
+                value={keyLabel}
+                onChangeText={setKeyLabel}
+              />
+              <Button
+                label={t("org.issueKey")}
+                variant="secondary"
+                onPress={async () => {
+                  const issued = await issueApiKey(keyLabel);
+                  setKeyLabel("");
+                  setNewKey(issued?.secret ?? null);
+                  await load();
+                }}
+              />
+            </Card>
+          ) : null}
+
           <Card style={{ borderColor: colors.info }}>
             <Body dim>{t("org.devAccreditNote")}</Body>
             <Button
@@ -248,5 +383,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   poolRow: { gap: 2, marginBottom: spacing.sm },
+  seatRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   link: { color: colors.info, fontSize: 15, fontWeight: "600", textAlign: "center" },
 });

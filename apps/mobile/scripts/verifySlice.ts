@@ -57,7 +57,71 @@ const SHIMS: Record<string, unknown> = {
   "expo-secure-store": secureStoreStub,
   "expo-image-picker": { launchImageLibraryAsync: async () => ({ canceled: true, assets: [] }), MediaTypeOptions: { Images: "Images" } },
   "expo-image-manipulator": { manipulateAsync: async () => ({ base64: "" }), SaveFormat: { JPEG: "jpeg" } },
+  // Picker/recorder modules are never exercised on this path — no picker is
+  // involved — but importing them off-device fails without a stand-in.
+  "expo-document-picker": { getDocumentAsync: async () => ({ canceled: true, assets: [] }) },
+  "expo-file-system": {
+    readAsStringAsync: async () => "",
+    deleteAsync: async () => undefined,
+    EncodingType: { Base64: "base64" },
+  },
+  "expo-av": {
+    Audio: {
+      requestPermissionsAsync: async () => ({ granted: false }),
+      setAudioModeAsync: async () => undefined,
+      Recording: { createAsync: async () => ({ recording: null }) },
+      RecordingOptionsPresets: { HIGH_QUALITY: {} },
+    },
+  },
   "react-native": { Platform: { OS: "web" } },
+};
+
+/**
+ * Stand-in for the embedded Tor native module.
+ *
+ * `available` starts false, which is what web and Expo Go really see — the
+ * transport wiring has to behave correctly in that state before anything else
+ * is worth checking. Steps 11–13 flip it to exercise the running path.
+ */
+const torStub = {
+  available: false,
+  state: "stopped" as "stopped" | "starting" | "running" | "failed",
+  socksPort: 0,
+  requests: [] as Array<{ url: string; method: string }>,
+  circuitRotations: 0,
+  nextBody: "",
+};
+
+SHIMS["expo-tor"] = {
+  isTorAvailable: () => torStub.available,
+  getStatus: () => ({
+    state: torStub.state,
+    socksPort: torStub.socksPort,
+    lastError: null,
+  }),
+  startTor: async () => {
+    torStub.state = "running";
+    torStub.socksPort = 9150;
+    return torStub.socksPort;
+  },
+  stopTor: async () => {
+    torStub.state = "stopped";
+    torStub.socksPort = 0;
+  },
+  newCircuit: async () => {
+    if (torStub.state !== "running") return false;
+    torStub.circuitRotations++;
+    return true;
+  },
+  torRequest: async (url: string, init: { method?: string }) => {
+    torStub.requests.push({ url, method: init?.method ?? "GET" });
+    return {
+      status: 200,
+      headers: { "content-type": "application/json" },
+      bodyBase64: Buffer.from(torStub.nextBody).toString("base64"),
+    };
+  },
+  TorUnavailableError: class TorUnavailableError extends Error {},
 };
 
 const origLoad = Module._load;
@@ -80,6 +144,7 @@ const { MockRelayer } = require("../src/relayer/mockRelayer");
 const { entityTagFor, normalizeEntityName, ZERO_TAG } = require("../src/entityTag");
 const { uploadAllEvidence } = require("../src/evidence");
 const { getContentStore } = require("../src/content");
+const { appendMirrorRow, readMirror } = require("../src/feed/localChainMirror");
 const { ACTIVE_CHAIN } = require("@khabardar/shared");
 const { generatePrivateKey, privateKeyToAccount } = require("viem/accounts");
 
@@ -217,6 +282,151 @@ async function main() {
   console.log("     onChainReportId              :", relay.onChainReportId);
   console.log("     explorerUrl                  :", relay.explorerUrl);
   console.log("     simulated                    :", relay.simulated);
+
+  // 8. Report ids must stay unique. The mock relayer stands in for the
+  // contract's monotonic `reportCount`; when it kept the counter in memory it
+  // restarted at 0 on every app reload, so a second session minted ids that
+  // already existed in the local mirror — the feed then opened the wrong
+  // report and a moderation verdict landed on two of them at once.
+  await appendMirrorRow({
+    onChainReportId: relay.onChainReportId,
+    reportHash,
+    cid,
+    category,
+    visibility: 0,
+    tier: 0,
+    coarseGeohash,
+    entityTag,
+    timestamp: Date.now(),
+    reporter: account.address,
+    corroborations: 0,
+  });
+
+  const second = await new MockRelayer().submitReport({
+    reportHash,
+    cid,
+    category,
+    visibility: 0,
+    coarseGeohash,
+    entityTag,
+    signer,
+  });
+  assert(
+    second.onChainReportId !== relay.onChainReportId,
+    "a second submission must not reuse an id already in the mirror"
+  );
+  assert((await readMirror()).length === 1, "mirror must hold exactly what was appended");
+  console.log("8. report id after mirrored submit:", second.onChainReportId, "(distinct — OK)");
+
+  // 9. Tip padding. AES-GCM ciphertext length equals plaintext length, so
+  // without padding an observer who never breaks the encryption still learns
+  // roughly how much someone wrote. Bucketing has to actually collapse
+  // different lengths onto the same size, and has to round-trip.
+  const { padToBucket, unpadFromBucket, TIP_LENGTH_BUCKETS } = require("../src/tips");
+
+  const shortTip = "Bribe demanded.";
+  const longerTip = "Bribe demanded at the counter, no receipt offered, third time this month.";
+
+  const paddedShort = padToBucket(shortTip);
+  const paddedLonger = padToBucket(longerTip);
+
+  assert(
+    paddedShort.length === paddedLonger.length,
+    "two tips in the same bucket must produce identical lengths"
+  );
+  assert(
+    paddedShort.length === TIP_LENGTH_BUCKETS[0],
+    "a short tip must land in the smallest bucket"
+  );
+  assert(unpadFromBucket(paddedShort) === shortTip, "padding must round-trip a short tip");
+  assert(unpadFromBucket(paddedLonger) === longerTip, "padding must round-trip a longer tip");
+
+  const big = padToBucket("x".repeat(TIP_LENGTH_BUCKETS[0] + 10));
+  assert(big.length === TIP_LENGTH_BUCKETS[1], "an oversized tip must move to the next bucket");
+  console.log(
+    "9. tip padding buckets           :",
+    `${shortTip.length}B and ${longerTip.length}B → both ${paddedShort.length}B (OK)`
+  );
+
+  // 10. Jury weight must match the contract, or the mock path shows a user a
+  // quorum they would not actually reach on-chain.
+  const { weightFromKarma } = require("../src/moderation");
+  const { JURY_QUORUM_WEIGHT, MAX_JUROR_WEIGHT, KARMA_PER_JURY_WEIGHT } = require("@khabardar/shared");
+
+  assert(weightFromKarma(0) === 1, "a fresh juror has weight 1");
+  assert(weightFromKarma(KARMA_PER_JURY_WEIGHT) === 2, "karma buys exactly one extra unit");
+  assert(
+    weightFromKarma(KARMA_PER_JURY_WEIGHT * 100) === MAX_JUROR_WEIGHT,
+    "juror weight must be capped"
+  );
+  assert(
+    MAX_JUROR_WEIGHT < JURY_QUORUM_WEIGHT,
+    "no single juror may reach quorum alone — that is the centralization the jury replaced"
+  );
+  console.log(
+    "10. jury weights                 :",
+    `cap ${MAX_JUROR_WEIGHT} < quorum ${JURY_QUORUM_WEIGHT} (no juror decides alone — OK)`
+  );
+
+  // 11. Transport selection. The property that matters is that a build which
+  // cannot run Tor never claims it can — web and Expo Go must report `direct`
+  // and unverified, because a user who believes otherwise makes decisions on it.
+  const transportMod = require("../src/net/transport");
+  const { getTransport, probeAnonymity, netFetch, isolateNextRequests } = transportMod;
+
+  torStub.available = false;
+  assert(getTransport().name === "direct", "no native module must select the direct transport");
+  assert(probeAnonymity().verified === false, "direct must never report as verified");
+  assert(probeAnonymity().claimed === false, "direct must not claim anonymity");
+
+  // Installed but not started: still not anonymised. Marking traffic protected
+  // because Tor *could* run is the exact failure this guards.
+  torStub.available = true;
+  torStub.state = "stopped";
+  assert(getTransport().name === "direct", "an idle Tor must not be selected");
+  assert(probeAnonymity().verified === false, "Tor that is not running is not protection");
+
+  torStub.state = "running";
+  torStub.socksPort = 9150;
+  assert(getTransport().name === "tor", "a running Tor must be selected");
+  assert(probeAnonymity().verified === true, "embedded Tor is verifiable end to end");
+  console.log("11. transport selection          : direct → idle-tor → running-tor (OK)");
+
+  // 12. Traffic must actually leave through the native module rather than the
+  // global fetch, and the response has to survive the base64 round trip.
+  torStub.nextBody = JSON.stringify({ cid: "bafyviator" });
+  torStub.requests.length = 0;
+
+  const response = await netFetch(
+    "https://example.invalid/pin",
+    { method: "POST", body: "{}" },
+    "test:tor"
+  );
+  const parsed = await response.json();
+
+  assert(torStub.requests.length === 1, "the request must go through the Tor native module");
+  assert(torStub.requests[0].method === "POST", "the method must survive the bridge");
+  assert(parsed.cid === "bafyviator", "the response body must survive the base64 round trip");
+  console.log("12. request through Tor          : POST relayed, body round-tripped (OK)");
+
+  // 13. Circuit isolation per submission. Two reports sharing a circuit share
+  // an exit relay and a timing pattern, which links them even though each is
+  // individually anonymous.
+  torStub.circuitRotations = 0;
+  assert((await isolateNextRequests()) === true, "a running Tor must grant fresh circuits");
+  assert(torStub.circuitRotations === 1, "isolation must reach the native module");
+
+  torStub.state = "stopped";
+  assert(
+    (await isolateNextRequests()) === false,
+    "isolation must report failure when Tor is off rather than pretending"
+  );
+  assert(torStub.circuitRotations === 1, "no rotation should be recorded while stopped");
+  console.log("13. circuit isolation            : rotates when running, honest when not (OK)");
+
+  // Leave the transport where the rest of the suite expects it.
+  torStub.available = false;
+  transportMod.setTransport(null);
 
   console.log("\n✅ ALL SLICE STEPS PASSED — compose → encrypt → hash → encode → sign → gasless submit\n");
 }

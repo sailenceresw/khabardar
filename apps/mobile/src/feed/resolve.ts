@@ -28,6 +28,9 @@ export async function resolveFeedReport(
     visibility: row.visibility,
     tier: row.tier,
     coarseGeohash: row.coarseGeohash,
+    // Carried through so callers can cluster reports naming the same entity.
+    // It is a blinded tag, not a name, and says nothing about who reported.
+    entityTag: row.entityTag,
     timestamp: row.timestamp,
     reporter: row.reporter,
     reporterCodename: codenameFromAddress(row.reporter),

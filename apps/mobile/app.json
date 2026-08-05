@@ -18,17 +18,22 @@
     },
     "android": {
       "package": "org.khabardar.app",
+      "_comment": "Location stays blocked at the manifest level so precise coordinates cannot even be requested — the app only ever handles a 4-character geohash the user types. RECORD_AUDIO is permitted because audio evidence exists, and is requested at the moment of recording, never at launch.",
       "blockedPermissions": [
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
       "bundler": "metro",
       "output": "single"
     },
-    "plugins": ["expo-router", "expo-secure-store", "expo-localization"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-localization",
+      "expo-tor/plugin/withExpoTor"
+    ],
     "experiments": {
       "typedRoutes": false
     }
