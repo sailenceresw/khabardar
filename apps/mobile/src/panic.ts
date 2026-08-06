@@ -6,6 +6,7 @@ import { clearMirror } from "./feed/localChainMirror";
 import { clearModerationLog } from "./moderation";
 import { clearCases } from "./cases";
 import { signOutOrg } from "./org";
+import { clearPersonhood } from "./personhood";
 import { clearSocial } from "./social";
 import { clearQueue } from "./submissionQueue";
 import { clearStealth } from "./stealth";
@@ -42,6 +43,9 @@ export async function panicDelete(): Promise<void> {
   // Profile, follows, comments and reactions. A follow list is a map of who
   // this device trusts, which is exactly what a seizure should not recover.
   await clearSocial();
+  // An enrolled Semaphore identity is an accredited credential — losing it is
+  // permanent, and keeping it on a seized device is worse.
+  await clearPersonhood();
   await disconnectWallet();
 
   // Keys last, and only after every blob they protect is already gone.

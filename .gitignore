@@ -47,7 +47,11 @@ build/
 # OS / editor
 .DS_Store
 Thumbs.db
-.vscode/
+.vscode/*
+# ...but share the debug targets. They encode project facts a newcomer would
+# otherwise have to discover — chiefly that the static build serves on 8085,
+# not the 8080 in VS Code's default template.
+!.vscode/launch.json
 .idea/
 
 # Logs
@@ -57,3 +61,8 @@ Thumbs.db
 # zk proving fixtures — multi-megabyte downloads, regenerate with the script
 packages/contracts/inputs.json
 packages/contracts/reference.json
+
+# zk prover native output — rebuild with `npm run zk:build:android`
+modules/expo-zkprove/rust/target/
+modules/expo-zkprove/android/src/main/jniLibs/
+modules/expo-zkprove/ios/lib/

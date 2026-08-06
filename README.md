@@ -195,11 +195,31 @@ sufficient: a zk proof submitted from an address with a traceable history is sti
 linkable through that address, so anonymity requires a fresh sponsored smart account per
 action *and* the proof.
 
-**Not done: proving on the device.** Proof generation needs `snarkjs`, a wasm witness
-generator, and a multi-megabyte proving key. Hermes has no wasm, so React Native needs
-either a native module wrapping `rapidsnark` or a dev build with a wasm runtime — the same
-shape of problem as the Tor transport, and the same answer. The contracts and the
-verification path are real and tested; the mobile client cannot yet produce a proof.
+**Proving on the device** is `modules/expo-zkprove` — witness generation and Groth16
+proving in Rust (`ark-circom` + `ark-groth16`), reusing the same cargo-ndk pipeline that
+carries Arti. The Android cross-compile produces a 6.1 MB AArch64 library exporting the
+three JNI entry points Kotlin declares.
+
+The split is deliberate: JS marshals the circuit inputs — which identity, which group,
+which scope — and native does only the expensive part, so the decisions worth auditing
+stay in readable TypeScript rather than behind an FFI boundary. Field elements cross that
+boundary as decimal strings, never JS numbers: they run to 254 bits and a JS number carries
+53, so passing them as numbers would round an identity secret into a *different* one and
+prove membership for someone who does not exist.
+
+Verified end to end against real artifacts: given the inputs the reference library would
+use, the prover produces the same Merkle root and the same nullifier, and self-verifies the
+proof before returning it. Matching the nullifier is the property that matters — a prover
+computing a different one would silently let one member signal twice.
+
+Proving artifacts (~3 MB per tree depth) are downloaded rather than bundled, and the
+fetcher is injected so it goes through the transport seam. Fetching a proving key from a
+CDN announces that an IP is about to produce a proof, which is a stronger signal than
+ordinary traffic — only someone *about to act* fetches one. `warmCache()` exists so the
+download need not be correlated in time with the action.
+
+**Still not run on a real device.** The library builds and the core is tested on desktop;
+no proof has been generated on a phone.
 
 With no gate configured — the default — corroboration is not sybil-resistant at all.
 

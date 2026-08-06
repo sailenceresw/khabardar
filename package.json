@@ -18,7 +18,8 @@
     "tor:test": "npm run test:rust --workspace expo-tor",
     "tor:build:android": "npm run build:android --workspace expo-tor",
     "tor:build:ios": "npm run build:ios --workspace expo-tor",
-    "zk:test": "cd modules/expo-zkprove/rust && cargo test"
+    "zk:test": "npm run test:rust --workspace expo-zkprove",
+    "zk:build:android": "npm run build:android --workspace expo-zkprove"
   },
   "engines": {
     "node": ">=20"
