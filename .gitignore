@@ -53,3 +53,7 @@ Thumbs.db
 # Logs
 *.log
 .vercel
+
+# zk proving fixtures — multi-megabyte downloads, regenerate with the script
+packages/contracts/inputs.json
+packages/contracts/reference.json

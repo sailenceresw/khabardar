@@ -2,7 +2,7 @@
   "name": "khabardar",
   "private": true,
   "version": "0.1.0",
-  "description": "Anonymous anti-corruption reporting app \u2014 monorepo root",
+  "description": "Anonymous anti-corruption reporting app — monorepo root",
   "workspaces": [
     "apps/*",
     "packages/*",
