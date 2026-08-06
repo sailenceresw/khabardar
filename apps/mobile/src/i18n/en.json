@@ -280,7 +280,8 @@
     "tips": "Tip channel",
     "feed": "Public feed",
     "loading": "Loading…",
-    "error": "Something went wrong"
+    "error": "Something went wrong",
+    "save": "Save"
   },
   "jury": {
     "intro": "Reports are judged by a jury of equals voting in secret. Every juror counts exactly one — no weighting by reputation or anything else. Ballots are sealed until the panel is full, so nobody can see which way it is leaning while there is still time to join. Disagreeing costs a juror nothing.",
@@ -447,5 +448,51 @@
     "whereReal": "Everything you see is either sample data or stays on this device. Nothing is written to a blockchain and nothing is sent to a server.",
     "acknowledge": "I understand — show me the demo",
     "footnote": "No security audit has been performed on this project."
+  },
+  "social": {
+    "title": "Profile",
+    "follow": "Follow",
+    "unfollow": "Following",
+    "joined": "Joined %{date}",
+    "reportCount": "%{count} report(s)",
+    "reportsTitle": "Reports",
+    "noReports": "Nothing published yet.",
+    "bioLabel": "Bio",
+    "bioPlaceholder": "Optional. Say as little as possible.",
+    "bioIdentifyingWarning": "That bio names a job or a workplace. On a platform where reports are grouped by author, one detail like that plus a coarse area is often enough to identify someone. Consider removing it.",
+    "profileRiskNote": "A profile groups reports by their author. That makes them easier to follow — and easier to pattern-match. Writing style, timing, and area across several reports can identify a person even though each report is anonymous. Use the hide control on anything sensitive.",
+    "visibilityTitle": "Visibility",
+    "listed": "Findable in search",
+    "listedExplainer": "When off, this profile does not appear in search or suggestions.",
+    "followListVisible": "Show who I follow",
+    "followListExplainer": "Off by default. Follower counts are harmless; the list of who you follow is a social graph, and a social graph over a reporting platform maps who trusts whom.",
+    "unlisted": "hidden",
+    "hideFromProfile": "Hide from profile",
+    "showOnProfile": "Show on profile",
+    "reactionsTitle": "Reactions",
+    "reactionsNote": "Reactions are not evidence and never change a report's verification. Corroboration above is the evidentiary signal — this is not.",
+    "reaction": {
+      "important": "Important",
+      "support": "Solidarity"
+    },
+    "commentsTitle": "%{count} comment(s)",
+    "commentsWarning": "Never speculate about who filed a report. If you see a comment doing it, report it — that reason hides the comment immediately.",
+    "commentPlaceholder": "Add context, a correction, or a source.",
+    "postComment": "Post comment",
+    "reportComment": "Report this comment",
+    "reportOwn": "Report or remove",
+    "reportReason": {
+      "identity": "Guesses who reported",
+      "harassment": "Harassment",
+      "defamation": "Defamation",
+      "spam": "Spam"
+    },
+    "tab": {
+      "following": "Following",
+      "all": "All",
+      "trending": "Trending"
+    },
+    "followNothingYet": "You are not following anything yet. Follow an accused office, an area, or a category from any report — those carry no reporter identity. Following a person does.",
+    "commentBadge": "%{count} comment(s)"
   }
 }

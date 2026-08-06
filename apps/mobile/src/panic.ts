@@ -6,6 +6,7 @@ import { clearMirror } from "./feed/localChainMirror";
 import { clearModerationLog } from "./moderation";
 import { clearCases } from "./cases";
 import { signOutOrg } from "./org";
+import { clearSocial } from "./social";
 import { clearQueue } from "./submissionQueue";
 import { clearStealth } from "./stealth";
 import { deleteAllTips } from "./tips";
@@ -38,6 +39,9 @@ export async function panicDelete(): Promise<void> {
   // prefix sweep below: the sweep is a backstop, not the contract.
   await signOutOrg();
   await clearCases();
+  // Profile, follows, comments and reactions. A follow list is a map of who
+  // this device trusts, which is exactly what a seizure should not recover.
+  await clearSocial();
   await disconnectWallet();
 
   // Keys last, and only after every blob they protect is already gone.

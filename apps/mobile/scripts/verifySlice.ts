@@ -425,6 +425,66 @@ async function main() {
     `weight ${JUROR_VOTE_WEIGHT} each, quorum ${JURY_QUORUM}, appeal ${APPEAL_QUORUM}, ballot sealed + recoverable (OK)`
   );
 
+  // 10b. The social layer must not leak into the evidentiary one. This is the
+  // property most likely to erode by accident: someone adds a "score" that
+  // quietly folds reactions into credibility, and a report accusing a popular
+  // figure starts reading as less true because fewer people liked it.
+  const social = require("../src/social");
+
+  const SOCIAL_REPORT = 77;
+  const ACTOR = "0x5555555555555555555555555555555555555555";
+
+  await social.react(SOCIAL_REPORT, ACTOR, social.ReactionKind.Important);
+  const counts = await social.reactionsFor(SOCIAL_REPORT);
+  assert(counts[social.ReactionKind.Important] === 1, "a reaction must be recorded");
+
+  // Reactions live in their own store and touch nothing the chain mirror holds.
+  const mirrored = (await readMirror()).find(
+    (r: { onChainReportId: number }) => r.onChainReportId === SOCIAL_REPORT
+  );
+  assert(!mirrored, "reactions must not create or alter a chain-mirror row");
+  assert(
+    typeof (social as Record<string, unknown>).corroborate === "undefined",
+    "the social module must expose no path to corroboration"
+  );
+
+  // One reaction per actor, replaceable — not an accumulating score.
+  await social.react(SOCIAL_REPORT, ACTOR, social.ReactionKind.Support);
+  const swapped = await social.reactionsFor(SOCIAL_REPORT);
+  assert(
+    swapped[social.ReactionKind.Important] === 0 && swapped[social.ReactionKind.Support] === 1,
+    "an actor's reaction must replace, not stack"
+  );
+
+  // A comment reported as identity speculation disappears immediately rather
+  // than waiting for review; the damage is done the moment it is read.
+  const comment = await social.addComment({
+    reportId: SOCIAL_REPORT,
+    author: ACTOR,
+    body: "pretty sure this is someone from the accounts department",
+  });
+  assert((await social.commentsFor(SOCIAL_REPORT)).length === 1, "comment posted");
+
+  await social.reportComment(comment.id, social.CommentReportReason.IdentitySpeculation);
+  assert(
+    (await social.commentsFor(SOCIAL_REPORT)).length === 0,
+    "identity speculation must hide on sight, not queue"
+  );
+
+  // Codenames are derived, never chosen: a handle someone picks travels between
+  // platforms and collapses the anonymity model into a search query.
+  const profile = social.profileFor(ACTOR, { codename: "mumbai_accountant" });
+  assert(
+    profile.codename !== "mumbai_accountant",
+    "a profile must not accept a chosen handle"
+  );
+  assert(profile.followListVisible === false, "follow lists must be private by default");
+
+  console.log(
+    "10b. social layer boundary       :",
+    "reactions isolated, identity-speculation auto-hidden, codename derived (OK)"
+  );
+
   // 11. Transport selection. The property that matters is that a build which
   // cannot run Tor never claims it can — web and Expo Go must report `direct`
   // and unverified, because a user who believes otherwise makes decisions on it.

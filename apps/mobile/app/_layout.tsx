@@ -32,6 +32,7 @@ function RootStack() {
       <Stack.Screen name="org" options={{ title: t("org.title") }} />
       <Stack.Screen name="feed/index" options={{ title: t("feed.title") }} />
       <Stack.Screen name="feed/[id]" options={{ title: t("feed.reportTitle") }} />
+      <Stack.Screen name="profile/[address]" options={{ title: t("social.title") }} />
       <Stack.Screen name="recovery" options={{ title: t("recovery.title") }} />
       <Stack.Screen name="wallet" options={{ title: t("wallet.title") }} />
       <Stack.Screen name="stealth" options={{ title: t("stealth.title") }} />
