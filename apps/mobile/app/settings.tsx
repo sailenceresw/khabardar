@@ -78,6 +78,26 @@ export default function SettingsScreen() {
         />
       </Card>
 
+      <Card>
+        <Body dim>{t("stealth.title")}</Body>
+        <Body dim>{t("stealth.intro")}</Body>
+        <Button
+          label={t("stealth.title")}
+          variant="secondary"
+          onPress={() => router.push("/stealth")}
+        />
+      </Card>
+
+      <Card style={{ borderColor: colors.danger }}>
+        <Body dim>{t("net.title")}</Body>
+        <Body dim>{t("net.warning")}</Body>
+        <Button
+          label={t("net.egressTitle")}
+          variant="secondary"
+          onPress={() => router.push("/network")}
+        />
+      </Card>
+
       <Card style={{ borderColor: colors.danger }}>
         <Title>{t("settings.panicTitle")}</Title>
         <Body dim>{t("settings.panicExplainer")}</Body>

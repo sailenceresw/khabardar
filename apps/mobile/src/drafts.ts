@@ -34,6 +34,23 @@ async function getOrCreateKey(name: string): Promise<Uint8Array> {
 export const getDraftKey = () => getOrCreateKey(DRAFT_KEY_NAME);
 export const getEvidenceKey = () => getOrCreateKey(EVIDENCE_KEY_NAME);
 
+/**
+ * Destroy the at-rest encryption keys. Called by panic delete.
+ *
+ * These must be deleted explicitly: on native they live in the hardware-backed
+ * keystore, which AsyncStorage's key sweep does not reach, so a wipe that
+ * skipped this left the drafts key and the evidence key sitting on a seized
+ * device — the one thing panic delete promises it removes.
+ */
+export async function destroyLocalKeys(): Promise<void> {
+  const names = [DRAFT_KEY_NAME, EVIDENCE_KEY_NAME];
+  if (Platform.OS === "web") {
+    await AsyncStorage.multiRemove(names);
+    return;
+  }
+  await Promise.all(names.map((n) => SecureStore.deleteItemAsync(n)));
+}
+
 interface StoredReport extends Omit<AnonymousReport, "body"> {
   encryptedBody: EncryptedBlob;
 }

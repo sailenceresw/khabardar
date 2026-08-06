@@ -57,7 +57,71 @@ const SHIMS: Record<string, unknown> = {
   "expo-secure-store": secureStoreStub,
   "expo-image-picker": { launchImageLibraryAsync: async () => ({ canceled: true, assets: [] }), MediaTypeOptions: { Images: "Images" } },
   "expo-image-manipulator": { manipulateAsync: async () => ({ base64: "" }), SaveFormat: { JPEG: "jpeg" } },
+  // Picker/recorder modules are never exercised on this path — no picker is
+  // involved — but importing them off-device fails without a stand-in.
+  "expo-document-picker": { getDocumentAsync: async () => ({ canceled: true, assets: [] }) },
+  "expo-file-system": {
+    readAsStringAsync: async () => "",
+    deleteAsync: async () => undefined,
+    EncodingType: { Base64: "base64" },
+  },
+  "expo-av": {
+    Audio: {
+      requestPermissionsAsync: async () => ({ granted: false }),
+      setAudioModeAsync: async () => undefined,
+      Recording: { createAsync: async () => ({ recording: null }) },
+      RecordingOptionsPresets: { HIGH_QUALITY: {} },
+    },
+  },
   "react-native": { Platform: { OS: "web" } },
+};
+
+/**
+ * Stand-in for the embedded Tor native module.
+ *
+ * `available` starts false, which is what web and Expo Go really see — the
+ * transport wiring has to behave correctly in that state before anything else
+ * is worth checking. Steps 11–13 flip it to exercise the running path.
+ */
+const torStub = {
+  available: false,
+  state: "stopped" as "stopped" | "starting" | "running" | "failed",
+  socksPort: 0,
+  requests: [] as Array<{ url: string; method: string }>,
+  circuitRotations: 0,
+  nextBody: "",
+};
+
+SHIMS["expo-tor"] = {
+  isTorAvailable: () => torStub.available,
+  getStatus: () => ({
+    state: torStub.state,
+    socksPort: torStub.socksPort,
+    lastError: null,
+  }),
+  startTor: async () => {
+    torStub.state = "running";
+    torStub.socksPort = 9150;
+    return torStub.socksPort;
+  },
+  stopTor: async () => {
+    torStub.state = "stopped";
+    torStub.socksPort = 0;
+  },
+  newCircuit: async () => {
+    if (torStub.state !== "running") return false;
+    torStub.circuitRotations++;
+    return true;
+  },
+  torRequest: async (url: string, init: { method?: string }) => {
+    torStub.requests.push({ url, method: init?.method ?? "GET" });
+    return {
+      status: 200,
+      headers: { "content-type": "application/json" },
+      bodyBase64: Buffer.from(torStub.nextBody).toString("base64"),
+    };
+  },
+  TorUnavailableError: class TorUnavailableError extends Error {},
 };
 
 const origLoad = Module._load;
@@ -80,6 +144,7 @@ const { MockRelayer } = require("../src/relayer/mockRelayer");
 const { entityTagFor, normalizeEntityName, ZERO_TAG } = require("../src/entityTag");
 const { uploadAllEvidence } = require("../src/evidence");
 const { getContentStore } = require("../src/content");
+const { appendMirrorRow, readMirror } = require("../src/feed/localChainMirror");
 const { ACTIVE_CHAIN } = require("@khabardar/shared");
 const { generatePrivateKey, privateKeyToAccount } = require("viem/accounts");
 
@@ -217,6 +282,268 @@ async function main() {
   console.log("     onChainReportId              :", relay.onChainReportId);
   console.log("     explorerUrl                  :", relay.explorerUrl);
   console.log("     simulated                    :", relay.simulated);
+
+  // 8. Report ids must stay unique. The mock relayer stands in for the
+  // contract's monotonic `reportCount`; when it kept the counter in memory it
+  // restarted at 0 on every app reload, so a second session minted ids that
+  // already existed in the local mirror — the feed then opened the wrong
+  // report and a moderation verdict landed on two of them at once.
+  await appendMirrorRow({
+    onChainReportId: relay.onChainReportId,
+    reportHash,
+    cid,
+    category,
+    visibility: 0,
+    tier: 0,
+    coarseGeohash,
+    entityTag,
+    timestamp: Date.now(),
+    reporter: account.address,
+    corroborations: 0,
+  });
+
+  const second = await new MockRelayer().submitReport({
+    reportHash,
+    cid,
+    category,
+    visibility: 0,
+    coarseGeohash,
+    entityTag,
+    signer,
+  });
+  assert(
+    second.onChainReportId !== relay.onChainReportId,
+    "a second submission must not reuse an id already in the mirror"
+  );
+  assert((await readMirror()).length === 1, "mirror must hold exactly what was appended");
+  console.log("8. report id after mirrored submit:", second.onChainReportId, "(distinct — OK)");
+
+  // 9. Tip padding. AES-GCM ciphertext length equals plaintext length, so
+  // without padding an observer who never breaks the encryption still learns
+  // roughly how much someone wrote. Bucketing has to actually collapse
+  // different lengths onto the same size, and has to round-trip.
+  const { padToBucket, unpadFromBucket, TIP_LENGTH_BUCKETS } = require("../src/tips");
+
+  const shortTip = "Bribe demanded.";
+  const longerTip = "Bribe demanded at the counter, no receipt offered, third time this month.";
+
+  const paddedShort = padToBucket(shortTip);
+  const paddedLonger = padToBucket(longerTip);
+
+  assert(
+    paddedShort.length === paddedLonger.length,
+    "two tips in the same bucket must produce identical lengths"
+  );
+  assert(
+    paddedShort.length === TIP_LENGTH_BUCKETS[0],
+    "a short tip must land in the smallest bucket"
+  );
+  assert(unpadFromBucket(paddedShort) === shortTip, "padding must round-trip a short tip");
+  assert(unpadFromBucket(paddedLonger) === longerTip, "padding must round-trip a longer tip");
+
+  const big = padToBucket("x".repeat(TIP_LENGTH_BUCKETS[0] + 10));
+  assert(big.length === TIP_LENGTH_BUCKETS[1], "an oversized tip must move to the next bucket");
+  console.log(
+    "9. tip padding buckets           :",
+    `${shortTip.length}B and ${longerTip.length}B → both ${paddedShort.length}B (OK)`
+  );
+
+  // 10. The jury's fairness properties. These are the design, not tuning, so
+  // they are asserted rather than left to a comment someone can drift away
+  // from — the mechanism they replaced looked reasonable too.
+  const { commitmentFor } = require("../src/moderation");
+  const { JUROR_VOTE_WEIGHT, JURY_QUORUM, APPEAL_QUORUM } = require("@khabardar/shared");
+
+  assert(JUROR_VOTE_WEIGHT === 1, "every juror must count exactly one");
+  assert(JURY_QUORUM >= 3, "a panel smaller than three is one person plus a rubber stamp");
+  assert(APPEAL_QUORUM > JURY_QUORUM, "an appeal must be heard by a larger panel");
+
+  // A commitment must be bound to the juror, or one juror could replay
+  // another's sealed ballot and open it on their behalf.
+  const salt = ("0x" + "11".repeat(32)) as `0x${string}`;
+  const forAlice = commitmentFor({
+    reportId: 7,
+    round: 1,
+    tier: 3,
+    salt,
+    juror: "0x1111111111111111111111111111111111111111",
+  });
+  const forBob = commitmentFor({
+    reportId: 7,
+    round: 1,
+    tier: 3,
+    salt,
+    juror: "0x2222222222222222222222222222222222222222",
+  });
+  const nextRound = commitmentFor({
+    reportId: 7,
+    round: 2,
+    tier: 3,
+    salt,
+    juror: "0x1111111111111111111111111111111111111111",
+  });
+  const otherTier = commitmentFor({
+    reportId: 7,
+    round: 1,
+    tier: 4,
+    salt,
+    juror: "0x1111111111111111111111111111111111111111",
+  });
+
+  assert(forAlice !== forBob, "a commitment must bind the juror who made it");
+  assert(forAlice !== nextRound, "a commitment must not survive into the next round");
+  assert(forAlice !== otherTier, "a commitment must bind the tier");
+  assert(/^0x[0-9a-f]{64}$/.test(forAlice), "a commitment must be a 32-byte hash");
+
+  // A juror must be able to reopen their own ballot after closing the app.
+  // Storing only the salt and keeping the tier in memory meant a commit
+  // followed by a restart could never be revealed — which lands the juror in
+  // abandonment, the one thing this design penalises, for doing nothing wrong.
+  const { commitVote: mockCommit, loadBallotSecret, roundFor } = require("../src/moderation");
+
+  const JUROR = "0x3333333333333333333333333333333333333333";
+  const REPORTER = "0x4444444444444444444444444444444444444444";
+  await mockCommit({ reportId: 42, juror: JUROR, reporter: REPORTER, tier: 3 });
+
+  const round = await roundFor(42);
+  const secret = await loadBallotSecret(42, round.index);
+  assert(!!secret, "a sealed ballot must be recoverable from device storage");
+  assert(secret.tier === 3, "the tier must survive a restart, not only the salt");
+  assert(/^0x[0-9a-f]{64}$/.test(secret.salt), "the salt must survive a restart");
+
+  // And the sealed ballot itself must carry no readable tier.
+  const { ballotsFor } = require("../src/moderation");
+  const sealed = (await ballotsFor(42, round.index))[0];
+  assert(sealed.tier === undefined, "a sealed ballot must not expose its tier");
+  assert(
+    sealed.commitment === commitmentFor({ reportId: 42, round: round.index, tier: 3, salt: secret.salt, juror: JUROR }),
+    "the stored commitment must match the sealed choice"
+  );
+
+  console.log(
+    "10. jury fairness                :",
+    `weight ${JUROR_VOTE_WEIGHT} each, quorum ${JURY_QUORUM}, appeal ${APPEAL_QUORUM}, ballot sealed + recoverable (OK)`
+  );
+
+  // 10b. The social layer must not leak into the evidentiary one. This is the
+  // property most likely to erode by accident: someone adds a "score" that
+  // quietly folds reactions into credibility, and a report accusing a popular
+  // figure starts reading as less true because fewer people liked it.
+  const social = require("../src/social");
+
+  const SOCIAL_REPORT = 77;
+  const ACTOR = "0x5555555555555555555555555555555555555555";
+
+  await social.react(SOCIAL_REPORT, ACTOR, social.ReactionKind.Important);
+  const counts = await social.reactionsFor(SOCIAL_REPORT);
+  assert(counts[social.ReactionKind.Important] === 1, "a reaction must be recorded");
+
+  // Reactions live in their own store and touch nothing the chain mirror holds.
+  const mirrored = (await readMirror()).find(
+    (r: { onChainReportId: number }) => r.onChainReportId === SOCIAL_REPORT
+  );
+  assert(!mirrored, "reactions must not create or alter a chain-mirror row");
+  assert(
+    typeof (social as Record<string, unknown>).corroborate === "undefined",
+    "the social module must expose no path to corroboration"
+  );
+
+  // One reaction per actor, replaceable — not an accumulating score.
+  await social.react(SOCIAL_REPORT, ACTOR, social.ReactionKind.Support);
+  const swapped = await social.reactionsFor(SOCIAL_REPORT);
+  assert(
+    swapped[social.ReactionKind.Important] === 0 && swapped[social.ReactionKind.Support] === 1,
+    "an actor's reaction must replace, not stack"
+  );
+
+  // A comment reported as identity speculation disappears immediately rather
+  // than waiting for review; the damage is done the moment it is read.
+  const comment = await social.addComment({
+    reportId: SOCIAL_REPORT,
+    author: ACTOR,
+    body: "pretty sure this is someone from the accounts department",
+  });
+  assert((await social.commentsFor(SOCIAL_REPORT)).length === 1, "comment posted");
+
+  await social.reportComment(comment.id, social.CommentReportReason.IdentitySpeculation);
+  assert(
+    (await social.commentsFor(SOCIAL_REPORT)).length === 0,
+    "identity speculation must hide on sight, not queue"
+  );
+
+  // Codenames are derived, never chosen: a handle someone picks travels between
+  // platforms and collapses the anonymity model into a search query.
+  const profile = social.profileFor(ACTOR, { codename: "mumbai_accountant" });
+  assert(
+    profile.codename !== "mumbai_accountant",
+    "a profile must not accept a chosen handle"
+  );
+  assert(profile.followListVisible === false, "follow lists must be private by default");
+
+  console.log(
+    "10b. social layer boundary       :",
+    "reactions isolated, identity-speculation auto-hidden, codename derived (OK)"
+  );
+
+  // 11. Transport selection. The property that matters is that a build which
+  // cannot run Tor never claims it can — web and Expo Go must report `direct`
+  // and unverified, because a user who believes otherwise makes decisions on it.
+  const transportMod = require("../src/net/transport");
+  const { getTransport, probeAnonymity, netFetch, isolateNextRequests } = transportMod;
+
+  torStub.available = false;
+  assert(getTransport().name === "direct", "no native module must select the direct transport");
+  assert(probeAnonymity().verified === false, "direct must never report as verified");
+  assert(probeAnonymity().claimed === false, "direct must not claim anonymity");
+
+  // Installed but not started: still not anonymised. Marking traffic protected
+  // because Tor *could* run is the exact failure this guards.
+  torStub.available = true;
+  torStub.state = "stopped";
+  assert(getTransport().name === "direct", "an idle Tor must not be selected");
+  assert(probeAnonymity().verified === false, "Tor that is not running is not protection");
+
+  torStub.state = "running";
+  torStub.socksPort = 9150;
+  assert(getTransport().name === "tor", "a running Tor must be selected");
+  assert(probeAnonymity().verified === true, "embedded Tor is verifiable end to end");
+  console.log("11. transport selection          : direct → idle-tor → running-tor (OK)");
+
+  // 12. Traffic must actually leave through the native module rather than the
+  // global fetch, and the response has to survive the base64 round trip.
+  torStub.nextBody = JSON.stringify({ cid: "bafyviator" });
+  torStub.requests.length = 0;
+
+  const response = await netFetch(
+    "https://example.invalid/pin",
+    { method: "POST", body: "{}" },
+    "test:tor"
+  );
+  const parsed = await response.json();
+
+  assert(torStub.requests.length === 1, "the request must go through the Tor native module");
+  assert(torStub.requests[0].method === "POST", "the method must survive the bridge");
+  assert(parsed.cid === "bafyviator", "the response body must survive the base64 round trip");
+  console.log("12. request through Tor          : POST relayed, body round-tripped (OK)");
+
+  // 13. Circuit isolation per submission. Two reports sharing a circuit share
+  // an exit relay and a timing pattern, which links them even though each is
+  // individually anonymous.
+  torStub.circuitRotations = 0;
+  assert((await isolateNextRequests()) === true, "a running Tor must grant fresh circuits");
+  assert(torStub.circuitRotations === 1, "isolation must reach the native module");
+
+  torStub.state = "stopped";
+  assert(
+    (await isolateNextRequests()) === false,
+    "isolation must report failure when Tor is off rather than pretending"
+  );
+  assert(torStub.circuitRotations === 1, "no rotation should be recorded while stopped");
+  console.log("13. circuit isolation            : rotates when running, honest when not (OK)");
+
+  // Leave the transport where the rest of the suite expects it.
+  torStub.available = false;
+  transportMod.setTransport(null);
 
   console.log("\n✅ ALL SLICE STEPS PASSED — compose → encrypt → hash → encode → sign → gasless submit\n");
 }

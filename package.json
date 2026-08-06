@@ -5,7 +5,8 @@
   "description": "Anonymous anti-corruption reporting app — monorepo root",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "modules/*"
   ],
   "scripts": {
     "contracts:compile": "npm run compile --workspace packages/contracts",
@@ -13,7 +14,14 @@
     "contracts:deploy:sepolia": "npm run deploy:sepolia --workspace packages/contracts",
     "mobile:start": "npm run start --workspace apps/mobile",
     "mobile:web": "npm run web --workspace apps/mobile",
-    "mobile:typecheck": "npm run typecheck --workspace apps/mobile"
+    "mobile:typecheck": "npm run typecheck --workspace apps/mobile",
+    "tor:test": "npm run test:rust --workspace expo-tor",
+    "tor:build:android": "npm run build:android --workspace expo-tor",
+    "tor:build:ios": "npm run build:ios --workspace expo-tor",
+    "zk:test": "npm run test:rust --workspace expo-zkprove",
+    "zk:build:android": "npm run build:android --workspace expo-zkprove",
+    "typecheck": "tsc -b",
+    "typecheck:clean": "tsc -b --clean && tsc -b"
   },
   "engines": {
     "node": ">=20"

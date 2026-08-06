@@ -1,0 +1,87 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'maven-publish'
+
+group = 'expo.modules.tor'
+version = '0.1.0'
+
+def expoModulesCorePlugin = new File(
+  project(":expo-modules-core").projectDir.absolutePath,
+  "ExpoModulesCorePlugin.gradle"
+)
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useExpoPublishing()
+
+android {
+  namespace "expo.modules.tor"
+  defaultConfig {
+    minSdkVersion 24
+    compileSdkVersion 35
+    // Only the ABIs Play Store devices actually ship. Each one is a separate
+    // full Arti build, so adding an ABI is measured in minutes of CI and
+    // megabytes of APK.
+    ndk {
+      abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+    }
+  }
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+  sourceSets {
+    main {
+      // Where cargo-ndk drops libkhabardar_tor.so per ABI.
+      jniLibs.srcDirs = ['src/main/jniLibs']
+    }
+  }
+}
+
+dependencies {
+  implementation "com.squareup.okhttp3:okhttp:4.12.0"
+}
+
+/**
+ * Cross-compile the Arti core for every enabled ABI.
+ *
+ * Requires the Android NDK and `cargo-ndk`:
+ *   cargo install cargo-ndk
+ *   rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+ *
+ * Skipped when the toolchain is absent so a checkout without Rust can still
+ * open in Android Studio — but the build then has no native library and
+ * `System.loadLibrary` fails at runtime, which is loud and correct. Silently
+ * shipping an app whose Tor cannot start would be far worse.
+ */
+def rustDir = file("${projectDir}/../rust")
+
+task buildRustCore(type: Exec) {
+  onlyIf {
+    def hasCargo = System.getenv("PATH")
+      ?.split(File.pathSeparator)
+      ?.any { new File(it, isWindows() ? "cargo.exe" : "cargo").exists() } ?: false
+    if (!hasCargo) {
+      logger.warn("expo-tor: cargo not found — skipping native Tor build. " +
+        "The app will fail to start Tor at runtime.")
+    }
+    hasCargo
+  }
+
+  workingDir rustDir
+  commandLine 'cargo', 'ndk',
+    '-t', 'arm64-v8a',
+    '-t', 'armeabi-v7a',
+    '-t', 'x86_64',
+    '-o', "${projectDir}/src/main/jniLibs",
+    'build', '--release'
+}
+
+static def isWindows() {
+  return System.getProperty('os.name').toLowerCase().contains('windows')
+}
+
+preBuild.dependsOn buildRustCore

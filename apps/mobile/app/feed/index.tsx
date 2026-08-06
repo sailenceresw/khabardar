@@ -10,7 +10,8 @@ import {
   type FeedReport,
 } from "@khabardar/shared";
 import { getNetworkIndex, resolveFeedReports, type FeedQuery } from "../../src/feed";
-import { Body, Card, Screen, TierBadge, Title } from "../../src/ui";
+import { commentCount, following, FollowKind, type Follow } from "../../src/social";
+import { Badge, Body, Card, Screen, TierBadge, Title } from "../../src/ui";
 import { colors, radius, spacing } from "../../src/theme";
 import { t } from "../../src/i18n";
 
@@ -31,10 +32,21 @@ const DATE_RANGES = [
   { key: "30d", ms: 30 * 24 * 60 * 60 * 1000 },
 ] as const;
 
+/**
+ * Which slice of the feed to show.
+ *
+ * "Following" is the social one, and note what it can follow: reporters,
+ * accused entities, regions, and categories. Only the first is a person.
+ */
+type FeedTab = "following" | "all" | "trending";
+
 export default function FeedScreen() {
   const router = useRouter();
   const [reports, setReports] = useState<FeedReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<FeedTab>("all");
+  const [follows, setFollows] = useState<Follow[]>([]);
+  const [commentCounts, setCommentCounts] = useState<Record<number, number>>({});
 
   const [category, setCategory] = useState<ReportCategory | undefined>();
   const [tier, setTier] = useState<VerificationTier | undefined>();
@@ -50,7 +62,14 @@ export default function FeedScreen() {
       // readable after decryption.
       const query: FeedQuery = { category, tier, region: region.trim() || undefined, since };
       const rows = await getNetworkIndex().list(query);
-      setReports(await resolveFeedReports(rows));
+      const resolved = await resolveFeedReports(rows);
+      setReports(resolved);
+
+      setFollows(await following());
+      const counts = await Promise.all(
+        resolved.map(async (r) => [r.onChainReportId, await commentCount(r.onChainReportId)] as const)
+      );
+      setCommentCounts(Object.fromEntries(counts));
     } finally {
       setLoading(false);
     }
@@ -63,12 +82,51 @@ export default function FeedScreen() {
   );
 
   const visible = useMemo(() => {
+    let rows = reports;
+
+    if (tab === "following") {
+      // A report matches if ANY followed thing matches it. Entity, region and
+      // category follows carry no reporter identity at all; only a reporter
+      // follow does, which is why they sit side by side rather than replacing
+      // each other.
+      const reporters = new Set(
+        follows.filter((f) => f.kind === FollowKind.Reporter).map((f) => f.target.toLowerCase())
+      );
+      const entities = new Set(
+        follows.filter((f) => f.kind === FollowKind.Entity).map((f) => f.target.toLowerCase())
+      );
+      const regions = follows
+        .filter((f) => f.kind === FollowKind.Region)
+        .map((f) => f.target.toLowerCase());
+      const categories = new Set(
+        follows.filter((f) => f.kind === FollowKind.Category).map((f) => Number(f.target))
+      );
+
+      rows = rows.filter(
+        (r) =>
+          reporters.has(r.reporter.toLowerCase()) ||
+          (r.entityTag && entities.has(r.entityTag.toLowerCase())) ||
+          regions.some((prefix) => r.coarseGeohash.toLowerCase().startsWith(prefix)) ||
+          categories.has(r.category)
+      );
+    }
+
+    if (tab === "trending") {
+      // Ranked by corroboration first, then engagement. Corroboration leads on
+      // purpose: it is an evidentiary claim, and letting comment volume outrank
+      // it would put the loudest report on top rather than the best-supported.
+      rows = [...rows].sort((a, b) => {
+        if (b.corroborations !== a.corroborations) return b.corroborations - a.corroborations;
+        return (commentCounts[b.onChainReportId] ?? 0) - (commentCounts[a.onChainReportId] ?? 0);
+      });
+    }
+
     const q = search.trim().toLowerCase();
-    if (!q) return reports;
+    if (!q) return rows;
     // Locked reports can never match a text query — we cannot read them, and
     // guessing from metadata would be misleading.
-    return reports.filter((r) => (r.body ?? "").toLowerCase().includes(q));
-  }, [reports, search]);
+    return rows.filter((r) => (r.body ?? "").toLowerCase().includes(q));
+  }, [reports, search, tab, follows, commentCounts]);
 
   const activeFilters = [category !== undefined, tier !== undefined, !!region.trim(), !!since].filter(
     Boolean
@@ -86,6 +144,24 @@ export default function FeedScreen() {
     <Screen>
       <Title>{t("feed.title")}</Title>
       <Body dim>{t("feed.subtitle")}</Body>
+
+      <View style={styles.tabs}>
+        {(["following", "all", "trending"] as FeedTab[]).map((key) => (
+          <Pressable key={key} onPress={() => setTab(key)} style={styles.tabFlex}>
+            <View style={[styles.tab, tab === key && styles.tabActive]}>
+              <Text style={[styles.tabText, tab === key && styles.tabTextActive]}>
+                {t(`social.tab.${key}`)}
+              </Text>
+            </View>
+          </Pressable>
+        ))}
+      </View>
+
+      {tab === "following" && follows.length === 0 ? (
+        <Card style={{ borderColor: colors.info }}>
+          <Body dim>{t("social.followNothingYet")}</Body>
+        </Card>
+      ) : null}
 
       <Card>
         <TextInput
@@ -198,6 +274,13 @@ export default function FeedScreen() {
                   </Body>
                   {r.demo ? <Text style={styles.demoTag}>{t("feed.sample")}</Text> : null}
                 </View>
+
+                {commentCounts[r.onChainReportId] ? (
+                  <Badge
+                    label={t("social.commentBadge", { count: commentCounts[r.onChainReportId] })}
+                    tone="dim"
+                  />
+                ) : null}
               </Card>
             </Pressable>
           ))}
@@ -247,6 +330,18 @@ const styles = StyleSheet.create({
   chipText: { color: colors.textDim, fontSize: 13 },
   chipTextActive: { color: colors.accentText, fontWeight: "600" },
   demoTag: { color: colors.textDim, fontSize: 11, fontStyle: "italic" },
+  tabs: { flexDirection: "row", gap: spacing.sm },
+  tabFlex: { flex: 1 },
+  tab: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  tabActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  tabText: { color: colors.textDim, fontSize: 14 },
+  tabTextActive: { color: colors.accentText, fontWeight: "600" },
   link: { color: colors.info, fontSize: 15, fontWeight: "600", textAlign: "center" },
   input: {
     color: colors.text,

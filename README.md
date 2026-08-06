@@ -93,7 +93,7 @@ Concrete guarantees in this scaffold:
   bundle), `cid` (pointer to that bundle in the content layer), category, visibility,
   verification tier, coarse geohash, blinded `entityTag`, timestamp, and the
   pseudonymous reporter address. A moderator role (v0: single address; later:
-  karma-weighted jury) sets the tier, adjusting reporter karma.
+  equal-weight secret-ballot jury) sets the tier, adjusting reporter karma.
 
 ### Content layer — how reports become readable
 
@@ -142,8 +142,86 @@ scraping.
 
 Separately, `corroborate(reportId)` lets a witness back a report; the contract blocks
 self-corroboration and double-voting, and auto-promotes to `CommunityCorroborated` at
-3 independent corroborations. **This is only as sybil-resistant as the caller set** —
-production must gate it behind proof-of-personhood (RLN / anonymous credentials).
+3 independent corroborations.
+
+### Sybil resistance, applied asymmetrically
+
+Three attacks, three defences, and — the part that matters — they are **not** applied to
+the same place:
+
+| Attack | Defence | Applied to |
+|---|---|---|
+| Flood the gasless endpoint | Per-epoch submission cap (10/day/account) | `submitReport` |
+| Sybil the witness set | `IPersonhoodGate` | `corroborate` |
+| Capture the review | Equal-weight secret-ballot jury, appealable | tier verdicts |
+
+Note what is deliberately absent: **there is no personhood check on `submitReport`.**
+Requiring anyone to prove who they are before reporting corruption would rebuild the
+identity chokepoint this whole design exists to remove, and would exclude exactly the
+people least able to obtain credentials. Reporting stays open to any address; only
+*vouching for someone else* is gated, because that is where sybils actually buy something.
+
+Two gates ship. **`AllowlistPersonhoodGate`** is honest about being non-anonymous — the
+operator learns who they admitted, which is fine for a closed pilot and unacceptable where
+a corroborator faces real risk. **`SemaphorePersonhoodGate`** is the real one.
+
+### Zero-knowledge personhood (Semaphore)
+
+A member proves, in zero knowledge: *"I am one of the identities in this group, and I have
+not already signalled in this scope."* It does not say **which** identity. The verifier
+learns only a `nullifier` — derived from the member's secret and the scope — unlinkable to
+the member and unlinkable to their nullifiers in any other scope.
+
+That is the difference that matters. The allowlist buys sybil resistance by making the
+operator hold a list of everyone willing to vouch for a corruption report — which is
+precisely the list a subpoena asks for. Semaphore buys the same resistance with the
+operator holding only identity *commitments*: hashes, from which they can never tell who
+acted. Enrolling someone stops being a record capable of identifying their later actions.
+
+The contract tests generate **real Groth16 proofs and verify them on-chain**, including
+the negative cases: a non-member's proof is rejected, a proof cannot be redeemed by a
+different address than the one it was bound to, and a nullifier cannot be spent twice.
+
+**A correction worth stating plainly, because it is a common and dangerous
+misconception: Linea's zk gives your users no privacy.** It is a zkEVM *rollup* — the
+proofs convince Ethereum that the rollup executed correctly, so L1 need not re-execute.
+They hide nothing from anyone reading Linea. Every address, every byte of calldata, and
+every nullifier is as public as on Ethereum. The anonymity here comes from the Semaphore
+circuit at the application layer, not from the chain.
+
+What Linea *does* give you is native account abstraction (ERC-4337, and EIP-7702
+post-Pectra), which is the gasless half. Both halves are needed and neither is
+sufficient: a zk proof submitted from an address with a traceable history is still
+linkable through that address, so anonymity requires a fresh sponsored smart account per
+action *and* the proof.
+
+**Proving on the device** is `modules/expo-zkprove` — witness generation and Groth16
+proving in Rust (`ark-circom` + `ark-groth16`), reusing the same cargo-ndk pipeline that
+carries Arti. The Android cross-compile produces a 6.1 MB AArch64 library exporting the
+three JNI entry points Kotlin declares.
+
+The split is deliberate: JS marshals the circuit inputs — which identity, which group,
+which scope — and native does only the expensive part, so the decisions worth auditing
+stay in readable TypeScript rather than behind an FFI boundary. Field elements cross that
+boundary as decimal strings, never JS numbers: they run to 254 bits and a JS number carries
+53, so passing them as numbers would round an identity secret into a *different* one and
+prove membership for someone who does not exist.
+
+Verified end to end against real artifacts: given the inputs the reference library would
+use, the prover produces the same Merkle root and the same nullifier, and self-verifies the
+proof before returning it. Matching the nullifier is the property that matters — a prover
+computing a different one would silently let one member signal twice.
+
+Proving artifacts (~3 MB per tree depth) are downloaded rather than bundled, and the
+fetcher is injected so it goes through the transport seam. Fetching a proving key from a
+CDN announces that an IP is about to produce a proof, which is a stronger signal than
+ordinary traffic — only someone *about to act* fetches one. `warmCache()` exists so the
+download need not be correlated in time with the action.
+
+**Still not run on a real device.** The library builds and the core is tested on desktop;
+no proof has been generated on a phone.
+
+With no gate configured — the default — corroboration is not sybil-resistant at all.
 
 ### Identity: three options, one default
 
@@ -239,6 +317,31 @@ should never be one signup form away. Plans and entitlements gate corpus export
 (`apps/mobile/src/export.ts`), which excludes restricted reports and never exports
 reporter addresses.
 
+**Seats and API keys.** Seats carry a role (`admin` / `member` / `viewer`, the last
+read-only and excluded from export) and revoked seats are kept with a `revokedAt` rather
+than deleted — "who had access to this corpus, and when" is a question an org will
+eventually have to answer, and a deleted row cannot answer it. API keys store only a
+prefix and a SHA-256 hash, so the secret is shown once and a stolen database yields no
+working credentials.
+
+**Analytics** (`/analytics`) suppresses any bucket below 5 reports rather than rounding
+it. Aggregates over a whistleblower corpus are *more* dangerous than individual reports:
+"three bribery reports in geohash tsj9 this month" sounds anonymous and is not, because
+three is a small enough set for someone with local knowledge to start guessing.
+Suppressed buckets are counted and reported, so an analyst sees that data was withheld
+rather than concluding a region is clean. There are no per-reporter statistics of any
+kind — not even counts.
+
+**Case management** (`/cases`) groups reports, tracks what was done, and records the
+outcome. Outcomes are the point: reports filed is an activity metric, investigations
+concluded is a result, and `outcomeSummary()` is the number that belongs in a grant
+report. Cases reference report *ids* only, never content, and carry no reporter
+identifier anywhere in the model.
+
+**Non-payment removes capability, never data.** A lapsed account drops to Community
+entitlements after a 30-day grace period and keeps everything. Cutting a newsroom off
+from its case notes mid-investigation is a way to get someone hurt.
+
 See [BUSINESS.md](./BUSINESS.md) for the revenue model, unit economics, and a
 completed / in-progress / not-started status breakdown.
 
@@ -246,12 +349,18 @@ completed / in-progress / not-started status breakdown.
 
 Prereqs: Node 20 (`.nvmrc`), npm 10.
 
+**Building without a test device?** See [DEVELOPING.md](./DEVELOPING.md) — Android runs
+on the emulator (mind the ABI: emulators are `x86_64`, phones are `arm64-v8a`, and the
+native modules are compiled per ABI), web runs anywhere, and iOS cannot be built on
+Windows at all.
+
 ```bash
 npm install                    # installs all workspaces
+npm run typecheck              # tsc -b across every workspace
 
 # Contracts
 npm run contracts:compile
-npm run contracts:test         # 23 passing
+npm run contracts:test         # 73 passing (11 generate real zk proofs)
 
 # Mobile app (mock relayer — no credentials needed)
 npm run mobile:web             # dev server with hot reload
@@ -265,13 +374,54 @@ npm run web:static  --workspace apps/mobile   # serves dist/ on :8085
 npm run verify:slice --workspace apps/mobile
 ```
 
+### Web demo deployment (Vercel)
+
+`vercel.json` at the repo root builds `apps/mobile/dist` and serves it as an SPA.
+
+```bash
+npx vercel deploy          # preview URL
+npx vercel deploy --prod   # production alias
+```
+
+**The web build is a demonstration and the deployment is configured to keep it that
+way.** Three of the app's guarantees do not exist in a browser:
+
+| Guarantee | Why it is absent on web |
+|---|---|
+| Keys in secure hardware | No Keychain/Keystore — the identity key, at-rest keys and stealth PINs fall back to `localStorage`, readable by any extension or XSS |
+| Tor | A browser cannot load the native module; every request leaves from the visitor's real IP |
+| Panic delete | Clears `localStorage`, but cannot reach a browser profile, sync, or backup that already copied those values |
+
+So the deployment does two things beyond serving files. `WebDemoGate` shows an
+unmissable interstitial before anything else on web — a gate rather than a dismissible
+banner, because someone who has started typing has already made the decision the banner
+was meant to inform. And `X-Robots-Tag: noindex` plus `robots.txt` keep it out of search
+results: a person searching for a way to report corruption safely must not *find* this
+and trust it, which is the precise failure the project exists to prevent.
+
+`Referrer-Policy: no-referrer` is set for the same reason — an anonymity tool should not
+announce itself as the origin when a visitor follows an outbound link.
+
+`.vercelignore` excludes the Rust build directory (5.4 GB) and `node_modules` (874 MB).
+Both are gitignored and the CLI would likely skip them anyway, but a silent
+multi-gigabyte upload is not a failure worth leaving to chance.
+
 `verify:slice` runs the real `cryptoUtils` / `encoding` / `evidence` / `content` /
-`MockRelayer` modules under Node (with `expo-crypto`, AsyncStorage, SecureStore and
-the image modules shimmed) and asserts the full path: encrypt → decrypt round-trip →
-deterministic keccak256 fingerprint → blinded entity tag → evidence upload returning a
-resolvable CID → ABI-encoded `submitReport()` calldata → device-key signature → relay
-result. It's the fastest way to confirm the chain-facing logic still works, and is
-CI-safe.
+`MockRelayer` / `tips` / `moderation` modules under Node (with `expo-crypto`,
+AsyncStorage, SecureStore and the native picker modules shimmed) and asserts the full
+path: encrypt → decrypt round-trip → deterministic keccak256 fingerprint → blinded entity
+tag → evidence upload returning a resolvable CID → ABI-encoded `submitReport()` calldata →
+device-key signature → relay result. It additionally guards three properties that are
+easy to regress silently:
+
+- **Report ids stay unique across app restarts.** The mock relayer stands in for the
+  contract's monotonic `reportCount`; an in-memory counter would restart at 0 on reload
+  and two reports would share an id, which makes the feed open the wrong one.
+- **Tip padding collapses different lengths onto one bucket**, and round-trips.
+- **No single juror can reach quorum** — the cap must stay strictly below the threshold,
+  or the jury quietly becomes a moderator again.
+
+It's the fastest way to confirm the chain-facing logic still works, and is CI-safe.
 
 ### Troubleshooting: Metro hangs on Windows
 
@@ -313,18 +463,97 @@ has moved past `Unverified`**:
 `Unverified → UnderReview → CommunityCorroborated → Verified` (or `Disputed`)
 
 The review queue (`/moderation`) lists everything not yet adjudicated, oldest first,
-with each report's integrity-check result. A moderator can change a report's **tier**
-but can **never edit or delete the report** — the content is anchored on-chain, so
-moderation adds judgement on top of an immutable record rather than rewriting it. Every
-decision is logged with a reason.
+with each report's integrity-check result.
 
-Two things about this are deliberately unfinished and should not be glossed over:
+### Jury of equals, voting in secret
 
-- The in-app "moderator mode" toggle is a **local dev affordance**. The real gate is the
-  contract's `onlyModerator` check; the toggle grants nothing on-chain.
-- The decision log is **on-device only**. Production must publish decisions (or their
-  hashes) so moderators are auditable by the same public being asked to trust them. A
-  moderation system nobody can audit is just censorship with extra steps.
+There is **no moderator address**. Verdicts come from a jury, and the contract has no
+admin path to a tier — the admin seats and unseats jurors and nothing else.
+
+| Property | Removes |
+|---|---|
+| Every juror counts exactly **one** | Influence accumulating to whoever agrees most |
+| Ballots are **sealed** until the panel is full | Late jurors reading the room instead of the evidence |
+| Dissent costs **nothing** | Pricing the one "no" that a captured panel most needs |
+| A **majority**, not a plurality, decides | Disagreement being dressed up as a decision |
+| The reporter can **appeal** once, to a larger panel | A wrong first verdict being permanent |
+| Every opened ballot publishes its **reason** | Unaccountable reasoning |
+
+#### Why an earlier version of this was unfair
+
+This started out weighting each juror's vote by their karma, paying them for agreeing
+with the eventual verdict and charging them double for dissenting. That was wrong in
+three compounding ways, and it is worth stating rather than quietly fixing:
+
+1. **It made agreement profitable.** The rational move for any juror was to vote with
+   whoever they expected to win, not with the evidence — a beauty contest, not a
+   truth-finding process.
+2. **The reward compounded.** Agreeing bought karma, karma bought weight, weight bought
+   influence over the next verdict. A juror who was right *before* the majority caught up
+   was stripped of standing for it.
+3. **Reporter karma and juror weight shared one counter.** Filing reports that got
+   Verified literally bought judicial power over the review of one's own later
+   accusations.
+
+The deep error was using majority agreement as a proxy for truth. For corruption reports
+that is backwards: the cases most likely to attract a confidently wrong majority are the
+ones accusing powerful or popular people, which are exactly the cases that need a juror
+willing to be the only "no" in the room.
+
+So the mechanism no longer measures agreement at all. The only thing a juror's record
+holds against them is committing to a verdict and then never opening it — a failure to do
+the job rather than a wrong opinion about the evidence. Bad jurors are removed by an
+explicit, visible, contestable decision of whoever holds `admin`, not by an automatic
+metric that mistakes conformity for judgement.
+
+#### How a round runs
+
+```
+commit  →  jurors submit keccak256(reportId, round, tier, salt, juror)
+           nothing readable exists; the tally does not yet exist
+        →  panel fills at quorum (3, or 5 on appeal)
+
+reveal  →  jurors open their ballot with (tier, salt) and a written reason
+           the vote was locked before they saw anyone else's
+
+close   →  majority of revealed ballots decides; anything less is "undecided"
+           committed-but-never-revealed is recorded as abandonment
+```
+
+`JuryVoteRevealed` carries the juror's stated reason on-chain, so the public can audit
+moderators with nothing but an RPC endpoint. Because the ballot was sealed first, that
+reason cannot be retrofitted to whatever the majority turned out to be.
+
+A jury can move a report's **tier** and can **never edit or delete the report** — the
+content hash is anchored, so moderation adds judgement on top of an immutable record.
+
+#### The capture vector, and why sortition was the wrong fix
+
+The commit phase used to close as soon as a fixed panel was full. That made the seats a
+race, and a race is a capture vector: a coordinated group watching for new reports could
+take every seat before anyone else saw the report, and honest jurors were locked out of
+exactly the reports that mattered most.
+
+The obvious fix is **sortition** — draw the panel at random so seats cannot be raced for.
+That needs randomness a block producer cannot grind, which on an L2 with one sequencer is
+genuinely hard, and a weak version would look like a defence while being one.
+
+The better fix was to **remove the scarcity instead**. The commit phase now stays open for
+a fixed window, for everyone. Any juror who wants to vote can. There is no seat to take,
+so there is nothing to race for — filling the window early costs an attacker nothing and
+buys them nothing, because the jurors they were trying to exclude simply commit too.
+`MIN_BALLOTS` guards the other end: a round too few people revealed on produces
+"undecided" rather than letting a handful decide for a panel that went quiet.
+
+#### What is still unfair, and not yet fixed
+
+- **A jury of three addresses controlled by one party** is exactly the centralization
+  this replaced. The contract cannot detect that; only the people seating jurors can.
+  Anonymous ballots (Semaphore, as used for personhood) would additionally stop jurors
+  being targeted or bribed, and is the natural next step.
+- The in-app "act as a juror" toggle is a **local dev affordance**, and the simulated
+  peers exist so one device can reach quorum in a demo. Both are labelled everywhere they
+  appear and both must be deleted before a real deployment.
 
 On detecting AI-generated reports: **do not ship a naive AI-text detector.** They have
 high false-positive rates on second-language English writers, which describes a large
@@ -351,47 +580,164 @@ publish them somewhere independently verifiable (DNS TXT, a well-known URI on th
 organisation's own domain, or an on-chain registry) and pin them in-app, so a compromised
 backend cannot silently swap in its own key and read every restricted report.
 
+## Surviving a seized phone
+
+Every other protection here assumes the adversary is on the network. Stealth mode
+(`/stealth`) assumes they are in the room, which for an anti-corruption reporter is the
+ordinary case rather than the exotic one.
+
+- **Duress PIN.** A second PIN that wipes everything and then opens the app as if it were
+  new — no error, no confirmation, nothing an observer could read as a wipe having
+  happened. When refusing to unlock is more dangerous than complying, the tool has to
+  make complying safe.
+- **Disguise.** The lock screen can be a working calculator. It has to actually
+  calculate: a calculator that does not add up marks the phone as having something to
+  hide, which is worse than no disguise at all.
+- **Screenshot and app-switcher blocking**, on by default. Both operating systems
+  snapshot the current screen, and a snapshot of a report is the report.
+
+**What this cannot do**, stated plainly: a duress wipe does not defend against a forensic
+image taken *before* the wipe, and it cannot recover data already copied. It makes a
+seized-and-unlocked phone survivable. It does not make it safe to carry this app into a
+search.
+
+## Network egress and Tor
+
+All outbound traffic — content store, relayer, RPC, indexer — goes through a single seam
+(`src/net/transport.ts`), and the strongest available transport wins:
+
+| Transport | Anonymised | Verified | When |
+|---|---|---|---|
+| **Tor** (`modules/expo-tor`) | yes | **yes** | native module present *and* Arti bootstrapped |
+| HTTP proxy | claimed | no | `EXPO_PUBLIC_ANONYMISING_PROXY_URL` is set |
+| Direct | no | no | otherwise |
+
+`verified` is not decoration. It is true only for embedded Tor, because that is the one
+case where the app owns the whole path — Arti runs in-process, we hold its SOCKS port, and
+the platform HTTP client is pointed at that port and nothing else. A proxy that *claims* to
+front Tor cannot be confirmed from inside the app, and Orbot's VPN mode is invisible to it
+entirely. Reporting either as verified would be exactly the false assurance the seam exists
+to prevent.
+
+### Embedded Tor
+
+`modules/expo-tor` runs **Arti** (Tor's Rust implementation) inside the app:
+
+```
+Arti (Rust, in-process)
+  └── loopback SOCKS5 proxy on an ephemeral port
+        └── OkHttp (Android) / URLSession (iOS)
+              └── TorTransport → the same netFetch() every other module uses
+```
+
+Native code owns exactly one thing — running Arti and offering a SOCKS port — and the
+platform HTTP stacks do the rest. Writing HTTP onto Arti's streams directly would have
+meant reimplementing TLS, certificate validation, and HTTP/2 in Rust, badly, in the one
+place where a mistake silently costs a user their anonymity.
+
+Three properties worth knowing about:
+
+- **No DNS leak.** Hostnames travel to the proxy as SOCKS5 `ATYP=0x03` and are resolved by
+  the Tor exit. Both HTTP clients build *unresolved* socket addresses for SOCKS proxies,
+  and OkHttp is additionally given a DNS resolver that refuses to answer. Resolving locally
+  is the classic way to leak while "using Tor": the traffic is anonymised and the lookup
+  that says exactly where you are going is not.
+- **A fresh circuit per submission.** `publishReport()` calls `isolateNextRequests()`
+  before any byte leaves. Two reports sharing a circuit share an exit relay and a timing
+  pattern — enough to infer one author, even though each report is individually anonymous.
+  The blinded entity tags and aggregate-only sponsor attribution elsewhere in this project
+  exist to prevent that inference; letting the transport hand it back would waste the work.
+- **No silent fallback.** When Tor is on and a request cannot go through it, the request
+  fails. A transport that quietly degrades is worse than none, because the user has been
+  told they are protected and has acted on it.
+
+**Requires a development build or a release binary.** Expo Go and the web preview cannot
+load native code, and in those builds `/network` says so in as many words rather than
+implying protection that is not there.
+
+```bash
+# Rust core — protocol tests, no Tor network needed
+npm run tor:test
+
+# Cross-compile Arti (needs the Android NDK / Xcode)
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+cargo install cargo-ndk
+npm run tor:build:android
+npm run tor:build:ios
+```
+
+Arti's state directory holds its **guard set** — the small number of entry relays the
+client deliberately reuses to resist traffic analysis. The config plugin excludes it from
+Android auto-backup and Android 12+ device transfer, and the iOS module marks it
+`isExcludedFromBackup`. A guard set sitting in cloud storage is subject to legal process
+and links every restore of that backup to the same user.
+
+### The rest of the seam
+
+- **Fail-closed policy.** Turn on "refuse unprotected connections" in `/network` and any
+  request that would leave without an anonymising transport throws instead of leaking.
+- **Egress accounting.** `/network` lists every host the app has contacted and why.
+  "We never see your data" is a claim; a list the user can read is better than a claim.
+
 ## Roadmap / current stubs
 
-- **Tor/onion transport** — not yet wired, and the largest remaining gap. Route relayer,
-  RPC, and content-store traffic through Tor (Arti has mobile bindings). SecureDrop
-  treats this as non-negotiable and so should we before any mainnet launch.
-- **RLN rate limiting / proof-of-personhood** — needed to make corroboration and karma
-  actually sybil-resistant, and to keep a gasless endpoint from being drained.
-- **Karma-weighted jury** — replace the single moderator address; stake karma on
-  verdicts so bad reviewers lose standing.
-- **Real indexer** — `ChainNetworkIndex` scans `eth_getLogs`, which will not survive
-  real volume. Swap for Ponder/subgraph behind the same `NetworkIndex` interface.
-- **Counterfactual smart account** — `PimlicoRelayer` still uses the owner EOA as
-  `sender`; the SimpleAccount factory derivation is marked as integration point 1.
-- **Evidence at scale** — blobs are encrypted and uploaded, but large files need
-  expo-file-system streaming rather than AsyncStorage + base64.
-- **Audio/document evidence** — photo pipeline is wired; audio/docs follow the same
-  strip → encrypt → hash → upload path.
-- **Offline drafts** — drafts work offline already; submission queueing/retry on
-  reconnect is not yet automatic.
-- **Stealth mode** — disguise UI, duress PIN, screenshot blocking. A recognisable
-  anti-corruption app on a seized phone is itself evidence against its user.
-- **Org accreditation + billing backend** — accreditation is currently a local flag with
-  a dev toggle, and there is no billing, seat management, or API-key issuance. The paid
-  surfaces (analytics, case management, public API) are declared in the entitlement model
-  but not built.
-- **Evidence upload wiring** — `uploadEvidence` returns CIDs but is not yet called from
-  the compose flow; evidence still resolves locally.
+- **Tor on a real network** — the transport is built and its protocol layer is tested, but
+  it has never carried traffic over the live Tor network from a device. The SOCKS5 server
+  is tested against a plain-TCP connector; Arti's own bootstrap and circuit handling are
+  exercised only by Arti's test suite, not ours. Until someone runs a dev build on a phone
+  and watches a report land, treat "works" as unproven.
+- **Bridges and pluggable transports** — plain Tor is blocked in several of the places this
+  app is for. Arti supports bridges and obfs4; the module does not configure them yet, so
+  bootstrap simply fails where Tor is censored. This is the next thing to build.
+- **RLN proof-of-personhood** — `IPersonhoodGate` is in the contract and corroboration is
+  gated on it, with `AllowlistPersonhoodGate` as a working non-anonymous implementation
+  for closed pilots. Real RLN needs a zk verifier contract and a prover, neither of which
+  is here. Per-epoch submission rate limiting (the non-zk half) *is* enforced on-chain.
+- **Forward secrecy for tips** — padding landed; a recipient key compromise still opens
+  every past tip. Needs a ratchet or per-tip recipient subkeys.
+- **Evidence at scale** — audio, documents and photos all encrypt and upload, but the
+  path is `AsyncStorage` + base64 and capped at 8 MB. Video needs `expo-file-system`
+  chunked reads with streaming AES-GCM.
+- **C2PA provenance** — capture-time signatures for evidence authenticity. Not started;
+  needs a signing cert chain, so it is real infrastructure rather than a code change.
+- **Billing backend and public API** — the client-side model is built (seats, roles, API
+  key issuance with hash-only storage, billing state with a grace period). There is no
+  server: no payment processing, no API to serve, no server-side key verification. That
+  is deliberate scope, not an oversight — it is a different deployment.
+- **Languages beyond English and Hindi** — the i18n layer takes a new JSON file and
+  nothing else. Not adding machine translations on purpose: mistranslated safety copy in
+  an app for at-risk users is worse than English they have to work through.
+- **Voice-first reporting** — audio evidence is wired; dictating a report needs
+  speech-to-text, and an on-device model is the only version that does not ship a
+  reporter's voice to a third party.
+- **Independent security audit** — not performed, and cannot be self-served. This is a
+  funding prerequisite, not a roadmap item.
 
 ## Security & threat-model caveats (v0)
 
 - The web build's SecureStore fallback is localStorage — **dev preview only**.
 - `MockRelayer` fabricates tx hashes and `MockContentStore` writes locally; nothing is
   on-chain or on IPFS until real providers are configured.
-- **No anonymising transport yet.** Network-level metadata (your IP contacting a relayer,
-  a gateway, or an RPC) is currently the weakest link in the whole design and would
-  deanonymize a targeted user regardless of how good the cryptography is.
-- Corroboration is only as sybil-resistant as the caller set until RLN lands.
+- **Tor is off by default and unproven on a real network.** It has to be started
+  explicitly in `/network`, so an untouched install still connects directly. And while the
+  transport is built and its SOCKS layer tested, no report has yet travelled over the live
+  Tor network from a device — see the roadmap. Do not assume it works because it compiles.
+- **Tor cannot start where Tor is blocked.** No bridge or pluggable-transport support yet,
+  so in exactly the censored environments that need it most, bootstrap fails and the user
+  is left choosing between a direct connection and no app.
+- A build without the native module — Expo Go, web preview — cannot run Tor at all. It
+  says so, but the distinction between "cannot protect you" and "is not protecting you
+  right now" is easy to miss.
+- Corroboration is sybil-resistant only to the degree the configured personhood gate is.
+  With no gate set — the default — it is not sybil-resistant at all.
 - Entity tags are reversible by dictionary attack — see the trade-off note above.
-- A single moderator address is a centralization point — acceptable for testnet only.
-- Demo recipient keys, sample feed rows, and demo sponsor pools must be removed before
-  any real deployment.
+- The jury is only as independent as its seated members. A deployment that seats three
+  addresses controlled by one party has the centralization the jury was meant to remove,
+  and the contract cannot detect that.
+- Simulated peer jurors, demo recipient keys, sample feed rows, and demo sponsor pools
+  must all be removed before any real deployment.
 - Org accreditation is a local flag; the dev toggle grants nothing on a real deployment,
   where accreditation belongs server-side next to the billing relationship.
+- A PIN has very little entropy. It protects against someone picking up an unlocked
+  phone, not against a forensic lab; the data's real protection is the OS keystore.
 - No security audit has been performed. Do not use for real reports yet.

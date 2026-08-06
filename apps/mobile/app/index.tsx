@@ -9,7 +9,7 @@ import { t } from "../src/i18n";
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { identity, identityLoaded, reports, refreshReports } = useApp();
+  const { identity, identityLoaded, reports, queue, flushing, refreshReports, retryQueued } = useApp();
 
   useEffect(() => {
     if (identityLoaded && !identity) {
@@ -39,6 +39,19 @@ export default function HomeScreen() {
 
       <Button label={t("home.newReport")} onPress={() => router.push("/compose")} />
       <Button label={t("feed.open")} onPress={() => router.push("/feed")} variant="secondary" />
+
+      {queue.length > 0 ? (
+        <Card style={{ borderColor: colors.info }}>
+          <Body dim>{t("queue.pending", { count: queue.length })}</Body>
+          <Body dim>{t("queue.explainer")}</Body>
+          <Button
+            label={t("queue.retryNow")}
+            onPress={retryQueued}
+            loading={flushing}
+            variant="secondary"
+          />
+        </Card>
+      ) : null}
 
       {reports.length === 0 ? (
         <Card>

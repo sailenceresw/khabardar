@@ -3,7 +3,7 @@ import { bytesToHex } from "@noble/ciphers/utils";
 import { gcm } from "@noble/ciphers/aes";
 import * as Crypto from "expo-crypto";
 import { keccak256, toBytes } from "viem";
-import { randomKey, utf8ToBytes } from "./cryptoUtils";
+import { bytesToUtf8, randomKey, utf8ToBytes } from "./cryptoUtils";
 import { wrapContentKey, type WrappedKey } from "./content/contentKeys";
 import { DEMO_RECIPIENTS, type Recipient } from "./content/recipients";
 import { getContentStore } from "./content";
@@ -20,16 +20,65 @@ import { safeJsonParse } from "./safeJson";
  * (ephemeral ECDH -> HKDF -> AES-256-GCM), so only the named recipient's
  * private key can open it.
  *
+ * Length is padded to fixed buckets before sealing — see {@link padToBucket}.
+ *
  * What v0 does NOT yet do, and must before this is safe to rely on:
  *  - Transport. The sealed payload is stored locally; there is no delivery.
  *    Real delivery has to run over an anonymising transport (Tor, a mixnet, or
  *    at minimum a relay that never sees the sender IP), because the network
  *    metadata is what deanonymises people, not the ciphertext.
- *  - Padding. Message length currently leaks. Tips should be padded to fixed
- *    buckets so a 20-word tip is indistinguishable from a 2000-word one.
  *  - Forward secrecy. A recipient key compromise retroactively opens every
  *    past tip to them. A ratchet (or per-tip recipient subkeys) fixes this.
  */
+
+/**
+ * Ciphertext length buckets, in bytes of padded plaintext.
+ *
+ * AES-GCM is a stream cipher construction: ciphertext length equals plaintext
+ * length. Without padding, an observer who never breaks the encryption still
+ * learns roughly how much someone wrote — and "a 4KB tip to this newsroom on
+ * the morning the story broke" is a strong enough signal on its own. Bucketing
+ * collapses that into a handful of indistinguishable sizes.
+ *
+ * The buckets are coarse and few on purpose: more buckets mean finer leakage,
+ * and the cost of over-padding is bytes, which are cheap compared to the
+ * anonymity they buy.
+ */
+export const TIP_LENGTH_BUCKETS = [512, 2048, 8192, 32768, 131072] as const;
+
+/**
+ * Pad `message` up to the next bucket using a length-prefixed encoding.
+ *
+ * Layout: `[4-byte big-endian length][utf-8 message][random filler]`. Filler is
+ * random rather than zeroes so a compromised-but-not-broken ciphertext leaks
+ * nothing about where the real content stops.
+ */
+export function padToBucket(message: string): Uint8Array {
+  const body = utf8ToBytes(message);
+  const needed = body.length + 4;
+
+  const bucket = TIP_LENGTH_BUCKETS.find((b) => b >= needed);
+  // Beyond the largest bucket, round up to a whole multiple of it rather than
+  // sending an exact length — a long tip should not be self-identifying either.
+  const size = bucket ?? Math.ceil(needed / TIP_LENGTH_BUCKETS[TIP_LENGTH_BUCKETS.length - 1]) *
+    TIP_LENGTH_BUCKETS[TIP_LENGTH_BUCKETS.length - 1];
+
+  const padded = new Uint8Array(size);
+  padded.set(Crypto.getRandomBytes(size), 0);
+
+  const view = new DataView(padded.buffer, padded.byteOffset, padded.byteLength);
+  view.setUint32(0, body.length, false);
+  padded.set(body, 4);
+  return padded;
+}
+
+/** Inverse of {@link padToBucket}. Used by the recipient's tooling. */
+export function unpadFromBucket(padded: Uint8Array): string {
+  const view = new DataView(padded.buffer, padded.byteOffset, padded.byteLength);
+  const length = view.getUint32(0, false);
+  if (length > padded.byteLength - 4) throw new Error("Padded tip declares an impossible length");
+  return bytesToUtf8(padded.subarray(4, 4 + length));
+}
 
 const TIPS_INDEX = "khabardar.tips.index.v1";
 
@@ -69,13 +118,17 @@ export function getRecipient(id: string): Recipient | undefined {
 export function sealTip(message: string, recipient: Recipient): SealedTip {
   const key = randomKey();
   const nonce = Crypto.getRandomBytes(12);
-  const ciphertext = gcm(key, nonce).encrypt(utf8ToBytes(message));
+  // Padded before encryption, so the ciphertext length reveals only which
+  // bucket the tip fell into and not how much was written.
+  const ciphertext = gcm(key, nonce).encrypt(padToBucket(message));
 
   const wrappedKey = wrapContentKey(key, recipient.id, recipient.pubKey);
   const ciphertextHex = bytesToHex(ciphertext);
 
   return {
-    id: `tip_${Date.now()}`,
+    // Timestamp alone collides for two tips sealed in the same millisecond,
+    // which silently overwrites one in the local list.
+    id: `tip_${Date.now()}_${bytesToHex(Crypto.getRandomBytes(4))}`,
     recipientId: recipient.id,
     recipientName: recipient.name,
     wrappedKey,
