@@ -16,7 +16,7 @@ measurable governance outcome, the numbers below are defensible.
 
 ## 1. Status: what is actually built
 
-Verified as of this commit: mobile typecheck clean, 59/59 contract tests passing,
+Verified as of this commit: mobile typecheck clean, 60/60 contract tests passing,
 headless end-to-end slice passing, web bundle builds.
 
 ### Completed and verified
@@ -25,7 +25,7 @@ headless end-to-end slice passing, web bundle builds.
 |---|---|
 | **Anonymity core** | Device-bound secp256k1 identity, no PII anywhere. Codename derived from address. AES-256-GCM encryption of bodies and evidence. EXIF/GPS stripped via re-encode before storage. Coarse geohash only (4 chars, district level). Panic delete wipes drafts, evidence, tips, jury log, chain mirror, submission queue, egress log, cases, org account, wallet session, stealth secrets, at-rest keys, and identity. |
 | **Identity recovery** | BIP-39 12-word phrase, standard Ethereum derivation path, restore-on-new-device. Deliberately replaces login rather than complementing it. |
-| **Chain layer** | `ReportRegistry.sol` on Linea (59144 / 59141). Anchors hash + CID + category + visibility + coarse geohash + blinded entity tag. Non-transferable karma. Corroboration with self-corroboration and double-vote blocking, auto-promotion at threshold. Five-state verification tier. Entity clustering. Per-epoch submission rate limiting. 59 tests. |
+| **Chain layer** | `ReportRegistry.sol` on Linea (59144 / 59141). Anchors hash + CID + category + visibility + coarse geohash + blinded entity tag. Non-transferable karma. Corroboration with self-corroboration and double-vote blocking, auto-promotion at threshold. Five-state verification tier. Entity clustering. Per-epoch submission rate limiting. 60 tests. |
 | **Moderation by jury** | An equal-weight, secret-ballot jury replaces the single moderator; there is no admin path to a verdict. Jurors commit a sealed ballot, then reveal it with a published reason, so nobody can see which way a panel is leaning while there is still time to join it. Every juror counts one, dissent costs nothing, a plurality is not a verdict, and the reporter can appeal once to a larger panel. Verdicts are auditable from an RPC endpoint alone via `JuryVoteRevealed`. |
 | **Sybil resistance** | `IPersonhoodGate` gates corroboration, with `AllowlistPersonhoodGate` as a working implementation. Deliberately **not** applied to `submitReport` — reporting stays open to any address. Submission flooding is handled by rate limiting instead. |
 | **Content layer** | Encrypted bundles to a `ContentStore` (mock + real IPFS pinning implementation). Per-report content key. ECIES key wrapping (secp256k1 ECDH → HKDF-SHA256 → AES-GCM) for journalist-restricted reports. Integrity check recomputes the hash against the on-chain anchor on every read. |

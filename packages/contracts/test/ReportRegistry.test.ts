@@ -686,6 +686,29 @@ describe("ReportRegistry", () => {
       expect((await registry.reports(0)).tier).to.equal(Tier.Verified);
     });
 
+    it("lets a juror unseated mid-round still open their ballot", async () => {
+      // Otherwise an admin could strip a juror after they sealed a dissenting
+      // vote and have it scored as abandonment — suppressing the ballot before
+      // anyone saw it, which is the capture the sealed ballot exists to stop.
+      const { registry, admin, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const round = await nextRoundIndex(registry, 0);
+      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+        await commitVote(registry, j, 0, i === 2 ? Tier.Disputed : Tier.Verified, SALT(i), round);
+      }
+
+      // The admin unseats the dissenter after the panel filled.
+      await (await registry.connect(admin).setJuror(jurorC.address, false)).wait();
+      expect(await registry.isJuror(jurorC.address)).to.equal(false);
+
+      await expect(registry.connect(jurorC).revealVote(0, Tier.Disputed, SALT(2), REASON))
+        .to.emit(registry, "JuryVoteRevealed")
+        .withArgs(0, jurorC.address, Tier.Disputed, REASON);
+
+      expect(await registry.jurorBallotsAbandoned(jurorC.address)).to.equal(0n);
+    });
+
     it("refuses to close a round whose window is still open", async () => {
       const { registry, reporterA, jurorA, geohash } = await deployFixture();
       await submit(registry, reporterA, geohash);

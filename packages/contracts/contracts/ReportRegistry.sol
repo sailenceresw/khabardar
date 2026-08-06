@@ -529,6 +529,15 @@ contract ReportRegistry {
     /// reasoning, not only for landing on the popular answer — and since the
     /// vote was locked at commit time, the reason cannot be retrofitted to
     /// whatever the majority turned out to be.
+    ///
+    /// Deliberately NOT `onlyJuror`. A juror unseated between committing and
+    /// revealing must still be able to open the ballot they cast in good faith
+    /// while seated: blocking them would score it as abandonment, the one thing
+    /// this design penalises, for an admin action they had no part in. It also
+    /// closes a nastier door — an admin who could strip a juror mid-round would
+    /// be able to suppress a dissenting ballot before anyone saw it, which is
+    /// precisely the capture the sealed ballot exists to prevent. Only a
+    /// matching commitment can be opened, so nothing is granted to anyone else.
     function revealVote(
         uint256 reportId,
         uint8 tier,

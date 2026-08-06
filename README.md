@@ -298,7 +298,7 @@ npm install                    # installs all workspaces
 
 # Contracts
 npm run contracts:compile
-npm run contracts:test         # 59 passing
+npm run contracts:test         # 60 passing
 
 # Mobile app (mock relayer — no credentials needed)
 npm run mobile:web             # dev server with hot reload
