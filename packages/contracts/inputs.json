@@ -1,0 +1,12 @@
+{
+  "secret": "1991217057341094674767537754629709907081664424034213557147760717422296290350",
+  "merkleProofLength": "0",
+  "merkleProofIndices": [
+    "0"
+  ],
+  "merkleProofSiblings": [
+    "0"
+  ],
+  "message": "42",
+  "scope": "7"
+}

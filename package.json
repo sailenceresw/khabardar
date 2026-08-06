@@ -2,7 +2,7 @@
   "name": "khabardar",
   "private": true,
   "version": "0.1.0",
-  "description": "Anonymous anti-corruption reporting app — monorepo root",
+  "description": "Anonymous anti-corruption reporting app \u2014 monorepo root",
   "workspaces": [
     "apps/*",
     "packages/*",
@@ -17,7 +17,8 @@
     "mobile:typecheck": "npm run typecheck --workspace apps/mobile",
     "tor:test": "npm run test:rust --workspace expo-tor",
     "tor:build:android": "npm run build:android --workspace expo-tor",
-    "tor:build:ios": "npm run build:ios --workspace expo-tor"
+    "tor:build:ios": "npm run build:ios --workspace expo-tor",
+    "zk:test": "cd modules/expo-zkprove/rust && cargo test"
   },
   "engines": {
     "node": ">=20"
