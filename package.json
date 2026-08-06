@@ -19,7 +19,9 @@
     "tor:build:android": "npm run build:android --workspace expo-tor",
     "tor:build:ios": "npm run build:ios --workspace expo-tor",
     "zk:test": "npm run test:rust --workspace expo-zkprove",
-    "zk:build:android": "npm run build:android --workspace expo-zkprove"
+    "zk:build:android": "npm run build:android --workspace expo-zkprove",
+    "typecheck": "tsc -b",
+    "typecheck:clean": "tsc -b --clean && tsc -b"
   },
   "engines": {
     "node": ">=20"

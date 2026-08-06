@@ -349,8 +349,14 @@ completed / in-progress / not-started status breakdown.
 
 Prereqs: Node 20 (`.nvmrc`), npm 10.
 
+**Building without a test device?** See [DEVELOPING.md](./DEVELOPING.md) — Android runs
+on the emulator (mind the ABI: emulators are `x86_64`, phones are `arm64-v8a`, and the
+native modules are compiled per ABI), web runs anywhere, and iOS cannot be built on
+Windows at all.
+
 ```bash
 npm install                    # installs all workspaces
+npm run typecheck              # tsc -b across every workspace
 
 # Contracts
 npm run contracts:compile

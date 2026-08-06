@@ -66,3 +66,6 @@ packages/contracts/reference.json
 modules/expo-zkprove/rust/target/
 modules/expo-zkprove/android/src/main/jniLibs/
 modules/expo-zkprove/ios/lib/
+
+# TypeScript project-reference build state
+*.tsbuildinfo

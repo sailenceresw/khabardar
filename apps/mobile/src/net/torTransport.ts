@@ -43,7 +43,17 @@ export class TorTransport implements Transport {
       body: typeof init?.body === "string" ? init.body : null,
     });
 
-    return new Response(base64ToBytes(response.bodyBase64), {
+    // Hand `Response` a standalone ArrayBuffer rather than the view.
+    //
+    // Same trap as hashing `.buffer` instead of the bytes: a view carries an
+    // offset and a length into a buffer that may be larger, so passing the
+    // backing store risks a body with extra bytes on either end. Copying is
+    // cheap next to the seconds a Tor round trip already took, and it makes the
+    // body exactly what came back.
+    const bytes = base64ToBytes(response.bodyBase64);
+    const body = new Uint8Array(bytes).buffer;
+
+    return new Response(body, {
       status: response.status,
       headers: response.headers,
     });
