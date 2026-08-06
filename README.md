@@ -161,11 +161,47 @@ identity chokepoint this whole design exists to remove, and would exclude exactl
 people least able to obtain credentials. Reporting stays open to any address; only
 *vouching for someone else* is gated, because that is where sybils actually buy something.
 
-`AllowlistPersonhoodGate` is a working implementation, and honest about being
-non-anonymous — the operator learns who they admitted, which is fine for a closed pilot
-with known participants and unacceptable where a corroborator faces real risk. RLN is the
-endgame and needs a zk verifier that is not in this repo. With no gate configured (the
-default) corroboration is not sybil-resistant at all.
+Two gates ship. **`AllowlistPersonhoodGate`** is honest about being non-anonymous — the
+operator learns who they admitted, which is fine for a closed pilot and unacceptable where
+a corroborator faces real risk. **`SemaphorePersonhoodGate`** is the real one.
+
+### Zero-knowledge personhood (Semaphore)
+
+A member proves, in zero knowledge: *"I am one of the identities in this group, and I have
+not already signalled in this scope."* It does not say **which** identity. The verifier
+learns only a `nullifier` — derived from the member's secret and the scope — unlinkable to
+the member and unlinkable to their nullifiers in any other scope.
+
+That is the difference that matters. The allowlist buys sybil resistance by making the
+operator hold a list of everyone willing to vouch for a corruption report — which is
+precisely the list a subpoena asks for. Semaphore buys the same resistance with the
+operator holding only identity *commitments*: hashes, from which they can never tell who
+acted. Enrolling someone stops being a record capable of identifying their later actions.
+
+The contract tests generate **real Groth16 proofs and verify them on-chain**, including
+the negative cases: a non-member's proof is rejected, a proof cannot be redeemed by a
+different address than the one it was bound to, and a nullifier cannot be spent twice.
+
+**A correction worth stating plainly, because it is a common and dangerous
+misconception: Linea's zk gives your users no privacy.** It is a zkEVM *rollup* — the
+proofs convince Ethereum that the rollup executed correctly, so L1 need not re-execute.
+They hide nothing from anyone reading Linea. Every address, every byte of calldata, and
+every nullifier is as public as on Ethereum. The anonymity here comes from the Semaphore
+circuit at the application layer, not from the chain.
+
+What Linea *does* give you is native account abstraction (ERC-4337, and EIP-7702
+post-Pectra), which is the gasless half. Both halves are needed and neither is
+sufficient: a zk proof submitted from an address with a traceable history is still
+linkable through that address, so anonymity requires a fresh sponsored smart account per
+action *and* the proof.
+
+**Not done: proving on the device.** Proof generation needs `snarkjs`, a wasm witness
+generator, and a multi-megabyte proving key. Hermes has no wasm, so React Native needs
+either a native module wrapping `rapidsnark` or a dev build with a wasm runtime — the same
+shape of problem as the Tor transport, and the same answer. The contracts and the
+verification path are real and tested; the mobile client cannot yet produce a proof.
+
+With no gate configured — the default — corroboration is not sybil-resistant at all.
 
 ### Identity: three options, one default
 
@@ -298,7 +334,7 @@ npm install                    # installs all workspaces
 
 # Contracts
 npm run contracts:compile
-npm run contracts:test         # 60 passing
+npm run contracts:test         # 71 passing (11 generate real zk proofs)
 
 # Mobile app (mock relayer — no credentials needed)
 npm run mobile:web             # dev server with hot reload
