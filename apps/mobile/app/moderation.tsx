@@ -20,6 +20,7 @@ import {
   JuryActionRejected,
   JuryPhase,
   JURY_QUORUM,
+  loadBallotSecret,
   publicDecisionLog,
   revealVote,
   roundFor,
@@ -120,7 +121,6 @@ export default function ModerationScreen() {
         reporter: r.reporter,
         tier,
       });
-      setPendingTier((p) => ({ ...p, [r.onChainReportId]: tier }));
       await load();
     } catch (e) {
       report(e);
@@ -129,22 +129,16 @@ export default function ModerationScreen() {
     }
   }
 
-  const [pendingTier, setPendingTier] = useState<Record<number, VerificationTier>>({});
-
   async function reveal(r: FeedReport) {
     if (!identity) return;
-    const tier = pendingTier[r.onChainReportId];
-    if (tier === undefined) {
-      setError(t("jury.rejected.no-salt"));
-      return;
-    }
     setBusyId(r.onChainReportId);
     setError(null);
     try {
+      // Tier and salt both come back from device storage, so a juror who
+      // committed and then closed the app can still open their ballot.
       await revealVote({
         reportId: r.onChainReportId,
         juror: identity.address,
-        tier,
         reason: reasons[r.onChainReportId] ?? "",
       });
       setReasons((p) => ({ ...p, [r.onChainReportId]: "" }));
@@ -157,12 +151,16 @@ export default function ModerationScreen() {
   }
 
   async function simulate(r: FeedReport) {
-    setBusyId(r.onChainReportId);
+    const id = r.onChainReportId;
+    setBusyId(id);
     try {
+      // Have the demo peers echo whatever this device sealed, so the round
+      // reaches a verdict rather than deadlocking three ways.
+      const mine = await loadBallotSecret(id, (await roundFor(id)).index);
       await simulatePeerReview({
-        reportId: r.onChainReportId,
+        reportId: id,
         reporter: r.reporter,
-        tier: pendingTier[r.onChainReportId] ?? VerificationTier.UnderReview,
+        tier: mine?.tier ?? VerificationTier.UnderReview,
       });
       await load();
     } finally {

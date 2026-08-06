@@ -165,21 +165,45 @@ export function randomSalt(): Hex {
   return `0x${bytesToHex(Crypto.getRandomBytes(32))}`;
 }
 
-/**
- * The salt has to survive between committing and revealing, so it is kept on
- * the device. Losing it means the ballot can never be opened and counts as
- * abandonment — which is exactly what happens on-chain, and why the real client
- * must treat this store as important rather than as a cache.
- */
-async function saveSalt(reportId: number, round: number, salt: Hex): Promise<void> {
-  const salts = safeJsonParse<Record<string, Hex>>(await AsyncStorage.getItem(SALTS_KEY)) ?? {};
-  salts[`${reportId}:${round}`] = salt;
-  await AsyncStorage.setItem(SALTS_KEY, JSON.stringify(salts));
+/** What a juror needs to reopen their own sealed ballot: the tier and the salt. */
+export interface BallotSecret {
+  tier: VerificationTier;
+  salt: Hex;
 }
 
-export async function loadSalt(reportId: number, round: number): Promise<Hex | null> {
-  const salts = safeJsonParse<Record<string, Hex>>(await AsyncStorage.getItem(SALTS_KEY)) ?? {};
-  return salts[`${reportId}:${round}`] ?? null;
+/**
+ * Both halves of the ballot have to survive between committing and revealing,
+ * so they are kept on the device.
+ *
+ * The tier is stored too, not just the salt. Secrecy here is about other people
+ * not seeing the vote before the panel closes — the chain holds only the
+ * commitment — and it was never about hiding a juror's choice from themselves.
+ * Keeping only the salt meant a juror who committed and then closed the app
+ * could not reveal at all, which forced them into abandonment: the single thing
+ * this design penalises, incurred for doing nothing wrong.
+ *
+ * Losing this store still means the ballot can never be opened, exactly as it
+ * would on-chain, so a real client must treat it as important rather than as a
+ * cache.
+ */
+async function saveBallotSecret(
+  reportId: number,
+  round: number,
+  secret: BallotSecret
+): Promise<void> {
+  const store =
+    safeJsonParse<Record<string, BallotSecret>>(await AsyncStorage.getItem(SALTS_KEY)) ?? {};
+  store[`${reportId}:${round}`] = secret;
+  await AsyncStorage.setItem(SALTS_KEY, JSON.stringify(store));
+}
+
+export async function loadBallotSecret(
+  reportId: number,
+  round: number
+): Promise<BallotSecret | null> {
+  const store =
+    safeJsonParse<Record<string, BallotSecret>>(await AsyncStorage.getItem(SALTS_KEY)) ?? {};
+  return store[`${reportId}:${round}`] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -292,7 +316,7 @@ export async function commitVote(input: {
   }
 
   const salt = randomSalt();
-  await saveSalt(reportId, round.index, salt);
+  await saveBallotSecret(reportId, round.index, { tier, salt });
 
   const ballot: Ballot = {
     reportId,
@@ -323,11 +347,12 @@ const pendingSimulated = new Map<string, { tier: VerificationTier; salt: Hex }>(
 export async function revealVote(input: {
   reportId: number;
   juror: string;
-  tier: VerificationTier;
   reason: string;
+  /** Omitted for the device's own ballot — both are recovered from storage. */
+  tier?: VerificationTier;
   salt?: Hex;
 }): Promise<JuryRound> {
-  const { reportId, juror, tier } = input;
+  const { reportId, juror } = input;
   const reason = input.reason.trim();
   if (!reason) throw new JuryActionRejected("no-reason");
 
@@ -345,8 +370,12 @@ export async function revealVote(input: {
   if (index === -1) throw new JuryActionRejected("nothing-committed");
   if (ballots[index].tier !== undefined) throw new JuryActionRejected("already-revealed");
 
-  const salt = input.salt ?? (await loadSalt(reportId, round.index));
-  if (!salt) throw new JuryActionRejected("no-salt");
+  // Recover both halves from the device unless the caller supplied them (the
+  // simulated peers do, since they have no storage of their own).
+  const stored = await loadBallotSecret(reportId, round.index);
+  const tier = input.tier ?? stored?.tier;
+  const salt = input.salt ?? stored?.salt;
+  if (tier === undefined || !salt) throw new JuryActionRejected("no-salt");
 
   // The contract checks this; so does the mock, or the demo would let a juror
   // reveal something they never committed to.

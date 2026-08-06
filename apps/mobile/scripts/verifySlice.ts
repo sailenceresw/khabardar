@@ -395,9 +395,34 @@ async function main() {
   assert(forAlice !== otherTier, "a commitment must bind the tier");
   assert(/^0x[0-9a-f]{64}$/.test(forAlice), "a commitment must be a 32-byte hash");
 
+  // A juror must be able to reopen their own ballot after closing the app.
+  // Storing only the salt and keeping the tier in memory meant a commit
+  // followed by a restart could never be revealed — which lands the juror in
+  // abandonment, the one thing this design penalises, for doing nothing wrong.
+  const { commitVote: mockCommit, loadBallotSecret, roundFor } = require("../src/moderation");
+
+  const JUROR = "0x3333333333333333333333333333333333333333";
+  const REPORTER = "0x4444444444444444444444444444444444444444";
+  await mockCommit({ reportId: 42, juror: JUROR, reporter: REPORTER, tier: 3 });
+
+  const round = await roundFor(42);
+  const secret = await loadBallotSecret(42, round.index);
+  assert(!!secret, "a sealed ballot must be recoverable from device storage");
+  assert(secret.tier === 3, "the tier must survive a restart, not only the salt");
+  assert(/^0x[0-9a-f]{64}$/.test(secret.salt), "the salt must survive a restart");
+
+  // And the sealed ballot itself must carry no readable tier.
+  const { ballotsFor } = require("../src/moderation");
+  const sealed = (await ballotsFor(42, round.index))[0];
+  assert(sealed.tier === undefined, "a sealed ballot must not expose its tier");
+  assert(
+    sealed.commitment === commitmentFor({ reportId: 42, round: round.index, tier: 3, salt: secret.salt, juror: JUROR }),
+    "the stored commitment must match the sealed choice"
+  );
+
   console.log(
     "10. jury fairness                :",
-    `weight ${JUROR_VOTE_WEIGHT} each, quorum ${JURY_QUORUM}, appeal ${APPEAL_QUORUM}, ballots bound (OK)`
+    `weight ${JUROR_VOTE_WEIGHT} each, quorum ${JURY_QUORUM}, appeal ${APPEAL_QUORUM}, ballot sealed + recoverable (OK)`
   );
 
   // 11. Transport selection. The property that matters is that a build which
