@@ -94,6 +94,12 @@ describe("ReportRegistry", () => {
     await (await registry.connect(juror).commitVote(reportId, commitment)).wait();
   }
 
+  /** Expire the commit window and open reveals, as any caller may. */
+  async function openWindow(registry: any, reportId: number) {
+    await time.increase(Number(await registry.COMMIT_WINDOW()) + 1);
+    await (await registry.openReveals(reportId)).wait();
+  }
+
   /**
    * Run a full panel through commit then reveal.
    *
@@ -111,6 +117,12 @@ describe("ReportRegistry", () => {
     for (let i = 0; i < jurors.length; i++) {
       await commitVote(registry, jurors[i], reportId, votes[i], SALT(i), round);
     }
+
+    // The commit window now stays open for everyone rather than closing at a
+    // panel size, so reveals begin when the window expires.
+    await time.increase(Number(await registry.COMMIT_WINDOW()) + 1);
+    await (await registry.openReveals(reportId)).wait();
+
     for (let i = 0; i < jurors.length; i++) {
       await (
         await registry.connect(jurors[i]).revealVote(reportId, votes[i], SALT(i), REASON)
@@ -431,7 +443,11 @@ describe("ReportRegistry", () => {
       expect(await registry.karma(jurorC.address)).to.equal(0n);
     });
 
-    it("closes the panel at quorum rather than letting it grow unbounded", async () => {
+    it("lets a late juror still vote — there are no seats to race for", async () => {
+      // The capture vector this replaced: the commit phase closed as soon as
+      // a fixed panel was full, so a coordinated group could take every seat
+      // before anyone else saw the report. Removing the ceiling removes the
+      // race; filling it early now buys an attacker nothing.
       const { registry, admin, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
       await submit(registry, reporterA, geohash);
 
@@ -440,11 +456,34 @@ describe("ReportRegistry", () => {
         await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
       }
 
-      // A fourth juror arrives after the panel filled.
-      const late = await registry.commitmentFor(0, round, Tier.Disputed, SALT(3), admin.address);
-      await expect(registry.connect(admin).commitVote(0, late)).to.be.revertedWith(
-        "ReportRegistry: not committing"
-      );
+      // A fourth juror arrives after three ballots are already in.
+      await commitVote(registry, admin, 0, Tier.Disputed, SALT(3), round);
+      expect((await registry.rounds(0)).commits).to.equal(4);
+
+      await openWindow(registry, 0);
+      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+        await (await registry.connect(j).revealVote(0, Tier.Verified, SALT(i), REASON)).wait();
+      }
+      await (await registry.connect(admin).revealVote(0, Tier.Disputed, SALT(3), REASON)).wait();
+
+      // The dissenter was heard and the majority still carried.
+      expect((await registry.reports(0)).tier).to.equal(Tier.Verified);
+      expect((await registry.rounds(0)).reveals).to.equal(4);
+    });
+
+    it("refuses a verdict when too few jurors turned up", async () => {
+      const { registry, reporterA, jurorA, jurorB, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const round = await nextRoundIndex(registry, 0);
+      await commitVote(registry, jurorA, 0, Tier.Verified, SALT(0), round);
+      await commitVote(registry, jurorB, 0, Tier.Verified, SALT(1), round);
+
+      await time.increase(Number(await registry.COMMIT_WINDOW()) + 1);
+      await expect(registry.openReveals(0)).to.emit(registry, "VerdictUndecided");
+
+      expect((await registry.rounds(0)).phase).to.equal(4n);
+      expect((await registry.reports(0)).tier).to.equal(Tier.Unverified);
     });
 
     it("keeps the tally invisible until every ballot is sealed", async () => {
@@ -491,6 +530,7 @@ describe("ReportRegistry", () => {
       for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
         await commitVote(registry, j, 0, [Tier.Verified, Tier.Disputed, Tier.UnderReview][i], SALT(i), round);
       }
+      await openWindow(registry, 0);
       await (await registry.connect(jurorA).revealVote(0, Tier.Verified, SALT(0), REASON)).wait();
       await (await registry.connect(jurorB).revealVote(0, Tier.Disputed, SALT(1), REASON)).wait();
 
@@ -511,7 +551,10 @@ describe("ReportRegistry", () => {
       expect(await registry.karma(reporterA.address)).to.equal(10n);
     });
 
-    it("does not open reveals until the panel is full", async () => {
+    it("does not open reveals until the commit window closes", async () => {
+      // Revealing early would show the room which way a ballot went while
+      // others could still be cast, which is the whole thing commit-reveal
+      // exists to prevent.
       const { registry, reporterA, jurorA, geohash } = await deployFixture();
       await submit(registry, reporterA, geohash);
 
@@ -521,6 +564,10 @@ describe("ReportRegistry", () => {
       await expect(
         registry.connect(jurorA).revealVote(0, Tier.UnderReview, SALT(0), REASON)
       ).to.be.revertedWith("ReportRegistry: not revealing");
+
+      await expect(registry.openReveals(0)).to.be.revertedWith(
+        "ReportRegistry: commit window open"
+      );
     });
 
     it("publishes the reason alongside the revealed tier", async () => {
@@ -532,6 +579,7 @@ describe("ReportRegistry", () => {
         await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
       }
 
+      await openWindow(registry, 0);
       await expect(registry.connect(jurorA).revealVote(0, Tier.Verified, SALT(0), REASON))
         .to.emit(registry, "JuryVoteRevealed")
         .withArgs(0, jurorA.address, Tier.Verified, REASON);
@@ -545,6 +593,7 @@ describe("ReportRegistry", () => {
       for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
         await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
       }
+      await openWindow(registry, 0);
       await expect(
         registry.connect(jurorA).revealVote(0, Tier.Verified, SALT(0), "")
       ).to.be.revertedWith("ReportRegistry: reason required");
@@ -559,6 +608,7 @@ describe("ReportRegistry", () => {
         await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
       }
 
+      await openWindow(registry, 0);
       // Committed to Verified, trying to reveal Disputed.
       await expect(
         registry.connect(jurorA).revealVote(0, Tier.Disputed, SALT(0), REASON)
@@ -573,6 +623,7 @@ describe("ReportRegistry", () => {
         await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
       }
 
+      await openWindow(registry, 0);
       await expect(
         registry.connect(admin).revealVote(0, Tier.Verified, SALT(9), REASON)
       ).to.be.revertedWith("ReportRegistry: nothing committed");
@@ -589,6 +640,7 @@ describe("ReportRegistry", () => {
       await commitVote(registry, jurorA, 0, Tier.Verified, SALT(1), round);
       await commitVote(registry, jurorC, 0, Tier.Verified, SALT(2), round);
 
+      await openWindow(registry, 0);
       // jurorB cannot open it: the hash binds jurorA's address, not theirs.
       await expect(
         registry.connect(jurorB).revealVote(0, Tier.Verified, SALT(0), REASON)
@@ -630,14 +682,17 @@ describe("ReportRegistry", () => {
       const { registry, admin, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
       await submit(registry, reporterA, geohash);
 
+      // Four commit so that three can still reveal after one walks away —
+      // MIN_BALLOTS applies to revealed ballots, not merely committed ones.
       const round = await nextRoundIndex(registry, 0);
-      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+      for (const [i, j] of [jurorA, jurorB, jurorC, admin].entries()) {
         await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
       }
-      void admin;
 
+      await openWindow(registry, 0);
       await (await registry.connect(jurorA).revealVote(0, Tier.Verified, SALT(0), REASON)).wait();
       await (await registry.connect(jurorB).revealVote(0, Tier.Verified, SALT(1), REASON)).wait();
+      await (await registry.connect(admin).revealVote(0, Tier.Verified, SALT(3), REASON)).wait();
       // jurorC never reveals.
 
       await time.increase(Number(await registry.REVEAL_WINDOW()) + 1);
@@ -647,8 +702,30 @@ describe("ReportRegistry", () => {
       expect(await registry.jurorBallotsAbandoned(jurorA.address)).to.equal(0n);
       expect(await registry.jurorBallotsCompleted(jurorA.address)).to.equal(1n);
 
-      // Two of three revealed, both agreeing — that is still a majority.
+      // Three revealed and agreed; the walkaway did not block the verdict.
       expect((await registry.reports(0)).tier).to.equal(Tier.Verified);
+    });
+
+    it("refuses a verdict when too few of the panel actually revealed", async () => {
+      // A majority of two revealed ballots is not a jury, however clear it
+      // looks: a round where most jurors went quiet would otherwise be decided
+      // by the handful who did not.
+      const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const round = await nextRoundIndex(registry, 0);
+      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+        await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
+      }
+
+      await openWindow(registry, 0);
+      await (await registry.connect(jurorA).revealVote(0, Tier.Verified, SALT(0), REASON)).wait();
+      await (await registry.connect(jurorB).revealVote(0, Tier.Verified, SALT(1), REASON)).wait();
+
+      await time.increase(Number(await registry.REVEAL_WINDOW()) + 1);
+      await expect(registry.closeRound(0)).to.emit(registry, "VerdictUndecided");
+
+      expect((await registry.reports(0)).tier).to.equal(Tier.Unverified);
     });
 
     it("lets anyone close an expired round", async () => {
@@ -661,6 +738,7 @@ describe("ReportRegistry", () => {
       for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
         await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
       }
+      await openWindow(registry, 0);
       await time.increase(Number(await registry.REVEAL_WINDOW()) + 1);
 
       // reporterB is neither a juror nor the reporter.
@@ -698,9 +776,11 @@ describe("ReportRegistry", () => {
         await commitVote(registry, j, 0, i === 2 ? Tier.Disputed : Tier.Verified, SALT(i), round);
       }
 
-      // The admin unseats the dissenter after the panel filled.
+      // The admin unseats the dissenter after they committed.
       await (await registry.connect(admin).setJuror(jurorC.address, false)).wait();
       expect(await registry.isJuror(jurorC.address)).to.equal(false);
+
+      await openWindow(registry, 0);
 
       await expect(registry.connect(jurorC).revealVote(0, Tier.Disputed, SALT(2), REASON))
         .to.emit(registry, "JuryVoteRevealed")

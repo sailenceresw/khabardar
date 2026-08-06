@@ -334,7 +334,7 @@ npm install                    # installs all workspaces
 
 # Contracts
 npm run contracts:compile
-npm run contracts:test         # 71 passing (11 generate real zk proofs)
+npm run contracts:test         # 73 passing (11 generate real zk proofs)
 
 # Mobile app (mock relayer — no credentials needed)
 npm run mobile:web             # dev server with hot reload
@@ -501,16 +501,30 @@ reason cannot be retrofitted to whatever the majority turned out to be.
 A jury can move a report's **tier** and can **never edit or delete the report** — the
 content hash is anchored, so moderation adds judgement on top of an immutable record.
 
+#### The capture vector, and why sortition was the wrong fix
+
+The commit phase used to close as soon as a fixed panel was full. That made the seats a
+race, and a race is a capture vector: a coordinated group watching for new reports could
+take every seat before anyone else saw the report, and honest jurors were locked out of
+exactly the reports that mattered most.
+
+The obvious fix is **sortition** — draw the panel at random so seats cannot be raced for.
+That needs randomness a block producer cannot grind, which on an L2 with one sequencer is
+genuinely hard, and a weak version would look like a defence while being one.
+
+The better fix was to **remove the scarcity instead**. The commit phase now stays open for
+a fixed window, for everyone. Any juror who wants to vote can. There is no seat to take,
+so there is nothing to race for — filling the window early costs an attacker nothing and
+buys them nothing, because the jurors they were trying to exclude simply commit too.
+`MIN_BALLOTS` guards the other end: a round too few people revealed on produces
+"undecided" rather than letting a handful decide for a panel that went quiet.
+
 #### What is still unfair, and not yet fixed
 
-- **The panel fills first-come-first-served.** A coordinated group watching for new
-  reports can take all three seats. The standard answer is sortition — draw the panel at
-  random — which needs a randomness source a block proposer cannot grind. A weak version
-  would be worse than none, because it would look like a defence while being one. Until
-  then the mitigations are off-chain: keep the juror set small and vetted, and watch the
-  published ballots for panels that always seat the same faces.
 - **A jury of three addresses controlled by one party** is exactly the centralization
   this replaced. The contract cannot detect that; only the people seating jurors can.
+  Anonymous ballots (Semaphore, as used for personhood) would additionally stop jurors
+  being targeted or bribed, and is the natural next step.
 - The in-app "act as a juror" toggle is a **local dev affordance**, and the simulated
   peers exist so one device can reach quorum in a demo. Both are labelled everywhere they
   appear and both must be deleted before a real deployment.

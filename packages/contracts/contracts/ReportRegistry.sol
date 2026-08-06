@@ -159,19 +159,15 @@ contract ReportRegistry {
     // rather than an automatic metric that mistakes conformity for judgement.
     // ---------------------------------------------------------------------
 
-    /// @notice Ballots that must be committed before the reveal phase opens.
+    /// @notice Fewest ballots a round needs before it can produce a verdict.
     ///
-    /// KNOWN LIMITATION: the panel fills first-come-first-served, so a
-    /// coordinated group watching for new reports can take all the seats. That
-    /// is a real capture vector and this contract does not close it. The
-    /// standard answer is sortition — draw the panel at random from the juror
-    /// set — which needs a randomness source that a block proposer cannot
-    /// grind. Building a weak version of that would be worse than not having
-    /// it, because it would look like a defence while being one.
-    ///
-    /// Until then the mitigations are off-chain and unglamorous: keep the
-    /// juror set small and vetted, watch the published ballots for panels that
-    /// always seat the same faces, and unseat jurors who behave that way.
+    /// A floor, not a ceiling. Nothing stops more jurors voting — see
+    /// {commitVote} for why removing the ceiling is what closes the capture
+    /// vector that a fixed panel size created.
+    uint8 public constant MIN_BALLOTS = 3;
+
+    /// @notice Retained as the label for an ordinary round. It no longer caps
+    /// participation; {MIN_BALLOTS} is the number that decides validity.
     uint8 public constant JURY_QUORUM = 3;
 
     /// @notice Panel size when a reporter appeals. Larger, so an appeal is a
@@ -485,9 +481,28 @@ contract ReportRegistry {
 
     /// @notice Commit to a verdict without revealing it.
     ///
-    /// The first commitment on a report opens a round. Once {JURY_QUORUM}
-    /// ballots are in (or {APPEAL_QUORUM} for an appeal), the panel is full and
-    /// the reveal phase opens.
+    /// The first commitment on a report opens a round, and the commit phase
+    /// stays open for {COMMIT_WINDOW} — for everyone, not for the first few.
+    ///
+    /// ## Why there is no panel size
+    ///
+    /// This used to close the commit phase as soon as {JURY_QUORUM} ballots
+    /// were in. That made the seats a race, and a race is a capture vector: a
+    /// coordinated group watching for new reports could take every seat before
+    /// anyone else saw the report, and honest jurors were locked out of the
+    /// ones that mattered most.
+    ///
+    /// The obvious fix is sortition — draw the panel at random so seats cannot
+    /// be raced for. That needs randomness a block producer cannot grind, which
+    /// on an L2 with one sequencer is genuinely hard, and a weak version would
+    /// look like a defence while being one.
+    ///
+    /// The better fix turned out to be removing the scarcity instead. If every
+    /// juror who wants to vote within the window can, there is no seat to take
+    /// and nothing to race for. Filling the window early now costs an attacker
+    /// nothing and buys them nothing — the honest jurors they were trying to
+    /// exclude simply commit too. {MIN_BALLOTS} still guards the other end, so
+    /// a round nobody showed up to does not produce a verdict.
     function commitVote(uint256 reportId, bytes32 commitment) external onlyJuror {
         require(reportId < reportCount, "ReportRegistry: unknown report");
         require(commitment != bytes32(0), "ReportRegistry: empty commitment");
@@ -516,11 +531,29 @@ contract ReportRegistry {
         round.commits += 1;
 
         emit JuryVoteCommitted(reportId, msg.sender, round.index);
+    }
 
-        if (round.commits >= round.quorum) {
-            round.phase = RoundPhase.Revealing;
-            round.revealDeadline = uint64(block.timestamp) + REVEAL_WINDOW;
+    /// @notice Close the commit phase once its window has expired.
+    ///
+    /// Callable by anyone, for the same reason {closeRound} is: a phase only
+    /// a juror can advance is a phase a juror can stall, and stalling a round
+    /// forever is a way to bury a report without ever voting against it.
+    function openReveals(uint256 reportId) public {
+        require(reportId < reportCount, "ReportRegistry: unknown report");
+
+        JuryRound storage round = rounds[reportId];
+        require(round.phase == RoundPhase.Committing, "ReportRegistry: not committing");
+        require(block.timestamp > round.commitDeadline, "ReportRegistry: commit window open");
+
+        if (round.commits < MIN_BALLOTS) {
+            // Too few jurors turned up to call this a jury.
+            round.phase = RoundPhase.Undecided;
+            emit VerdictUndecided(reportId, round.index, round.reveals);
+            return;
         }
+
+        round.phase = RoundPhase.Revealing;
+        round.revealDeadline = uint64(block.timestamp) + REVEAL_WINDOW;
     }
 
     /// @notice Reveal a committed verdict, with the reason published alongside.
@@ -584,10 +617,10 @@ contract ReportRegistry {
         JuryRound storage round = rounds[reportId];
 
         if (round.phase == RoundPhase.Committing) {
-            require(block.timestamp > round.commitDeadline, "ReportRegistry: commit window open");
-            // Never filled the panel. Not anyone's fault, and not a verdict.
-            round.phase = RoundPhase.Undecided;
-            emit VerdictUndecided(reportId, round.index, round.reveals);
+            // Advances to reveals when enough jurors turned up, or ends the
+            // round when they did not. Delegated so there is exactly one rule
+            // about what "enough" means.
+            openReveals(reportId);
             return;
         }
 
@@ -646,6 +679,15 @@ contract ReportRegistry {
         (uint8 winner, uint8 votes, bool majority) = _tally(reportId, round);
 
         _settleAbandoned(reportId, round);
+
+        // A majority of two revealed ballots is not a jury, however clear it
+        // looks. Without this floor a round where four of five jurors went
+        // quiet would be decided by the one who did not.
+        if (round.reveals < MIN_BALLOTS) {
+            round.phase = RoundPhase.Undecided;
+            emit VerdictUndecided(reportId, round.index, round.reveals);
+            return;
+        }
 
         if (!majority) {
             // A plurality is not a verdict. Saying "the jury did not agree" is
