@@ -417,5 +417,17 @@
       "no-action-taken": "No action taken",
       "unsubstantiated": "Unsubstantiated"
     }
+  },
+  "webDemo": {
+    "title": "This is a demonstration",
+    "intro": "You are looking at the web preview of Khabardar. It behaves like the real app and it does not protect you like the real app. Read this before you type anything into it.",
+    "missingTitle": "What is missing here that exists on a phone",
+    "missingKeys": "Your identity key and every encryption key are stored in this browser's localStorage, not in secure hardware. A browser extension, a malicious script, or anyone with access to this computer can read them.",
+    "missingTor": "There is no Tor. A browser cannot load the native module, so every request leaves from your real IP address.",
+    "missingWipe": "Panic delete cannot fully deliver. It clears this browser's storage, but the browser may already have copied those values into a profile, a sync, or a backup.",
+    "doNotUse": "Do not file a real report here. If you have something genuine to report, use a real build on a phone — or an established channel such as a newsroom's SecureDrop.",
+    "whereReal": "Everything you see is either sample data or stays on this device. Nothing is written to a blockchain and nothing is sent to a server.",
+    "acknowledge": "I understand — show me the demo",
+    "footnote": "No security audit has been performed on this project."
   }
 }

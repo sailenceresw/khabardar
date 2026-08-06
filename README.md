@@ -312,6 +312,38 @@ npm run web:static  --workspace apps/mobile   # serves dist/ on :8085
 npm run verify:slice --workspace apps/mobile
 ```
 
+### Web demo deployment (Vercel)
+
+`vercel.json` at the repo root builds `apps/mobile/dist` and serves it as an SPA.
+
+```bash
+npx vercel deploy          # preview URL
+npx vercel deploy --prod   # production alias
+```
+
+**The web build is a demonstration and the deployment is configured to keep it that
+way.** Three of the app's guarantees do not exist in a browser:
+
+| Guarantee | Why it is absent on web |
+|---|---|
+| Keys in secure hardware | No Keychain/Keystore — the identity key, at-rest keys and stealth PINs fall back to `localStorage`, readable by any extension or XSS |
+| Tor | A browser cannot load the native module; every request leaves from the visitor's real IP |
+| Panic delete | Clears `localStorage`, but cannot reach a browser profile, sync, or backup that already copied those values |
+
+So the deployment does two things beyond serving files. `WebDemoGate` shows an
+unmissable interstitial before anything else on web — a gate rather than a dismissible
+banner, because someone who has started typing has already made the decision the banner
+was meant to inform. And `X-Robots-Tag: noindex` plus `robots.txt` keep it out of search
+results: a person searching for a way to report corruption safely must not *find* this
+and trust it, which is the precise failure the project exists to prevent.
+
+`Referrer-Policy: no-referrer` is set for the same reason — an anonymity tool should not
+announce itself as the origin when a visitor follows an outbound link.
+
+`.vercelignore` excludes the Rust build directory (5.4 GB) and `node_modules` (874 MB).
+Both are gitignored and the CLI would likely skip them anyway, but a silent
+multi-gigabyte upload is not a failure worth leaving to chance.
+
 `verify:slice` runs the real `cryptoUtils` / `encoding` / `evidence` / `content` /
 `MockRelayer` / `tips` / `moderation` modules under Node (with `expo-crypto`,
 AsyncStorage, SecureStore and the native picker modules shimmed) and asserts the full

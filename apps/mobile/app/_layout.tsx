@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as ScreenCapture from "expo-screen-capture";
 import { LockGate } from "../src/LockGate";
+import { WebDemoGate } from "../src/WebDemoGate";
 import { AppProvider, useApp } from "../src/state/AppContext";
 import { getStealthConfig } from "../src/stealth";
 import { colors } from "../src/theme";
@@ -78,9 +79,14 @@ export default function Layout() {
     <AppProvider>
       <StatusBar style="light" />
       <ScreenCaptureGuard />
-      <LockGate>
-        <RootStack />
-      </LockGate>
+      {/* Outermost on purpose: on web the disclosure has to come before the
+          PIN screen, because a lock screen implies protection this build
+          cannot provide. No-op on native. */}
+      <WebDemoGate>
+        <LockGate>
+          <RootStack />
+        </LockGate>
+      </WebDemoGate>
     </AppProvider>
   );
 }
