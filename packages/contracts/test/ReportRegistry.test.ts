@@ -64,11 +64,64 @@ describe("ReportRegistry", () => {
     return hash;
   }
 
-  /** Drive a report to a final verdict with three agreeing base-weight jurors. */
-  async function reachVerdict(registry: any, jurors: any[], reportId: number, tier: number) {
-    for (const j of jurors) {
-      await (await registry.connect(j).castJuryVote(reportId, tier, REASON)).wait();
+  const SALT = (n: number) => ethers.zeroPadValue(ethers.toBeHex(0xbeef00 + n), 32);
+
+  const Phase = { None: 0n, Committing: 1n, Revealing: 2n, Decided: 3n, Undecided: 4n };
+
+  /**
+   * The round index the next commit will land in.
+   *
+   * A client has to predict this, because the first commit is what opens the
+   * round — the commitment has to be built against an index that does not exist
+   * on-chain yet.
+   */
+  async function nextRoundIndex(registry: any, reportId: number): Promise<number> {
+    const r = await registry.rounds(reportId);
+    const opensNew = r.phase === Phase.None || r.phase === Phase.Undecided;
+    return Number(r.index) + (opensNew ? 1 : 0);
+  }
+
+  /** Commit a sealed ballot, exactly as a client would (salt never on-chain). */
+  async function commitVote(
+    registry: any,
+    juror: any,
+    reportId: number,
+    tier: number,
+    salt: string,
+    round: number
+  ) {
+    const commitment = await registry.commitmentFor(reportId, round, tier, salt, juror.address);
+    await (await registry.connect(juror).commitVote(reportId, commitment)).wait();
+  }
+
+  /**
+   * Run a full panel through commit then reveal.
+   *
+   * `tiers` may be one tier for everyone, or one per juror to model dissent.
+   */
+  async function runRound(
+    registry: any,
+    jurors: any[],
+    reportId: number,
+    tiers: number[] | number
+  ): Promise<number> {
+    const votes = Array.isArray(tiers) ? tiers : jurors.map(() => tiers);
+    const round = await nextRoundIndex(registry, reportId);
+
+    for (let i = 0; i < jurors.length; i++) {
+      await commitVote(registry, jurors[i], reportId, votes[i], SALT(i), round);
     }
+    for (let i = 0; i < jurors.length; i++) {
+      await (
+        await registry.connect(jurors[i]).revealVote(reportId, votes[i], SALT(i), REASON)
+      ).wait();
+    }
+    return round;
+  }
+
+  /** Drive a report to a unanimous verdict with the given panel. */
+  async function reachVerdict(registry: any, jurors: any[], reportId: number, tier: number) {
+    return runRound(registry, jurors, reportId, tier);
   }
 
   describe("submitReport", () => {
@@ -329,20 +382,126 @@ describe("ReportRegistry", () => {
     });
   });
 
-  describe("karma-weighted jury", () => {
-    it("holds the tier until quorum weight is reached", async () => {
+  describe("jury — fairness properties", () => {
+    it("gives every juror exactly one vote", async () => {
+      const { registry, jurorA, jurorB } = await deployFixture();
+      expect(await registry.jurorWeight(jurorA.address)).to.equal(1n);
+      expect(await registry.jurorWeight(jurorB.address)).to.equal(1n);
+    });
+
+    it("does not let reporting karma buy jury influence", async () => {
+      // The bug this replaced: reporter karma and juror weight shared one
+      // mapping, so filing reports that got Verified bought judicial power over
+      // the review of one's own later accusations.
+      const { registry, admin, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await (await registry.connect(admin).setJuror(reporterA.address, true)).wait();
+
+      await submit(registry, reporterA, geohash, "earn-karma");
+      await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Verified);
+
+      expect(await registry.karma(reporterA.address)).to.equal(10n);
+      expect(await registry.jurorWeight(reporterA.address)).to.equal(1n);
+    });
+
+    it("costs a juror nothing to disagree with the verdict", async () => {
+      // The mechanism this replaced charged a dissenter more karma than an
+      // agreeing juror earned, which made voting with the expected winner the
+      // rational play regardless of the evidence.
+      const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      // Two say Verified, jurorC dissents. The majority carries.
+      await runRound(
+        registry,
+        [jurorA, jurorB, jurorC],
+        0,
+        [Tier.Verified, Tier.Verified, Tier.Disputed]
+      );
+
+      expect((await registry.reports(0)).tier).to.equal(Tier.Verified);
+
+      // The dissenter's record shows a completed duty, not a demerit.
+      expect(await registry.jurorBallotsCompleted(jurorC.address)).to.equal(1n);
+      expect(await registry.jurorBallotsAbandoned(jurorC.address)).to.equal(0n);
+      expect(await registry.jurorWeight(jurorC.address)).to.equal(1n);
+
+      // And agreeing bought nobody anything either.
+      expect(await registry.jurorWeight(jurorA.address)).to.equal(1n);
+      expect(await registry.karma(jurorA.address)).to.equal(0n);
+      expect(await registry.karma(jurorC.address)).to.equal(0n);
+    });
+
+    it("closes the panel at quorum rather than letting it grow unbounded", async () => {
+      const { registry, admin, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const round = await nextRoundIndex(registry, 0);
+      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+        await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
+      }
+
+      // A fourth juror arrives after the panel filled.
+      const late = await registry.commitmentFor(0, round, Tier.Disputed, SALT(3), admin.address);
+      await expect(registry.connect(admin).commitVote(0, late)).to.be.revertedWith(
+        "ReportRegistry: not committing"
+      );
+    });
+
+    it("keeps the tally invisible until every ballot is sealed", async () => {
+      // The property that makes independence real: a juror deciding whether to
+      // join cannot see which way the panel is leaning.
       const { registry, reporterA, jurorA, jurorB, geohash } = await deployFixture();
       await submit(registry, reporterA, geohash);
 
-      await (await registry.connect(jurorA).castJuryVote(0, Tier.Verified, REASON)).wait();
-      expect((await registry.reports(0)).tier).to.equal(Tier.Unverified);
-      expect(await registry.verdictFinal(0)).to.equal(false);
+      const round = await nextRoundIndex(registry, 0);
+      await commitVote(registry, jurorA, 0, Tier.Verified, SALT(0), round);
+      await commitVote(registry, jurorB, 0, Tier.Disputed, SALT(1), round);
 
-      await (await registry.connect(jurorB).castJuryVote(0, Tier.Verified, REASON)).wait();
+      // Two very different ballots are in, and nothing about them is readable.
+      for (const tier of [Tier.Unverified, Tier.UnderReview, Tier.CommunityCorroborated, Tier.Verified, Tier.Disputed]) {
+        expect(await registry.tierVotes(0, round, tier)).to.equal(0n);
+      }
+      expect(await registry.juryVoteOf(0, jurorA.address)).to.deep.equal([false, 0n]);
       expect((await registry.reports(0)).tier).to.equal(Tier.Unverified);
     });
 
-    it("finalizes at quorum and awards the reporter karma", async () => {
+    it("refuses to turn a plurality into a verdict", async () => {
+      // Three jurors, three different answers. Manufacturing a verdict from
+      // that would be dressing up disagreement as a decision.
+      const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      await runRound(
+        registry,
+        [jurorA, jurorB, jurorC],
+        0,
+        [Tier.Verified, Tier.Disputed, Tier.UnderReview]
+      );
+
+      expect((await registry.rounds(0)).phase).to.equal(4n); // Undecided
+      expect(await registry.verdictFinal(0)).to.equal(false);
+      expect((await registry.reports(0)).tier).to.equal(Tier.Unverified);
+    });
+
+    it("emits VerdictUndecided rather than silently stalling", async () => {
+      const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const round = await nextRoundIndex(registry, 0);
+      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+        await commitVote(registry, j, 0, [Tier.Verified, Tier.Disputed, Tier.UnderReview][i], SALT(i), round);
+      }
+      await (await registry.connect(jurorA).revealVote(0, Tier.Verified, SALT(0), REASON)).wait();
+      await (await registry.connect(jurorB).revealVote(0, Tier.Disputed, SALT(1), REASON)).wait();
+
+      await expect(registry.connect(jurorC).revealVote(0, Tier.UnderReview, SALT(2), REASON))
+        .to.emit(registry, "VerdictUndecided")
+        .withArgs(0, round, 3);
+    });
+  });
+
+  describe("jury — commit/reveal mechanics", () => {
+    it("reaches a verdict and awards the reporter karma", async () => {
       const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
       await submit(registry, reporterA, geohash);
       await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Verified);
@@ -352,174 +511,292 @@ describe("ReportRegistry", () => {
       expect(await registry.karma(reporterA.address)).to.equal(10n);
     });
 
-    it("publishes each vote with its reason before the outcome is known", async () => {
+    it("does not open reveals until the panel is full", async () => {
       const { registry, reporterA, jurorA, geohash } = await deployFixture();
       await submit(registry, reporterA, geohash);
 
-      await expect(registry.connect(jurorA).castJuryVote(0, Tier.UnderReview, REASON))
-        .to.emit(registry, "JuryVoteCast")
-        .withArgs(0, jurorA.address, Tier.UnderReview, 1, REASON);
+      const round = await nextRoundIndex(registry, 0);
+      await commitVote(registry, jurorA, 0, Tier.UnderReview, SALT(0), round);
+
+      await expect(
+        registry.connect(jurorA).revealVote(0, Tier.UnderReview, SALT(0), REASON)
+      ).to.be.revertedWith("ReportRegistry: not revealing");
     });
 
-    it("requires a reason for every vote", async () => {
-      const { registry, reporterA, jurorA, geohash } = await deployFixture();
-      await submit(registry, reporterA, geohash);
-      await expect(registry.connect(jurorA).castJuryVote(0, Tier.Verified, "")).to.be.revertedWith(
-        "ReportRegistry: reason required"
-      );
-    });
-
-    it("rewards jurors who agreed and penalizes those who dissented", async () => {
-      const { registry, reporterA, jurorA, jurorB, jurorC, admin, geohash } = await deployFixture();
+    it("publishes the reason alongside the revealed tier", async () => {
+      const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
       await submit(registry, reporterA, geohash);
 
-      // The admin is seated as a juror by the constructor; use them as the dissenter.
-      await (await registry.connect(admin).castJuryVote(0, Tier.Disputed, "Looks fabricated.")).wait();
-      await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Verified);
-
-      expect(await registry.karma(jurorA.address)).to.equal(3n);
-      expect(await registry.karma(jurorB.address)).to.equal(3n);
-      expect(await registry.karma(jurorC.address)).to.equal(3n);
-      // Dissenter had no karma to lose; penalty floors at zero rather than underflowing.
-      expect(await registry.karma(admin.address)).to.equal(0n);
-    });
-
-    it("does not let juror karma underflow below zero", async () => {
-      const { registry, reporterA, reporterB, admin, jurorA, jurorB, jurorC, geohash } =
-        await deployFixture();
-      await submit(registry, reporterA, geohash, "1");
-      await submit(registry, reporterB, geohash, "2");
-
-      // jurorA banks karma on report 0, then loses more than that on report 1.
-      await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Verified);
-      expect(await registry.karma(jurorA.address)).to.equal(3n);
-
-      await (await registry.connect(jurorA).castJuryVote(1, Tier.Verified, "Disagree.")).wait();
-      await reachVerdict(registry, [jurorB, jurorC, admin], 1, Tier.Disputed);
-
-      expect(await registry.karma(jurorA.address)).to.equal(0n);
-    });
-
-    it("weights a high-karma juror more, but never enough to decide alone", async () => {
-      const { registry, admin, reporterA, reporterB, jurorA, jurorB, jurorC, geohash } =
-        await deployFixture();
-
-      // Bank enough karma for jurorA to earn the weight bonus. Submissions
-      // alternate between two reporters so the per-account epoch cap — which is
-      // doing its job — does not stop the fixture from being built.
-      const perWeight = Number(await registry.KARMA_PER_JURY_WEIGHT());
-      const perVerdict = Number(await registry.KARMA_JUROR_AGREED());
-      const rounds = Math.ceil(perWeight / perVerdict);
-
-      for (let i = 0; i < rounds; i++) {
-        await submit(registry, i % 2 === 0 ? reporterA : reporterB, geohash, `k-${i}`);
-        await reachVerdict(registry, [jurorA, jurorB, jurorC], i, Tier.Verified);
+      const round = await nextRoundIndex(registry, 0);
+      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+        await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
       }
 
-      expect(await registry.jurorWeight(jurorA.address)).to.equal(2n);
-      expect(await registry.MAX_JUROR_WEIGHT()).to.equal(2n);
-
-      // Weight 2 is still below the quorum of 3: one juror cannot finalize.
-      await submit(registry, reporterB, geohash, "solo");
-      const solo = rounds;
-      await (await registry.connect(jurorA).castJuryVote(solo, Tier.Disputed, "Alone.")).wait();
-      expect(await registry.verdictFinal(solo)).to.equal(false);
-
-      // One more base-weight juror tips it over.
-      await (await registry.connect(admin).castJuryVote(solo, Tier.Disputed, "Agreed.")).wait();
-      expect(await registry.verdictFinal(solo)).to.equal(true);
+      await expect(registry.connect(jurorA).revealVote(0, Tier.Verified, SALT(0), REASON))
+        .to.emit(registry, "JuryVoteRevealed")
+        .withArgs(0, jurorA.address, Tier.Verified, REASON);
     });
 
-    it("lowers reporter karma without underflowing when Disputed", async () => {
+    it("requires a reason on every reveal", async () => {
+      const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const round = await nextRoundIndex(registry, 0);
+      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+        await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
+      }
+      await expect(
+        registry.connect(jurorA).revealVote(0, Tier.Verified, SALT(0), "")
+      ).to.be.revertedWith("ReportRegistry: reason required");
+    });
+
+    it("rejects a reveal that does not match the commitment", async () => {
+      const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const round = await nextRoundIndex(registry, 0);
+      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+        await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
+      }
+
+      // Committed to Verified, trying to reveal Disputed.
+      await expect(
+        registry.connect(jurorA).revealVote(0, Tier.Disputed, SALT(0), REASON)
+      ).to.be.revertedWith("ReportRegistry: commitment mismatch");
+    });
+
+    it("rejects a reveal from a juror who never committed", async () => {
+      const { registry, admin, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+      const round = await nextRoundIndex(registry, 0);
+      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+        await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
+      }
+
+      await expect(
+        registry.connect(admin).revealVote(0, Tier.Verified, SALT(9), REASON)
+      ).to.be.revertedWith("ReportRegistry: nothing committed");
+    });
+
+    it("binds a commitment to the juror, so it cannot be copied", async () => {
+      const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const round = await nextRoundIndex(registry, 0);
+      // jurorB front-runs by submitting a commitment built for jurorA.
+      const foreign = await registry.commitmentFor(0, round, Tier.Verified, SALT(0), jurorA.address);
+      await (await registry.connect(jurorB).commitVote(0, foreign)).wait();
+      await commitVote(registry, jurorA, 0, Tier.Verified, SALT(1), round);
+      await commitVote(registry, jurorC, 0, Tier.Verified, SALT(2), round);
+
+      // jurorB cannot open it: the hash binds jurorA's address, not theirs.
+      await expect(
+        registry.connect(jurorB).revealVote(0, Tier.Verified, SALT(0), REASON)
+      ).to.be.revertedWith("ReportRegistry: commitment mismatch");
+    });
+
+    it("blocks committing twice in the same round", async () => {
+      const { registry, reporterA, jurorA, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const round = await nextRoundIndex(registry, 0);
+      await commitVote(registry, jurorA, 0, Tier.Verified, SALT(0), round);
+      await expect(
+        commitVote(registry, jurorA, 0, Tier.Disputed, SALT(1), round)
+      ).to.be.revertedWith("ReportRegistry: already committed");
+    });
+
+    it("blocks a juror from judging their own report", async () => {
+      const { registry, jurorA, geohash } = await deployFixture();
+      await submit(registry, jurorA, geohash);
+      const round = await nextRoundIndex(registry, 0);
+      await expect(
+        commitVote(registry, jurorA, 0, Tier.Verified, SALT(0), round)
+      ).to.be.revertedWith("ReportRegistry: self review");
+    });
+
+    it("blocks non-jurors from committing", async () => {
+      const { registry, reporterA, reporterB, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+      const round = await nextRoundIndex(registry, 0);
+      await expect(
+        commitVote(registry, reporterB, 0, Tier.Verified, SALT(0), round)
+      ).to.be.revertedWith("ReportRegistry: not juror");
+    });
+  });
+
+  describe("jury — abandonment and deadlines", () => {
+    it("penalises committing and never revealing", async () => {
+      const { registry, admin, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const round = await nextRoundIndex(registry, 0);
+      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+        await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
+      }
+      void admin;
+
+      await (await registry.connect(jurorA).revealVote(0, Tier.Verified, SALT(0), REASON)).wait();
+      await (await registry.connect(jurorB).revealVote(0, Tier.Verified, SALT(1), REASON)).wait();
+      // jurorC never reveals.
+
+      await time.increase(Number(await registry.REVEAL_WINDOW()) + 1);
+      await (await registry.closeRound(0)).wait();
+
+      expect(await registry.jurorBallotsAbandoned(jurorC.address)).to.equal(1n);
+      expect(await registry.jurorBallotsAbandoned(jurorA.address)).to.equal(0n);
+      expect(await registry.jurorBallotsCompleted(jurorA.address)).to.equal(1n);
+
+      // Two of three revealed, both agreeing — that is still a majority.
+      expect((await registry.reports(0)).tier).to.equal(Tier.Verified);
+    });
+
+    it("lets anyone close an expired round", async () => {
+      // A round only a juror can close is a round a juror can leave open
+      // forever, which is a cheap way to bury a report.
+      const { registry, reporterA, reporterB, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const round = await nextRoundIndex(registry, 0);
+      for (const [i, j] of [jurorA, jurorB, jurorC].entries()) {
+        await commitVote(registry, j, 0, Tier.Verified, SALT(i), round);
+      }
+      await time.increase(Number(await registry.REVEAL_WINDOW()) + 1);
+
+      // reporterB is neither a juror nor the reporter.
+      await (await registry.connect(reporterB).closeRound(0)).wait();
+      expect((await registry.rounds(0)).phase).to.equal(4n); // nobody revealed
+    });
+
+    it("abandons a round that never filled its panel, and allows a retry", async () => {
+      const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+
+      const first = await nextRoundIndex(registry, 0);
+      await commitVote(registry, jurorA, 0, Tier.Verified, SALT(0), first);
+
+      await time.increase(Number(await registry.COMMIT_WINDOW()) + 1);
+      await (await registry.closeRound(0)).wait();
+      expect((await registry.rounds(0)).phase).to.equal(4n);
+
+      // A fresh panel can start over on a new round index.
+      const second = await nextRoundIndex(registry, 0);
+      expect(second).to.equal(first + 1);
+      await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Verified);
+      expect((await registry.reports(0)).tier).to.equal(Tier.Verified);
+    });
+
+    it("refuses to close a round whose window is still open", async () => {
+      const { registry, reporterA, jurorA, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+      const round = await nextRoundIndex(registry, 0);
+      await commitVote(registry, jurorA, 0, Tier.Verified, SALT(0), round);
+
+      await expect(registry.closeRound(0)).to.be.revertedWith(
+        "ReportRegistry: commit window open"
+      );
+    });
+  });
+
+  describe("jury — appeal", () => {
+    it("lets the reporter contest a verdict before a larger panel", async () => {
       const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
       await submit(registry, reporterA, geohash);
       await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Disputed);
 
-      expect(await registry.karma(reporterA.address)).to.equal(0n);
-    });
+      expect(await registry.canAppeal(0)).to.equal(true);
+      await expect(registry.connect(reporterA).appealVerdict(0)).to.emit(registry, "VerdictAppealed");
 
-    it("moves a report into UnderReview without touching reporter karma", async () => {
-      const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
-      await submit(registry, reporterA, geohash);
-      await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.UnderReview);
-
+      // Contested verdicts do not keep standing while under appeal.
       expect((await registry.reports(0)).tier).to.equal(Tier.UnderReview);
-      expect(await registry.karma(reporterA.address)).to.equal(0n);
+      expect(await registry.verdictFinal(0)).to.equal(false);
+      expect((await registry.rounds(0)).quorum).to.equal(await registry.APPEAL_QUORUM());
     });
 
-    it("does not auto-promote a report already moved by the jury", async () => {
-      const { registry, reporterA, reporterB, witnessA, witnessB, jurorA, jurorB, jurorC, geohash } =
+    it("undoes the karma the overturned verdict moved", async () => {
+      const { registry, admin, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash, "1");
+      await submit(registry, reporterA, geohash, "2");
+
+      // Bank karma on report 0, then lose some on report 1.
+      await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Verified);
+      expect(await registry.karma(reporterA.address)).to.equal(10n);
+
+      await reachVerdict(registry, [jurorA, jurorB, jurorC], 1, Tier.Disputed);
+      expect(await registry.karma(reporterA.address)).to.equal(5n);
+
+      // Appealing the Disputed verdict restores what it took.
+      await (await registry.connect(reporterA).appealVerdict(1)).wait();
+      expect(await registry.karma(reporterA.address)).to.equal(10n);
+      void admin;
+    });
+
+    it("re-hears the report and can overturn the outcome", async () => {
+      const { registry, admin, reporterA, jurorA, jurorB, jurorC, witnessA, geohash } =
         await deployFixture();
+      await (await registry.connect(admin).setJuror(witnessA.address, true)).wait();
       await submit(registry, reporterA, geohash);
-      await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.UnderReview);
 
-      await (await registry.connect(witnessA).corroborate(0)).wait();
-      await (await registry.connect(witnessB).corroborate(0)).wait();
-      await (await registry.connect(reporterB).corroborate(0)).wait();
+      await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Disputed);
+      await (await registry.connect(reporterA).appealVerdict(0)).wait();
 
-      expect((await registry.reports(0)).tier).to.equal(Tier.UnderReview);
+      // Five jurors on appeal, and this time they say Verified.
+      await runRound(registry, [jurorA, jurorB, jurorC, admin, witnessA], 0, Tier.Verified);
+
+      expect((await registry.reports(0)).tier).to.equal(Tier.Verified);
+      expect(await registry.karma(reporterA.address)).to.equal(10n);
     });
 
-    it("blocks a second vote from the same juror", async () => {
-      const { registry, reporterA, jurorA, geohash } = await deployFixture();
+    it("allows only one appeal", async () => {
+      const { registry, admin, reporterA, jurorA, jurorB, jurorC, witnessA, geohash } =
+        await deployFixture();
+      await (await registry.connect(admin).setJuror(witnessA.address, true)).wait();
       await submit(registry, reporterA, geohash);
-      await (await registry.connect(jurorA).castJuryVote(0, Tier.Verified, REASON)).wait();
 
-      await expect(registry.connect(jurorA).castJuryVote(0, Tier.Disputed, REASON)).to.be.revertedWith(
-        "ReportRegistry: already voted"
+      await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Disputed);
+      await (await registry.connect(reporterA).appealVerdict(0)).wait();
+      await runRound(registry, [jurorA, jurorB, jurorC, admin, witnessA], 0, Tier.Disputed);
+
+      expect(await registry.canAppeal(0)).to.equal(false);
+      await expect(registry.connect(reporterA).appealVerdict(0)).to.be.revertedWith(
+        "ReportRegistry: already appealed"
       );
     });
 
-    it("blocks voting once the verdict is final", async () => {
+    it("lets nobody but the reporter appeal", async () => {
+      const { registry, reporterA, reporterB, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+      await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Disputed);
+
+      await expect(registry.connect(reporterB).appealVerdict(0)).to.be.revertedWith(
+        "ReportRegistry: not the reporter"
+      );
+      await expect(registry.connect(jurorA).appealVerdict(0)).to.be.revertedWith(
+        "ReportRegistry: not the reporter"
+      );
+    });
+
+    it("closes the appeal window", async () => {
+      const { registry, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
+      await submit(registry, reporterA, geohash);
+      await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Disputed);
+
+      await time.increase(Number(await registry.APPEAL_WINDOW()) + 1);
+      expect(await registry.canAppeal(0)).to.equal(false);
+      await expect(registry.connect(reporterA).appealVerdict(0)).to.be.revertedWith(
+        "ReportRegistry: appeal window closed"
+      );
+    });
+
+    it("blocks voting on a decided report without an appeal", async () => {
       const { registry, admin, reporterA, jurorA, jurorB, jurorC, geohash } = await deployFixture();
       await submit(registry, reporterA, geohash);
       await reachVerdict(registry, [jurorA, jurorB, jurorC], 0, Tier.Verified);
 
-      await expect(registry.connect(admin).castJuryVote(0, Tier.Disputed, REASON)).to.be.revertedWith(
-        "ReportRegistry: verdict final"
+      const commitment = await registry.commitmentFor(0, 1, Tier.Disputed, SALT(7), admin.address);
+      await expect(registry.connect(admin).commitVote(0, commitment)).to.be.revertedWith(
+        "ReportRegistry: not committing"
       );
-    });
-
-    it("blocks a juror from reviewing their own report", async () => {
-      const { registry, jurorA, geohash } = await deployFixture();
-      await submit(registry, jurorA, geohash);
-      await expect(registry.connect(jurorA).castJuryVote(0, Tier.Verified, REASON)).to.be.revertedWith(
-        "ReportRegistry: self review"
-      );
-    });
-
-    it("rejects an out-of-range tier", async () => {
-      const { registry, reporterA, jurorA, geohash } = await deployFixture();
-      await submit(registry, reporterA, geohash);
-      await expect(registry.connect(jurorA).castJuryVote(0, 99, REASON)).to.be.revertedWith(
-        "ReportRegistry: bad tier"
-      );
-    });
-
-    it("blocks non-jurors from voting", async () => {
-      const { registry, reporterA, reporterB, geohash } = await deployFixture();
-      await submit(registry, reporterA, geohash);
-      await expect(registry.connect(reporterB).castJuryVote(0, Tier.Verified, REASON)).to.be.revertedWith(
-        "ReportRegistry: not juror"
-      );
-    });
-
-    it("reports how each juror voted", async () => {
-      const { registry, reporterA, jurorA, jurorB, geohash } = await deployFixture();
-      await submit(registry, reporterA, geohash);
-      await (await registry.connect(jurorA).castJuryVote(0, Tier.Disputed, REASON)).wait();
-
-      expect(await registry.juryVoteOf(0, jurorA.address)).to.deep.equal([true, BigInt(Tier.Disputed)]);
-      expect(await registry.juryVoteOf(0, jurorB.address)).to.deep.equal([false, 0n]);
-      expect(await registry.jurorsVotedOn(0)).to.deep.equal([jurorA.address]);
-    });
-
-    it("gives no weight to a revoked juror", async () => {
-      const { registry, admin, jurorA } = await deployFixture();
-      expect(await registry.jurorWeight(jurorA.address)).to.equal(1n);
-
-      await (await registry.connect(admin).setJuror(jurorA.address, false)).wait();
-      expect(await registry.jurorWeight(jurorA.address)).to.equal(0n);
     });
   });
 
@@ -552,6 +829,7 @@ describe("ReportRegistry", () => {
       // admin-only path to a verdict. The admin votes as one juror or not at all.
       const { registry } = await deployFixture();
       expect((registry as any).setVerificationTier).to.equal(undefined);
+      expect((registry as any).castJuryVote).to.equal(undefined);
     });
 
     it("transfers admin", async () => {

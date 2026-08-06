@@ -93,7 +93,7 @@ Concrete guarantees in this scaffold:
   bundle), `cid` (pointer to that bundle in the content layer), category, visibility,
   verification tier, coarse geohash, blinded `entityTag`, timestamp, and the
   pseudonymous reporter address. A moderator role (v0: single address; later:
-  karma-weighted jury) sets the tier, adjusting reporter karma.
+  equal-weight secret-ballot jury) sets the tier, adjusting reporter karma.
 
 ### Content layer — how reports become readable
 
@@ -153,7 +153,7 @@ the same place:
 |---|---|---|
 | Flood the gasless endpoint | Per-epoch submission cap (10/day/account) | `submitReport` |
 | Sybil the witness set | `IPersonhoodGate` | `corroborate` |
-| Capture the moderator | Karma-weighted jury | tier verdicts |
+| Capture the review | Equal-weight secret-ballot jury, appealable | tier verdicts |
 
 Note what is deliberately absent: **there is no personhood check on `submitReport`.**
 Requiring anyone to prove who they are before reporting corruption would rebuild the
@@ -298,7 +298,7 @@ npm install                    # installs all workspaces
 
 # Contracts
 npm run contracts:compile
-npm run contracts:test         # 48 passing
+npm run contracts:test         # 59 passing
 
 # Mobile app (mock relayer — no credentials needed)
 npm run mobile:web             # dev server with hot reload
@@ -403,33 +403,81 @@ has moved past `Unverified`**:
 The review queue (`/moderation`) lists everything not yet adjudicated, oldest first,
 with each report's integrity-check result.
 
-### Karma-weighted jury
+### Jury of equals, voting in secret
 
 There is **no moderator address**. Verdicts come from a jury, and the contract has no
-admin path to a tier — the admin seats and unseats jurors and nothing else. Four
-properties, each of which exists to remove a specific failure:
+admin path to a tier — the admin seats and unseats jurors and nothing else.
 
 | Property | Removes |
 |---|---|
-| A verdict needs 3 units of agreeing weight | One captured account deciding alone |
-| Juror weight is capped at 2, below quorum | A high-karma juror becoming that account |
-| Dissenting jurors lose 6 karma, agreeing gain 3 | Careless review having no cost |
-| Every vote publishes its reason, before the outcome | Unaccountable reasoning |
+| Every juror counts exactly **one** | Influence accumulating to whoever agrees most |
+| Ballots are **sealed** until the panel is full | Late jurors reading the room instead of the evidence |
+| Dissent costs **nothing** | Pricing the one "no" that a captured panel most needs |
+| A **majority**, not a plurality, decides | Disagreement being dressed up as a decision |
+| The reporter can **appeal** once, to a larger panel | A wrong first verdict being permanent |
+| Every opened ballot publishes its **reason** | Unaccountable reasoning |
 
-That last one is the important one. `JuryVoteCast` carries the juror's stated reason
-on-chain at the moment they vote, so the public can audit moderators with nothing but an
-RPC endpoint — no trust in the operator required. A moderation system nobody can audit is
-just censorship with extra steps.
+#### Why an earlier version of this was unfair
+
+This started out weighting each juror's vote by their karma, paying them for agreeing
+with the eventual verdict and charging them double for dissenting. That was wrong in
+three compounding ways, and it is worth stating rather than quietly fixing:
+
+1. **It made agreement profitable.** The rational move for any juror was to vote with
+   whoever they expected to win, not with the evidence — a beauty contest, not a
+   truth-finding process.
+2. **The reward compounded.** Agreeing bought karma, karma bought weight, weight bought
+   influence over the next verdict. A juror who was right *before* the majority caught up
+   was stripped of standing for it.
+3. **Reporter karma and juror weight shared one counter.** Filing reports that got
+   Verified literally bought judicial power over the review of one's own later
+   accusations.
+
+The deep error was using majority agreement as a proxy for truth. For corruption reports
+that is backwards: the cases most likely to attract a confidently wrong majority are the
+ones accusing powerful or popular people, which are exactly the cases that need a juror
+willing to be the only "no" in the room.
+
+So the mechanism no longer measures agreement at all. The only thing a juror's record
+holds against them is committing to a verdict and then never opening it — a failure to do
+the job rather than a wrong opinion about the evidence. Bad jurors are removed by an
+explicit, visible, contestable decision of whoever holds `admin`, not by an automatic
+metric that mistakes conformity for judgement.
+
+#### How a round runs
+
+```
+commit  →  jurors submit keccak256(reportId, round, tier, salt, juror)
+           nothing readable exists; the tally does not yet exist
+        →  panel fills at quorum (3, or 5 on appeal)
+
+reveal  →  jurors open their ballot with (tier, salt) and a written reason
+           the vote was locked before they saw anyone else's
+
+close   →  majority of revealed ballots decides; anything less is "undecided"
+           committed-but-never-revealed is recorded as abandonment
+```
+
+`JuryVoteRevealed` carries the juror's stated reason on-chain, so the public can audit
+moderators with nothing but an RPC endpoint. Because the ballot was sealed first, that
+reason cannot be retrofitted to whatever the majority turned out to be.
 
 A jury can move a report's **tier** and can **never edit or delete the report** — the
 content hash is anchored, so moderation adds judgement on top of an immutable record.
 
-Still unfinished, and it should not be glossed over: the in-app "act as a juror" toggle is
-a **local dev affordance**, and the simulated peer jurors exist so a single device can
-reach quorum in a demo. Both are labelled everywhere they appear and both must be deleted
-before a real deployment. And a jury of three addresses controlled by one party is exactly
-the centralization this replaced — the contract cannot detect that, only the people
-seating jurors can.
+#### What is still unfair, and not yet fixed
+
+- **The panel fills first-come-first-served.** A coordinated group watching for new
+  reports can take all three seats. The standard answer is sortition — draw the panel at
+  random — which needs a randomness source a block proposer cannot grind. A weak version
+  would be worse than none, because it would look like a defence while being one. Until
+  then the mitigations are off-chain: keep the juror set small and vetted, and watch the
+  published ballots for panels that always seat the same faces.
+- **A jury of three addresses controlled by one party** is exactly the centralization
+  this replaced. The contract cannot detect that; only the people seating jurors can.
+- The in-app "act as a juror" toggle is a **local dev affordance**, and the simulated
+  peers exist so one device can reach quorum in a demo. Both are labelled everywhere they
+  appear and both must be deleted before a real deployment.
 
 On detecting AI-generated reports: **do not ship a naive AI-text detector.** They have
 high false-positive rates on second-language English writers, which describes a large

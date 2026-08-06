@@ -2,7 +2,6 @@ import React, { useCallback, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
-  JURY_QUORUM_WEIGHT,
   REPORT_CATEGORY_KEYS,
   TIER_SLUGS,
   VerificationTier,
@@ -11,18 +10,24 @@ import {
 } from "@khabardar/shared";
 import { getNetworkIndex, resolveFeedReports } from "../src/feed";
 import {
-  castJuryVote,
+  appealVerdict,
+  ballotsFor,
+  canAppeal,
+  commitVote,
   isJurorMode,
   jurorLabel,
-  JuryVoteRejected,
-  karmaOf,
+  jurorRecord,
+  JuryActionRejected,
+  JuryPhase,
+  JURY_QUORUM,
   publicDecisionLog,
+  revealVote,
+  roundFor,
   setJurorMode,
   simulatePeerReview,
-  tallyFor,
-  weightFromKarma,
-  type JuryTally,
-  type JuryVote,
+  type Ballot,
+  type JuryRound,
+  type JurorRecord,
 } from "../src/moderation";
 import { useApp } from "../src/state/AppContext";
 import { Badge, Body, Button, Card, Screen, TierBadge, Title } from "../src/ui";
@@ -35,15 +40,21 @@ const QUEUE_TIERS = [
   VerificationTier.CommunityCorroborated,
 ];
 
+interface RowState {
+  round: JuryRound;
+  ballots: Ballot[];
+  appealable: boolean;
+}
+
 export default function ModerationScreen() {
   const router = useRouter();
   const { identity } = useApp();
 
   const [juror, setJuror] = useState(false);
-  const [weight, setWeight] = useState(1);
+  const [record, setRecord] = useState<JurorRecord>({ completed: 0, abandoned: 0 });
   const [reports, setReports] = useState<FeedReport[]>([]);
-  const [tallies, setTallies] = useState<Record<number, JuryTally>>({});
-  const [log, setLog] = useState<JuryVote[]>([]);
+  const [state, setState] = useState<Record<number, RowState>>({});
+  const [log, setLog] = useState<Ballot[]>([]);
   const [loading, setLoading] = useState(true);
   const [reasons, setReasons] = useState<Record<number, string>>({});
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -59,21 +70,28 @@ export default function ModerationScreen() {
       ]);
       setJuror(mode);
       setLog(decisions);
-
-      if (identity) setWeight(weightFromKarma(await karmaOf(identity.address)));
+      if (identity) setRecord(await jurorRecord(identity.address));
 
       const resolved = await resolveFeedReports(rows);
-      // The queue is everything not yet finally adjudicated, oldest first —
-      // a report that has waited longest should be seen first.
       const queue = resolved
         .filter((r) => QUEUE_TIERS.includes(r.tier) && !r.demo)
         .sort((a, b) => a.timestamp - b.timestamp);
       setReports(queue);
 
       const entries = await Promise.all(
-        queue.map(async (r) => [r.onChainReportId, await tallyFor(r.onChainReportId)] as const)
+        queue.map(async (r) => {
+          const id = r.onChainReportId;
+          return [
+            id,
+            {
+              round: await roundFor(id),
+              ballots: await ballotsFor(id),
+              appealable: await canAppeal(id),
+            },
+          ] as const;
+        })
       );
-      setTallies(Object.fromEntries(entries));
+      setState(Object.fromEntries(entries));
     } finally {
       setLoading(false);
     }
@@ -85,40 +103,66 @@ export default function ModerationScreen() {
     }, [load])
   );
 
-  async function vote(report: FeedReport, tier: VerificationTier) {
+  function report(e: unknown) {
+    setError(e instanceof JuryActionRejected ? t(`jury.rejected.${e.code}`) : t("common.error"));
+  }
+
+  async function commit(r: FeedReport, tier: VerificationTier) {
     if (!identity) return;
-    setBusyId(report.onChainReportId);
+    setBusyId(r.onChainReportId);
     setError(null);
     try {
-      await castJuryVote({
-        reportId: report.onChainReportId,
+      // The tier is sealed here — it is not stored anywhere readable until the
+      // panel fills and this juror reveals it.
+      await commitVote({
+        reportId: r.onChainReportId,
         juror: identity.address,
-        reporter: report.reporter,
+        reporter: r.reporter,
         tier,
-        reason: reasons[report.onChainReportId] ?? "",
       });
-      setReasons((p) => ({ ...p, [report.onChainReportId]: "" }));
+      setPendingTier((p) => ({ ...p, [r.onChainReportId]: tier }));
       await load();
     } catch (e) {
-      setError(
-        e instanceof JuryVoteRejected ? t(`jury.rejected.${e.code}`) : t("common.error")
-      );
+      report(e);
     } finally {
       setBusyId(null);
     }
   }
 
-  async function simulate(report: FeedReport) {
-    const tally = tallies[report.onChainReportId];
-    const mine = tally?.votes.find(
-      (v) => v.juror.toLowerCase() === identity?.address.toLowerCase()
-    );
-    setBusyId(report.onChainReportId);
+  const [pendingTier, setPendingTier] = useState<Record<number, VerificationTier>>({});
+
+  async function reveal(r: FeedReport) {
+    if (!identity) return;
+    const tier = pendingTier[r.onChainReportId];
+    if (tier === undefined) {
+      setError(t("jury.rejected.no-salt"));
+      return;
+    }
+    setBusyId(r.onChainReportId);
+    setError(null);
+    try {
+      await revealVote({
+        reportId: r.onChainReportId,
+        juror: identity.address,
+        tier,
+        reason: reasons[r.onChainReportId] ?? "",
+      });
+      setReasons((p) => ({ ...p, [r.onChainReportId]: "" }));
+      await load();
+    } catch (e) {
+      report(e);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function simulate(r: FeedReport) {
+    setBusyId(r.onChainReportId);
     try {
       await simulatePeerReview({
-        reportId: report.onChainReportId,
-        reporter: report.reporter,
-        tier: mine?.tier ?? VerificationTier.UnderReview,
+        reportId: r.onChainReportId,
+        reporter: r.reporter,
+        tier: pendingTier[r.onChainReportId] ?? VerificationTier.UnderReview,
       });
       await load();
     } finally {
@@ -126,9 +170,14 @@ export default function ModerationScreen() {
     }
   }
 
-  async function toggleJuror() {
-    await setJurorMode(!juror);
-    await load();
+  async function appeal(r: FeedReport) {
+    setBusyId(r.onChainReportId);
+    try {
+      await appealVerdict(r.onChainReportId);
+      await load();
+    } finally {
+      setBusyId(null);
+    }
   }
 
   return (
@@ -143,12 +192,15 @@ export default function ModerationScreen() {
         <Body dim>{t("jury.devModeNote")}</Body>
         <Button
           label={juror ? t("jury.leaveJurorMode") : t("jury.enterJurorMode")}
-          onPress={toggleJuror}
+          onPress={async () => {
+            await setJurorMode(!juror);
+            await load();
+          }}
           variant="secondary"
         />
         {juror ? (
           <Body dim>
-            {t("jury.yourWeight", { weight })} · {t("jury.quorum", { n: JURY_QUORUM_WEIGHT })}
+            {t("jury.yourRecord", { done: record.completed, missed: record.abandoned })}
           </Body>
         ) : null}
       </Card>
@@ -171,15 +223,18 @@ export default function ModerationScreen() {
         <>
           <Body dim>{t("moderation.queueCount", { count: reports.length })}</Body>
           {reports.map((r) => {
-            const tally = tallies[r.onChainReportId];
-            const votes = tally?.votes ?? [];
-            const mine = votes.find(
-              (v) => v.juror.toLowerCase() === identity?.address.toLowerCase()
+            const id = r.onChainReportId;
+            const row = state[id];
+            const ballots = row?.ballots ?? [];
+            const mine = ballots.find(
+              (b) => b.juror.toLowerCase() === identity?.address.toLowerCase()
             );
             const isOwn = identity?.address.toLowerCase() === r.reporter.toLowerCase();
+            const phase = row?.round.phase ?? JuryPhase.None;
+            const revealed = ballots.filter((b) => b.tier !== undefined);
 
             return (
-              <Card key={r.onChainReportId}>
+              <Card key={id}>
                 <View style={styles.row}>
                   <Body>{t(REPORT_CATEGORY_KEYS[r.category])}</Body>
                   <TierBadge tier={r.tier} />
@@ -200,23 +255,22 @@ export default function ModerationScreen() {
                   {t("feed.corroborations", { count: r.corroborations })}
                 </Body>
 
-                <Body dim>
-                  {r.integrityVerified
-                    ? `✅ ${t("feed.integrityOk")}`
-                    : `⚠️ ${t("feed.integrityFail")}`}
-                </Body>
+                <PhaseBar round={row?.round} sealed={ballots.length} opened={revealed.length} />
 
-                <TallyBar tally={tally} />
-
-                {votes.length > 0 ? (
-                  <View style={styles.votes}>
-                    {votes.map((v) => (
-                      <View key={`${v.juror}-${v.castAt}`} style={styles.voteRow}>
+                {/* Sealed ballots show WHO committed and nothing else. Showing a
+                    running tally here is exactly what would let a late juror
+                    read the room instead of the evidence. */}
+                {ballots.length > 0 ? (
+                  <View style={styles.ballots}>
+                    {ballots.map((b) => (
+                      <View key={`${b.juror}-${b.round}`} style={styles.ballotRow}>
                         <Body dim>
-                          {jurorLabel(v.juror)} → {t(`tier.${TIER_SLUGS[v.tier]}`)} (
-                          {t("jury.weight", { weight: v.weight })}): {v.reason}
+                          {jurorLabel(b.juror)} —{" "}
+                          {b.tier === undefined
+                            ? t("jury.sealed")
+                            : `${t(`tier.${TIER_SLUGS[b.tier]}`)}: ${b.reason}`}
                         </Body>
-                        {v.simulated ? (
+                        {b.simulated ? (
                           <Text style={styles.simTag}>{t("jury.simulatedTag")}</Text>
                         ) : null}
                       </View>
@@ -224,56 +278,80 @@ export default function ModerationScreen() {
                   </View>
                 ) : null}
 
+                {row?.appealable && isOwn ? (
+                  <>
+                    <Body dim>{t("jury.appealExplainer")}</Body>
+                    <Button
+                      label={t("jury.appeal")}
+                      variant="secondary"
+                      loading={busyId === id}
+                      onPress={() => appeal(r)}
+                    />
+                  </>
+                ) : null}
+
                 {!juror ? (
                   <Body dim>{t("moderation.readOnly")}</Body>
                 ) : isOwn ? (
                   <Body dim>{t("jury.rejected.self-review")}</Body>
-                ) : mine ? (
+                ) : phase === JuryPhase.Revealing && mine && mine.tier === undefined ? (
                   <>
-                    <Body dim>
-                      {t("jury.yourVote", { tier: t(`tier.${TIER_SLUGS[mine.tier]}`) })}
-                    </Body>
-                    <Button
-                      label={t("jury.simulatePeers")}
-                      variant="secondary"
-                      loading={busyId === r.onChainReportId}
-                      onPress={() => simulate(r)}
-                    />
-                    <Body dim>{t("jury.simulateNote")}</Body>
-                  </>
-                ) : (
-                  <>
+                    <Body dim>{t("jury.revealPrompt")}</Body>
                     <TextInput
                       style={styles.input}
                       placeholder={t("jury.reasonPlaceholder")}
                       placeholderTextColor={colors.textDim}
                       multiline
-                      value={reasons[r.onChainReportId] ?? ""}
-                      onChangeText={(v) => setReasons((p) => ({ ...p, [r.onChainReportId]: v }))}
+                      value={reasons[id] ?? ""}
+                      onChangeText={(v) => setReasons((p) => ({ ...p, [id]: v }))}
                     />
                     <Body dim>{t("jury.reasonNote")}</Body>
+                    <Button
+                      label={t("jury.reveal")}
+                      loading={busyId === id}
+                      onPress={() => reveal(r)}
+                    />
+                  </>
+                ) : mine ? (
+                  <>
+                    <Body dim>
+                      {mine.tier === undefined ? t("jury.committed") : t("jury.revealed")}
+                    </Body>
+                    <Button
+                      label={t("jury.simulatePeers")}
+                      variant="secondary"
+                      loading={busyId === id}
+                      onPress={() => simulate(r)}
+                    />
+                    <Body dim>{t("jury.simulateNote")}</Body>
+                  </>
+                ) : phase === JuryPhase.Decided ? (
+                  <Body dim>{t("jury.rejected.not-committing")}</Body>
+                ) : (
+                  <>
+                    <Body dim>{t("jury.commitPrompt")}</Body>
                     <View style={styles.actions}>
                       <View style={styles.flex}>
                         <Button
                           label={t("moderation.startReview")}
                           variant="secondary"
-                          loading={busyId === r.onChainReportId}
-                          onPress={() => vote(r, VerificationTier.UnderReview)}
+                          loading={busyId === id}
+                          onPress={() => commit(r, VerificationTier.UnderReview)}
                         />
                       </View>
                       <View style={styles.flex}>
                         <Button
                           label={t("moderation.verify")}
-                          loading={busyId === r.onChainReportId}
-                          onPress={() => vote(r, VerificationTier.Verified)}
+                          loading={busyId === id}
+                          onPress={() => commit(r, VerificationTier.Verified)}
                         />
                       </View>
                       <View style={styles.flex}>
                         <Button
                           label={t("moderation.reject")}
                           variant="danger"
-                          loading={busyId === r.onChainReportId}
-                          onPress={() => vote(r, VerificationTier.Disputed)}
+                          loading={busyId === id}
+                          onPress={() => commit(r, VerificationTier.Disputed)}
                         />
                       </View>
                     </View>
@@ -288,10 +366,10 @@ export default function ModerationScreen() {
       {log.length > 0 ? (
         <Card>
           <Body dim>{t("jury.auditLog")}</Body>
-          {log.slice(0, 10).map((v) => (
-            <Body key={`${v.reportId}-${v.juror}-${v.castAt}`} dim>
-              #{v.reportId} · {jurorLabel(v.juror)} → {t(`tier.${TIER_SLUGS[v.tier]}`)}
-              {v.reason ? ` — ${v.reason}` : ""}
+          {log.slice(0, 10).map((b) => (
+            <Body key={`${b.reportId}-${b.round}-${b.juror}`} dim>
+              #{b.reportId} · {jurorLabel(b.juror)} → {t(`tier.${TIER_SLUGS[b.tier!]}`)}
+              {b.reason ? ` — ${b.reason}` : ""}
             </Body>
           ))}
           <Body dim>{t("jury.auditNote")}</Body>
@@ -305,20 +383,37 @@ export default function ModerationScreen() {
   );
 }
 
-/** Weight accumulated behind each tier, against the quorum needed to finalize. */
-function TallyBar({ tally }: { tally?: JuryTally }) {
-  const entries = Object.entries(tally?.weightByTier ?? {}).filter(([, w]) => w > 0);
-  if (entries.length === 0) return <Body dim>{t("jury.noVotesYet")}</Body>;
+/**
+ * Progress through the two phases.
+ *
+ * Deliberately shows counts and never a tally: how many ballots are sealed is
+ * safe to publish, which way they lean is not.
+ */
+function PhaseBar({
+  round,
+  sealed,
+  opened,
+}: {
+  round?: JuryRound;
+  sealed: number;
+  opened: number;
+}) {
+  const phase = round?.phase ?? JuryPhase.None;
+  const quorum = round?.quorum ?? JURY_QUORUM;
+
+  const tone =
+    phase === JuryPhase.Decided ? "success" : phase === JuryPhase.Undecided ? "danger" : "info";
 
   return (
-    <View style={styles.tally}>
-      {entries.map(([tier, w]) => (
-        <Badge
-          key={tier}
-          label={`${t(`tier.${TIER_SLUGS[Number(tier) as VerificationTier]}`)} ${w}/${JURY_QUORUM_WEIGHT}`}
-          tone={w >= JURY_QUORUM_WEIGHT ? "success" : "info"}
-        />
-      ))}
+    <View style={styles.phase}>
+      <Badge label={t(`jury.phase.${JuryPhase[phase].toLowerCase()}`)} tone={tone} />
+      {phase === JuryPhase.Committing ? (
+        <Badge label={t("jury.sealedCount", { n: sealed, quorum })} tone="dim" />
+      ) : null}
+      {phase === JuryPhase.Revealing ? (
+        <Badge label={t("jury.openedCount", { n: opened, total: sealed })} tone="dim" />
+      ) : null}
+      {round?.appealed ? <Badge label={t("jury.onAppeal")} tone="info" /> : null}
     </View>
   );
 }
@@ -327,9 +422,14 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   actions: { flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" },
   flex: { flex: 1, minWidth: 100 },
-  tally: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  votes: { gap: 2, borderLeftWidth: 2, borderLeftColor: colors.border, paddingLeft: spacing.sm },
-  voteRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.sm },
+  phase: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  ballots: { gap: 2, borderLeftWidth: 2, borderLeftColor: colors.border, paddingLeft: spacing.sm },
+  ballotRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
   simTag: { color: colors.textDim, fontSize: 11, fontStyle: "italic" },
   link: { color: colors.info, fontSize: 15, fontWeight: "600", textAlign: "center" },
   input: {

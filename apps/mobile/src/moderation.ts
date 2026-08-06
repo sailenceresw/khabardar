@@ -1,8 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { bytesToHex } from "@noble/ciphers/utils";
+import * as Crypto from "expo-crypto";
+import { keccak256, encodeAbiParameters, type Hex } from "viem";
 import {
-  JURY_QUORUM_WEIGHT,
-  KARMA_PER_JURY_WEIGHT,
-  MAX_JUROR_WEIGHT,
+  APPEAL_QUORUM,
+  JURY_QUORUM,
+  JuryPhase,
   VerificationTier,
 } from "@khabardar/shared";
 import { updateMirrorRow } from "./feed/localChainMirror";
@@ -10,67 +13,94 @@ import { codenameFromAddress } from "./identity";
 import { safeJsonParse } from "./safeJson";
 
 /**
- * Moderation by karma-weighted jury.
+ * Moderation by an equal-weight, secret-ballot jury.
  *
- * This module mirrors `ReportRegistry.castJuryVote` so the mock path behaves
- * like the contract. Three properties carry over exactly, because they are the
- * design and not an implementation detail:
+ * This mirrors `ReportRegistry`'s commit–reveal so the mock path behaves like
+ * the contract. Four properties carry over exactly, because they are the design
+ * and not implementation detail:
  *
- *  1. **No one decides alone.** A verdict needs {@link JURY_QUORUM_WEIGHT} of
- *     agreeing weight, and no single juror can hold that much.
- *  2. **Being wrong costs standing.** When a verdict lands, dissenting jurors
- *     lose more karma than agreeing jurors gain, so careless review decays a
- *     juror's influence toward nothing.
- *  3. **Every vote is public, reason included, before the outcome is known.**
- *     On-chain that is the `JuryVoteCast` event; here it is a local log that
- *     the UI renders in full. A moderation system nobody can audit is
- *     censorship with extra steps.
+ *  1. **Every juror counts one.** No weighting, by anything.
+ *  2. **Ballots are sealed until the panel is full.** Nobody can see which way
+ *     the panel is leaning while there is still time to join it.
+ *  3. **Dissent is free.** No juror gains or loses standing for the tier they
+ *     chose. The only demerit is committing and never revealing — a failure to
+ *     do the job, not a wrong opinion about the evidence.
+ *  4. **A plurality is not a verdict.** Three jurors with three different
+ *     answers produces "undecided", which is honest, rather than promoting
+ *     whichever tier edged ahead.
  *
- * And the constraint that outranks all three: a jury can move a report's
- * TIER and can never edit or delete the report. The content hash is anchored
- * on-chain, so moderation adds judgement on top of an immutable record.
+ * ## Why this replaced karma weighting
+ *
+ * The previous version weighted votes by karma and paid jurors for agreeing
+ * with the eventual verdict while charging them more for dissenting. That made
+ * voting with the expected winner the rational play regardless of the evidence,
+ * and the reward compounded — agreeing bought karma, karma bought weight,
+ * weight bought influence over the next verdict.
+ *
+ * For this application that is backwards. The reports most likely to attract a
+ * confidently wrong majority are the ones accusing powerful people, which are
+ * exactly the reports that need a juror willing to be the only "no" in the
+ * room. Worse, reporter karma and juror weight shared one counter, so filing
+ * reports bought judicial power over the review of one's own accusations.
+ *
+ * And the constraint that outranks all of it: a jury can move a report's TIER
+ * and can never edit or delete the report. The content hash is anchored, so
+ * moderation adds judgement on top of an immutable record.
  */
 
-const VOTES_KEY = "khabardar.jury.votes.v1";
-const KARMA_KEY = "khabardar.jury.karma.v1";
+const BALLOTS_KEY = "khabardar.jury.ballots.v2";
+const ROUNDS_KEY = "khabardar.jury.rounds.v2";
+const RECORD_KEY = "khabardar.jury.record.v2";
+const SALTS_KEY = "khabardar.jury.salts.v2";
 const JUROR_MODE_KEY = "khabardar.jury.isJuror.v1";
 
-export interface JuryVote {
+export { JuryPhase, JURY_QUORUM, APPEAL_QUORUM };
+
+export interface Ballot {
   reportId: number;
-  /** Pseudonymous juror address. */
+  round: number;
   juror: string;
-  tier: VerificationTier;
-  /** Weight this vote carried, snapshotted at cast time. */
-  weight: number;
-  reason: string;
-  castAt: number;
+  commitment: Hex;
+  committedAt: number;
+  /** Present only after reveal — this is what "sealed" means. */
+  tier?: VerificationTier;
+  reason?: string;
+  revealedAt?: number;
   /** True for the clearly-labelled demo peers, never for a real juror. */
   simulated?: boolean;
 }
 
-export interface JuryTally {
+export interface JuryRound {
   reportId: number;
-  /** Accumulated weight behind each tier. */
-  weightByTier: Record<number, number>;
-  /** The tier that reached quorum, or null while the report is still open. */
-  verdict: VerificationTier | null;
-  votes: JuryVote[];
+  index: number;
+  phase: JuryPhase;
+  quorum: number;
+  appealed: boolean;
+  /** Winning tier once decided. */
+  verdict?: VerificationTier;
+  decidedAt?: number;
+}
+
+export interface JurorRecord {
+  completed: number;
+  abandoned: number;
 }
 
 /**
- * Simulated peers so the quorum mechanic is demonstrable on one device.
+ * Simulated peers so the mechanism is demonstrable on one device.
  *
- * They exist for the same reason the sample feed rows do: without them a
- * single-device demo can never reach a three-weight quorum, and the most
- * important property of the design — that one person cannot decide alone —
- * would be invisible. They only ever vote when the operator explicitly asks
- * them to, they are badged as simulated everywhere they appear, and like the
- * demo rows they must be deleted before any real deployment.
+ * They exist for the same reason the sample feed rows do: a single-device demo
+ * can never fill a three-seat panel, so the most important property — that one
+ * person cannot decide alone — would be invisible. They only vote when the
+ * operator explicitly asks, they are badged as simulated everywhere they
+ * appear, and they must be deleted before any real deployment.
  */
 export const SIMULATED_JURORS = [
   "0xA11CE00000000000000000000000000000000001",
   "0xB0B0000000000000000000000000000000000002",
   "0xC4501E00000000000000000000000000000003",
+  "0xD00D000000000000000000000000000000000004",
+  "0xE55E000000000000000000000000000000000005",
 ] as const;
 
 export function isSimulatedJuror(address: string): boolean {
@@ -83,9 +113,9 @@ export function isSimulatedJuror(address: string): boolean {
 
 /**
  * v0 lets the local user flip into juror mode so the queue is explorable
- * without a deployed contract and a seated jury key. This is a DEV AFFORDANCE
- * ONLY — on a real deployment the contract's `onlyJuror` modifier is the
- * actual gate, and this toggle grants nothing on-chain.
+ * without a deployed contract and a seated jury key. DEV AFFORDANCE ONLY — on a
+ * real deployment the contract's `onlyJuror` modifier is the gate and this
+ * toggle grants nothing on-chain.
  */
 export async function isJurorMode(): Promise<boolean> {
   return (await AsyncStorage.getItem(JUROR_MODE_KEY)) === "true";
@@ -96,175 +126,373 @@ export async function setJurorMode(enabled: boolean): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Karma and weight
+// Commitments
 // ---------------------------------------------------------------------------
 
-async function readKarma(): Promise<Record<string, number>> {
-  return safeJsonParse<Record<string, number>>(await AsyncStorage.getItem(KARMA_KEY)) ?? {};
+/**
+ * Build the sealed commitment. Matches `ReportRegistry.commitmentFor` exactly,
+ * including binding the juror's address so a commitment cannot be replayed onto
+ * another report, reused after an appeal, or copied from another juror.
+ */
+export function commitmentFor(input: {
+  reportId: number;
+  round: number;
+  tier: VerificationTier;
+  salt: Hex;
+  juror: string;
+}): Hex {
+  return keccak256(
+    encodeAbiParameters(
+      [
+        { type: "uint256" },
+        { type: "uint8" },
+        { type: "uint8" },
+        { type: "bytes32" },
+        { type: "address" },
+      ],
+      [
+        BigInt(input.reportId),
+        input.round,
+        input.tier,
+        input.salt,
+        input.juror as Hex,
+      ]
+    )
+  );
 }
 
-async function writeKarma(karma: Record<string, number>): Promise<void> {
-  await AsyncStorage.setItem(KARMA_KEY, JSON.stringify(karma));
-}
-
-export async function karmaOf(address: string): Promise<number> {
-  return (await readKarma())[address.toLowerCase()] ?? 0;
-}
-
-/** Matches `ReportRegistry.jurorWeight`: 1, plus a capped karma bonus. */
-export function weightFromKarma(karma: number): number {
-  return Math.min(1 + Math.floor(karma / KARMA_PER_JURY_WEIGHT), MAX_JUROR_WEIGHT);
-}
-
-export async function jurorWeightOf(address: string): Promise<number> {
-  return weightFromKarma(await karmaOf(address));
-}
-
-// ---------------------------------------------------------------------------
-// Votes
-// ---------------------------------------------------------------------------
-
-export async function allVotes(): Promise<JuryVote[]> {
-  return safeJsonParse<JuryVote[]>(await AsyncStorage.getItem(VOTES_KEY)) ?? [];
-}
-
-export async function votesFor(reportId: number): Promise<JuryVote[]> {
-  return (await allVotes()).filter((v) => v.reportId === reportId);
-}
-
-export async function hasVoted(reportId: number, juror: string): Promise<boolean> {
-  const lower = juror.toLowerCase();
-  return (await votesFor(reportId)).some((v) => v.juror.toLowerCase() === lower);
-}
-
-function tallyOf(reportId: number, votes: JuryVote[]): JuryTally {
-  const weightByTier: Record<number, number> = {};
-  for (const v of votes) {
-    weightByTier[v.tier] = (weightByTier[v.tier] ?? 0) + v.weight;
-  }
-
-  const reached = Object.entries(weightByTier).find(([, w]) => w >= JURY_QUORUM_WEIGHT);
-  return {
-    reportId,
-    weightByTier,
-    verdict: reached ? (Number(reached[0]) as VerificationTier) : null,
-    votes,
-  };
-}
-
-export async function tallyFor(reportId: number): Promise<JuryTally> {
-  return tallyOf(reportId, await votesFor(reportId));
-}
-
-export class JuryVoteRejected extends Error {
-  constructor(readonly code: "already-voted" | "verdict-final" | "self-review" | "no-reason") {
-    super(code);
-    this.name = "JuryVoteRejected";
-  }
+export function randomSalt(): Hex {
+  return `0x${bytesToHex(Crypto.getRandomBytes(32))}`;
 }
 
 /**
- * Cast one juror's verdict. Mirrors the contract's checks in the same order, so
- * a vote the mock accepts is one the chain would accept too.
- *
- * @returns the tally after this vote, including the verdict if quorum landed.
+ * The salt has to survive between committing and revealing, so it is kept on
+ * the device. Losing it means the ballot can never be opened and counts as
+ * abandonment — which is exactly what happens on-chain, and why the real client
+ * must treat this store as important rather than as a cache.
  */
-export async function castJuryVote(input: {
+async function saveSalt(reportId: number, round: number, salt: Hex): Promise<void> {
+  const salts = safeJsonParse<Record<string, Hex>>(await AsyncStorage.getItem(SALTS_KEY)) ?? {};
+  salts[`${reportId}:${round}`] = salt;
+  await AsyncStorage.setItem(SALTS_KEY, JSON.stringify(salts));
+}
+
+export async function loadSalt(reportId: number, round: number): Promise<Hex | null> {
+  const salts = safeJsonParse<Record<string, Hex>>(await AsyncStorage.getItem(SALTS_KEY)) ?? {};
+  return salts[`${reportId}:${round}`] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Storage
+// ---------------------------------------------------------------------------
+
+async function readBallots(): Promise<Ballot[]> {
+  return safeJsonParse<Ballot[]>(await AsyncStorage.getItem(BALLOTS_KEY)) ?? [];
+}
+
+async function writeBallots(ballots: Ballot[]): Promise<void> {
+  await AsyncStorage.setItem(BALLOTS_KEY, JSON.stringify(ballots));
+}
+
+async function readRounds(): Promise<Record<number, JuryRound>> {
+  return safeJsonParse<Record<number, JuryRound>>(await AsyncStorage.getItem(ROUNDS_KEY)) ?? {};
+}
+
+async function writeRounds(rounds: Record<number, JuryRound>): Promise<void> {
+  await AsyncStorage.setItem(ROUNDS_KEY, JSON.stringify(rounds));
+}
+
+export async function roundFor(reportId: number): Promise<JuryRound> {
+  const rounds = await readRounds();
+  return (
+    rounds[reportId] ?? {
+      reportId,
+      index: 0,
+      phase: JuryPhase.None,
+      quorum: JURY_QUORUM,
+      appealed: false,
+    }
+  );
+}
+
+export async function ballotsFor(reportId: number, round?: number): Promise<Ballot[]> {
+  const target = round ?? (await roundFor(reportId)).index;
+  return (await readBallots()).filter((b) => b.reportId === reportId && b.round === target);
+}
+
+export async function jurorRecord(address: string): Promise<JurorRecord> {
+  const records =
+    safeJsonParse<Record<string, JurorRecord>>(await AsyncStorage.getItem(RECORD_KEY)) ?? {};
+  return records[address.toLowerCase()] ?? { completed: 0, abandoned: 0 };
+}
+
+async function bumpRecord(address: string, field: keyof JurorRecord): Promise<void> {
+  const records =
+    safeJsonParse<Record<string, JurorRecord>>(await AsyncStorage.getItem(RECORD_KEY)) ?? {};
+  const key = address.toLowerCase();
+  const current = records[key] ?? { completed: 0, abandoned: 0 };
+  records[key] = { ...current, [field]: current[field] + 1 };
+  await AsyncStorage.setItem(RECORD_KEY, JSON.stringify(records));
+}
+
+// ---------------------------------------------------------------------------
+// Voting
+// ---------------------------------------------------------------------------
+
+export class JuryActionRejected extends Error {
+  constructor(
+    readonly code:
+      | "already-committed"
+      | "not-committing"
+      | "not-revealing"
+      | "already-revealed"
+      | "nothing-committed"
+      | "self-review"
+      | "no-reason"
+      | "no-salt"
+  ) {
+    super(code);
+    this.name = "JuryActionRejected";
+  }
+}
+
+/** Seal a ballot. The tier is not stored — only the commitment. */
+export async function commitVote(input: {
   reportId: number;
   juror: string;
   reporter: string;
   tier: VerificationTier;
-  reason: string;
   simulated?: boolean;
-}): Promise<JuryTally> {
+}): Promise<JuryRound> {
   const { reportId, juror, reporter, tier, simulated } = input;
-  const reason = input.reason.trim();
-
-  const existing = await votesFor(reportId);
-  if (tallyOf(reportId, existing).verdict !== null) throw new JuryVoteRejected("verdict-final");
-  if (existing.some((v) => v.juror.toLowerCase() === juror.toLowerCase())) {
-    throw new JuryVoteRejected("already-voted");
+  if (juror.toLowerCase() === reporter.toLowerCase()) {
+    throw new JuryActionRejected("self-review");
   }
-  if (juror.toLowerCase() === reporter.toLowerCase()) throw new JuryVoteRejected("self-review");
-  if (!reason) throw new JuryVoteRejected("no-reason");
 
-  const vote: JuryVote = {
+  const rounds = await readRounds();
+  let round = await roundFor(reportId);
+
+  // A finished round has to be cleared before another opens, so a retry or an
+  // appeal starts from a clean panel rather than inheriting half the last one.
+  if (round.phase === JuryPhase.None || round.phase === JuryPhase.Undecided) {
+    round = {
+      ...round,
+      index: round.index + 1,
+      phase: JuryPhase.Committing,
+      quorum: round.appealed ? APPEAL_QUORUM : round.quorum,
+      verdict: undefined,
+      decidedAt: undefined,
+    };
+  }
+  if (round.phase !== JuryPhase.Committing) throw new JuryActionRejected("not-committing");
+
+  const existing = await ballotsFor(reportId, round.index);
+  if (existing.some((b) => b.juror.toLowerCase() === juror.toLowerCase())) {
+    throw new JuryActionRejected("already-committed");
+  }
+
+  const salt = randomSalt();
+  await saveSalt(reportId, round.index, salt);
+
+  const ballot: Ballot = {
     reportId,
+    round: round.index,
     juror,
-    tier,
-    weight: await jurorWeightOf(juror),
-    reason,
-    castAt: Date.now(),
+    commitment: commitmentFor({ reportId, round: round.index, tier, salt, juror }),
+    committedAt: Date.now(),
     ...(simulated ? { simulated: true } : {}),
   };
 
-  const votes = await allVotes();
-  await AsyncStorage.setItem(VOTES_KEY, JSON.stringify([vote, ...votes]));
+  // Simulated peers cannot keep their own salts, so their tier rides along
+  // out-of-band. A real juror's tier exists nowhere until they reveal.
+  if (simulated) pendingSimulated.set(`${reportId}:${round.index}:${juror}`, { tier, salt });
 
-  const tally = tallyOf(reportId, [...existing, vote]);
-  if (tally.verdict !== null) await settleVerdict(tally, reporter);
-  return tally;
+  await writeBallots([ballot, ...(await readBallots())]);
+
+  if (existing.length + 1 >= round.quorum) round = { ...round, phase: JuryPhase.Revealing };
+
+  rounds[reportId] = round;
+  await writeRounds(rounds);
+  return round;
 }
 
-/**
- * Apply a reached verdict: move the report's tier, move the reporter's karma,
- * and settle every juror who voted. Karma changes mirror the contract's
- * constants — dissent costs more than agreement earns, on purpose.
- */
-async function settleVerdict(tally: JuryTally, reporter: string): Promise<void> {
-  const verdict = tally.verdict;
-  if (verdict === null) return;
+/** In-memory only: the demo peers' sealed choices, never persisted. */
+const pendingSimulated = new Map<string, { tier: VerificationTier; salt: Hex }>();
 
-  await updateMirrorRow(tally.reportId, { tier: verdict });
+/** Open a sealed ballot and publish the tier with its reason. */
+export async function revealVote(input: {
+  reportId: number;
+  juror: string;
+  tier: VerificationTier;
+  reason: string;
+  salt?: Hex;
+}): Promise<JuryRound> {
+  const { reportId, juror, tier } = input;
+  const reason = input.reason.trim();
+  if (!reason) throw new JuryActionRejected("no-reason");
 
-  const karma = await readKarma();
-  const bump = (address: string, delta: number) => {
-    const key = address.toLowerCase();
-    karma[key] = Math.max(0, (karma[key] ?? 0) + delta);
-  };
+  const rounds = await readRounds();
+  let round = await roundFor(reportId);
+  if (round.phase !== JuryPhase.Revealing) throw new JuryActionRejected("not-revealing");
 
-  if (verdict === VerificationTier.Verified) bump(reporter, 10);
-  else if (verdict === VerificationTier.Disputed) bump(reporter, -5);
+  const ballots = await readBallots();
+  const index = ballots.findIndex(
+    (b) =>
+      b.reportId === reportId &&
+      b.round === round.index &&
+      b.juror.toLowerCase() === juror.toLowerCase()
+  );
+  if (index === -1) throw new JuryActionRejected("nothing-committed");
+  if (ballots[index].tier !== undefined) throw new JuryActionRejected("already-revealed");
 
-  for (const vote of tally.votes) {
-    bump(vote.juror, vote.tier === verdict ? 3 : -6);
+  const salt = input.salt ?? (await loadSalt(reportId, round.index));
+  if (!salt) throw new JuryActionRejected("no-salt");
+
+  // The contract checks this; so does the mock, or the demo would let a juror
+  // reveal something they never committed to.
+  const expected = commitmentFor({ reportId, round: round.index, tier, salt, juror });
+  if (expected !== ballots[index].commitment) throw new JuryActionRejected("nothing-committed");
+
+  ballots[index] = { ...ballots[index], tier, reason, revealedAt: Date.now() };
+  await writeBallots(ballots);
+  await bumpRecord(juror, "completed");
+
+  const inRound = ballots.filter((b) => b.reportId === reportId && b.round === round.index);
+  const revealed = inRound.filter((b) => b.tier !== undefined);
+
+  if (revealed.length === inRound.length) {
+    round = await closeRound(reportId, round, inRound);
   }
 
-  await writeKarma(karma);
+  rounds[reportId] = round;
+  await writeRounds(rounds);
+  return round;
+}
+
+/** Tally revealed ballots. A plurality is not enough — a majority is required. */
+async function closeRound(
+  reportId: number,
+  round: JuryRound,
+  ballots: Ballot[]
+): Promise<JuryRound> {
+  const revealed = ballots.filter((b) => b.tier !== undefined);
+
+  for (const b of ballots) {
+    if (b.tier === undefined) await bumpRecord(b.juror, "abandoned");
+  }
+
+  const counts = new Map<VerificationTier, number>();
+  for (const b of revealed) {
+    counts.set(b.tier!, (counts.get(b.tier!) ?? 0) + 1);
+  }
+
+  let winner: VerificationTier | undefined;
+  let top = 0;
+  let runnerUp = 0;
+  for (const [tier, n] of counts) {
+    if (n > top) {
+      runnerUp = top;
+      top = n;
+      winner = tier;
+    } else if (n > runnerUp) {
+      runnerUp = n;
+    }
+  }
+
+  const majority = winner !== undefined && top > runnerUp && top * 2 > revealed.length;
+  if (!majority) return { ...round, phase: JuryPhase.Undecided };
+
+  await updateMirrorRow(reportId, { tier: winner! });
+  return { ...round, phase: JuryPhase.Decided, verdict: winner, decidedAt: Date.now() };
 }
 
 /**
- * Have the simulated peers weigh in, so a one-device demo can actually reach
- * quorum. Explicitly operator-triggered and badged everywhere — this fabricates
- * agreement and must never run on a real deployment.
+ * Contest a verdict. Reporter only, once, re-heard by a larger panel.
+ *
+ * A first-instance verdict with no way to challenge it is not a fair process
+ * however carefully the panel was assembled — three people can be wrong, and
+ * the reporter carries the cost.
+ */
+export async function appealVerdict(reportId: number): Promise<JuryRound> {
+  const rounds = await readRounds();
+  const round = await roundFor(reportId);
+  if (round.phase !== JuryPhase.Decided || round.appealed) return round;
+
+  // Under appeal is not the same as unjudged, and leaving the contested verdict
+  // standing would be the unfair part.
+  await updateMirrorRow(reportId, { tier: VerificationTier.UnderReview });
+
+  const next: JuryRound = {
+    ...round,
+    phase: JuryPhase.Undecided,
+    appealed: true,
+    quorum: APPEAL_QUORUM,
+    verdict: undefined,
+    decidedAt: undefined,
+  };
+  rounds[reportId] = next;
+  await writeRounds(rounds);
+  return next;
+}
+
+export async function canAppeal(reportId: number): Promise<boolean> {
+  const round = await roundFor(reportId);
+  return round.phase === JuryPhase.Decided && !round.appealed;
+}
+
+/**
+ * Have the simulated peers commit, then reveal, so a one-device demo can reach
+ * quorum. Explicitly operator-triggered and badged — this fabricates agreement
+ * and must never run on a real deployment.
  */
 export async function simulatePeerReview(input: {
   reportId: number;
   reporter: string;
   tier: VerificationTier;
   reason?: string;
-}): Promise<JuryTally> {
-  let tally = await tallyFor(input.reportId);
+}): Promise<JuryRound> {
+  let round = await roundFor(input.reportId);
 
   for (const juror of SIMULATED_JURORS) {
-    if (tally.verdict !== null) break;
+    round = await roundFor(input.reportId);
+    if (round.phase !== JuryPhase.Committing && round.phase !== JuryPhase.None) break;
     if (juror.toLowerCase() === input.reporter.toLowerCase()) continue;
-    if (await hasVoted(input.reportId, juror)) continue;
 
-    tally = await castJuryVote({
-      reportId: input.reportId,
-      juror,
-      reporter: input.reporter,
-      tier: input.tier,
-      reason: input.reason ?? "Simulated peer juror (demo).",
-      simulated: true,
-    });
+    try {
+      round = await commitVote({
+        reportId: input.reportId,
+        juror,
+        reporter: input.reporter,
+        tier: input.tier,
+        simulated: true,
+      });
+    } catch {
+      break;
+    }
   }
 
-  return tally;
+  // Then open every sealed peer ballot.
+  round = await roundFor(input.reportId);
+  for (const juror of SIMULATED_JURORS) {
+    const held = pendingSimulated.get(`${input.reportId}:${round.index}:${juror}`);
+    if (!held) continue;
+    try {
+      round = await revealVote({
+        reportId: input.reportId,
+        juror,
+        tier: held.tier,
+        salt: held.salt,
+        reason: input.reason ?? "Simulated peer juror (demo).",
+      });
+    } catch {
+      // Panel already closed, or this peer never committed.
+    }
+  }
+
+  return round;
 }
 
-/** Human-readable label for a juror, without ever revealing an address in UI. */
+/** Human-readable label for a juror, without revealing an address in UI. */
 export function jurorLabel(address: string): string {
   return codenameFromAddress(address);
 }
@@ -272,14 +500,26 @@ export function jurorLabel(address: string): string {
 /**
  * The full public decision log, newest first.
  *
- * On a real deployment this is not read from the device at all — it is read
- * from `JuryVoteCast` events, so the public can audit moderators using nothing
- * but an RPC endpoint. That is the whole reason the reason string is on-chain.
+ * On a real deployment this is not read from the device at all — it comes from
+ * `JuryVoteRevealed` events, so the public can audit moderators using nothing
+ * but an RPC endpoint. Only revealed ballots appear; a sealed one has nothing
+ * to show, which is the point.
  */
-export async function publicDecisionLog(): Promise<JuryVote[]> {
-  return allVotes();
+export async function publicDecisionLog(): Promise<Ballot[]> {
+  return (await readBallots()).filter((b) => b.tier !== undefined);
+}
+
+export async function allBallots(): Promise<Ballot[]> {
+  return readBallots();
 }
 
 export async function clearModerationLog(): Promise<void> {
-  await AsyncStorage.multiRemove([VOTES_KEY, KARMA_KEY, JUROR_MODE_KEY]);
+  pendingSimulated.clear();
+  await AsyncStorage.multiRemove([
+    BALLOTS_KEY,
+    ROUNDS_KEY,
+    RECORD_KEY,
+    SALTS_KEY,
+    JUROR_MODE_KEY,
+  ]);
 }

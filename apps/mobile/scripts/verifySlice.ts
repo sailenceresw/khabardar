@@ -348,24 +348,56 @@ async function main() {
     `${shortTip.length}B and ${longerTip.length}B → both ${paddedShort.length}B (OK)`
   );
 
-  // 10. Jury weight must match the contract, or the mock path shows a user a
-  // quorum they would not actually reach on-chain.
-  const { weightFromKarma } = require("../src/moderation");
-  const { JURY_QUORUM_WEIGHT, MAX_JUROR_WEIGHT, KARMA_PER_JURY_WEIGHT } = require("@khabardar/shared");
+  // 10. The jury's fairness properties. These are the design, not tuning, so
+  // they are asserted rather than left to a comment someone can drift away
+  // from — the mechanism they replaced looked reasonable too.
+  const { commitmentFor } = require("../src/moderation");
+  const { JUROR_VOTE_WEIGHT, JURY_QUORUM, APPEAL_QUORUM } = require("@khabardar/shared");
 
-  assert(weightFromKarma(0) === 1, "a fresh juror has weight 1");
-  assert(weightFromKarma(KARMA_PER_JURY_WEIGHT) === 2, "karma buys exactly one extra unit");
-  assert(
-    weightFromKarma(KARMA_PER_JURY_WEIGHT * 100) === MAX_JUROR_WEIGHT,
-    "juror weight must be capped"
-  );
-  assert(
-    MAX_JUROR_WEIGHT < JURY_QUORUM_WEIGHT,
-    "no single juror may reach quorum alone — that is the centralization the jury replaced"
-  );
+  assert(JUROR_VOTE_WEIGHT === 1, "every juror must count exactly one");
+  assert(JURY_QUORUM >= 3, "a panel smaller than three is one person plus a rubber stamp");
+  assert(APPEAL_QUORUM > JURY_QUORUM, "an appeal must be heard by a larger panel");
+
+  // A commitment must be bound to the juror, or one juror could replay
+  // another's sealed ballot and open it on their behalf.
+  const salt = ("0x" + "11".repeat(32)) as `0x${string}`;
+  const forAlice = commitmentFor({
+    reportId: 7,
+    round: 1,
+    tier: 3,
+    salt,
+    juror: "0x1111111111111111111111111111111111111111",
+  });
+  const forBob = commitmentFor({
+    reportId: 7,
+    round: 1,
+    tier: 3,
+    salt,
+    juror: "0x2222222222222222222222222222222222222222",
+  });
+  const nextRound = commitmentFor({
+    reportId: 7,
+    round: 2,
+    tier: 3,
+    salt,
+    juror: "0x1111111111111111111111111111111111111111",
+  });
+  const otherTier = commitmentFor({
+    reportId: 7,
+    round: 1,
+    tier: 4,
+    salt,
+    juror: "0x1111111111111111111111111111111111111111",
+  });
+
+  assert(forAlice !== forBob, "a commitment must bind the juror who made it");
+  assert(forAlice !== nextRound, "a commitment must not survive into the next round");
+  assert(forAlice !== otherTier, "a commitment must bind the tier");
+  assert(/^0x[0-9a-f]{64}$/.test(forAlice), "a commitment must be a 32-byte hash");
+
   console.log(
-    "10. jury weights                 :",
-    `cap ${MAX_JUROR_WEIGHT} < quorum ${JURY_QUORUM_WEIGHT} (no juror decides alone — OK)`
+    "10. jury fairness                :",
+    `weight ${JUROR_VOTE_WEIGHT} each, quorum ${JURY_QUORUM}, appeal ${APPEAL_QUORUM}, ballots bound (OK)`
   );
 
   // 11. Transport selection. The property that matters is that a build which
