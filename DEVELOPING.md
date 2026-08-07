@@ -47,8 +47,25 @@ npm run zk:build:android
 
 Both scripts build every ABI listed in the module's `build.gradle`. Building all
 of them takes a while — each ABI is a full compile of Arti or of the prover and
-its wasm runtime — so during development it is reasonable to trim the list to the
-one you are actually running.
+its wasm runtime.
+
+### Building one ABI while you iterate
+
+Pass `-PkhabardarAbis` to build only what you are about to run. On a laptop this
+is the difference between a coffee break and most of an hour:
+
+```bash
+./gradlew :app:assembleDebug -PkhabardarAbis=x86_64      # emulator only
+npx expo run:android -- -PkhabardarAbis=x86_64
+```
+
+It sets both `abiFilters` and the `cargo ndk` target list, so the two cannot
+drift apart. The build also fails up front, with the exact `rustup target add`
+command, if a target for an enabled ABI is missing — rather than dying with an
+opaque cargo error some minutes in.
+
+**Never pass this for a release build.** A Play Store artifact needs every ABI;
+one built with this flag would silently exclude real devices.
 
 ### Running it
 

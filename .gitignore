@@ -29,7 +29,8 @@ apps/mobile/android/
 # anonymity tool is exactly the thing nobody can audit.
 modules/expo-tor/rust/target/
 modules/expo-tor/android/src/main/jniLibs/
-modules/expo-tor/android/.gradle/
+# Gradle's per-project cache, created wherever a module is configured.
+.gradle/
 modules/expo-tor/android/build/
 modules/expo-tor/ios/lib/
 modules/expo-tor/ios/Pods/

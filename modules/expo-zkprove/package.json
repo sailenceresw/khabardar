@@ -6,7 +6,7 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
-    "build:android": "cd rust && cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o ../android/src/main/jniLibs build --release",
+    "build:android": "cd rust && cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o ../android/src/main/jniLibs build --release && cd .. && bash scripts/prune-jnilibs.sh",
     "build:ios": "bash scripts/build-ios.sh",
     "test:rust": "cd rust && cargo test",
     "fixtures": "node scripts/genFixtures.mjs"

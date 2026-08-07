@@ -14,16 +14,26 @@ applyKotlinExpoModulesCorePlugin()
 useCoreDependencies()
 useExpoPublishing()
 
+/**
+ * ABIs to build, overridable for local work.
+ *
+ * The default is every ABI Play Store devices actually ship, because a release
+ * must contain all of them. But each one is a separate full Arti build — tens
+ * of minutes — and someone iterating against an emulator needs exactly one.
+ * Pass `-PkhabardarAbis=x86_64` to build just that.
+ *
+ * Release builds must not set this. See DEVELOPING.md.
+ */
+def enabledAbis = ((project.findProperty('khabardarAbis') ?: 'arm64-v8a,armeabi-v7a,x86_64') as String)
+  .split(',').collect { it.trim() }.findAll { it }
+
 android {
   namespace "expo.modules.tor"
   defaultConfig {
     minSdkVersion 24
     compileSdkVersion 35
-    // Only the ABIs Play Store devices actually ship. Each one is a separate
-    // full Arti build, so adding an ABI is measured in minutes of CI and
-    // megabytes of APK.
     ndk {
-      abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+      abiFilters.addAll(enabledAbis)
     }
   }
   compileOptions {
@@ -59,7 +69,49 @@ dependencies {
  */
 def rustDir = file("${projectDir}/../rust")
 
+/**
+ * Fail early and legibly when a Rust target is missing.
+ *
+ * Without this, `cargo ndk` fails partway through the Gradle build with a raw
+ * toolchain error that says nothing about `rustup target add`. The ABI list
+ * here and the `abiFilters` above have to agree, and it is easy for a machine
+ * to have only some of them installed.
+ */
+def requiredRustTargets = [
+  'arm64-v8a'   : 'aarch64-linux-android',
+  'armeabi-v7a' : 'armv7-linux-androideabi',
+  'x86_64'      : 'x86_64-linux-android',
+]
+
+task checkRustTargets {
+  doLast {
+    // If rustup itself is absent there is no toolchain to check, and the
+    // `onlyIf` on the build task below already handles that case by skipping
+    // the native build with a warning. Failing here instead would break the
+    // documented "opens in Android Studio without Rust" path.
+    def installed
+    try {
+      installed = "rustup target list --installed".execute().text
+    } catch (IOException ignored) {
+      logger.warn("expo-tor: rustup not found — skipping Rust target check.")
+      return
+    }
+    // Only the ABIs actually being built need a toolchain.
+    def missing = requiredRustTargets
+      .findAll { abi, triple -> enabledAbis.contains(abi) && !installed.contains(triple) }
+    if (missing) {
+      throw new GradleException(
+        "expo-tor: no Rust target installed for ABI(s): " + missing.keySet().join(', ') +
+        ". These are listed in abiFilters, so the build would fail partway " +
+        "through with an opaque cargo error. Install them with: rustup target add " +
+        missing.values().join(' ')
+      )
+    }
+  }
+}
+
 task buildRustCore(type: Exec) {
+  dependsOn checkRustTargets
   onlyIf {
     def hasCargo = System.getenv("PATH")
       ?.split(File.pathSeparator)
@@ -72,12 +124,9 @@ task buildRustCore(type: Exec) {
   }
 
   workingDir rustDir
-  commandLine 'cargo', 'ndk',
-    '-t', 'arm64-v8a',
-    '-t', 'armeabi-v7a',
-    '-t', 'x86_64',
-    '-o', "${projectDir}/src/main/jniLibs",
-    'build', '--release'
+  commandLine(['cargo', 'ndk'] +
+    enabledAbis.collectMany { ['-t', it] } +
+    ['-o', "${projectDir}/src/main/jniLibs", 'build', '--release'])
 }
 
 static def isWindows() {
