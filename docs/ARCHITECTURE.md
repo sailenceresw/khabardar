@@ -9,17 +9,15 @@ Deep detail on how Khabardar works. For the short version, see the
 - [Anonymity model](#anonymity-model)
 - [Why React Native (Expo) and not Flutter](#why-react-native-expo-and-not-flutter)
 - [Blockchain layer (Linea)](#blockchain-layer-linea)
-- [Content layer](#content-layer--how-reports-become-readable)
+- [Content layer](#content-layer-how-reports-become-readable)
 - [Linking reports without deanonymizing anyone](#linking-reports-without-deanonymizing-anyone)
 - [Identity: three options, one default](#identity-three-options-one-default)
 - [Gasless flow](#gasless-flow-nobody-holds-eth)
 - [Sponsored gas pools and attribution](#sponsored-gas-pools-and-attribution)
-- [Organizations — the accountable side](#organizations--the-accountable-side)
+- [Organizations: the accountable side](#organizations-the-accountable-side)
 - [Verification and moderation](#verification-and-moderation)
 - [Tip channel](#tip-channel)
 - [i18n](#i18n)
-
----
 
 ## Anonymity model
 
@@ -42,19 +40,19 @@ Concrete guarantees in this scaffold:
 
 | Threat | Mitigation |
 |---|---|
-| Identity leakage at signup | No PII collected — device keypair only (`src/identity.ts`) |
+| Identity leakage at signup | No PII collected, device keypair only (`src/identity.ts`) |
 | EXIF/GPS in evidence | Re-encode pipeline (`src/evidence.ts`) |
 | Precise location in report | Geohash hard-capped at 4 chars ≈ city level (`src/geo.ts`) |
 | Device seizure | AES-256-GCM at rest + **panic delete** wipes drafts, evidence, keys, identity (`src/panic.ts`) |
 | Content on a public chain | Only `keccak256` fingerprints go on-chain, never content |
-| Network observation | **Not yet mitigated** — Tor/onion or mixnet transport is [#9](https://github.com/sailenceresw/khabardar/issues/9) |
+| Network observation | **Not yet mitigated**. Tor/onion or mixnet transport is [#9](https://github.com/sailenceresw/khabardar/issues/9) |
 
 ## Why React Native (Expo) and not Flutter
 
 Both are fine cross-platform frameworks; the deciding factor is the **blockchain layer**:
 
 1. **The entire Ethereum/AA toolchain is TypeScript-first.** viem, permissionless.js,
-   Pimlico/thirdweb/Biconomy SDKs — all TS. Dart bindings (web3dart) lag badly on
+   Pimlico/thirdweb/Biconomy SDKs are all TS. Dart bindings (web3dart) lag badly on
    ERC-4337/EIP-7702 support; we would end up hand-rolling UserOperation plumbing.
 2. **One language across the monorepo.** The app imports the contract ABI and types
    directly from `@khabardar/shared`; contract changes surface as compile errors in the
@@ -68,12 +66,12 @@ Both are fine cross-platform frameworks; the deciding factor is the **blockchain
 - **Chains:** Linea Sepolia testnet (`59141`) now; Linea mainnet (`59144`) later.
 - **Why Linea:** post-Pectra Linea supports **EIP-7702** natively and serves ERC-4337
   bundler methods on `rpc.linea.build`; the AA provider ecosystem (Pimlico, thirdweb,
-  Etherspot, Biconomy, Arka) is first-class. Status Network — previously the "gasless
-  L2" on the Linea stack — **merged into Linea (April 2026)**, so we build against
+  Etherspot, Biconomy, Arka) is first-class. Status Network, previously the "gasless
+  L2" on the Linea stack, **merged into Linea (April 2026)**, so we build against
   Linea directly and borrow Status's ideas rather than their SDK:
-  - **Karma:** non-transferable reputation (`ReportRegistry.karma`) — credibility that
+  - **Karma:** non-transferable reputation (`ReportRegistry.karma`), credibility that
     cannot be bought or transferred, only earned through verified reports.
-  - **RLN-style rate limiting:** planned — sybil-resistant per-epoch submission limits
+  - **RLN-style rate limiting:** planned. Sybil-resistant per-epoch submission limits
     to keep a gasless endpoint spam-free ([#10](https://github.com/sailenceresw/khabardar/issues/10)).
 
 **`ReportRegistry.sol`** stores per report: `reportHash` (fingerprint of the encrypted
@@ -82,7 +80,7 @@ verification tier, coarse geohash, blinded `entityTag`, timestamp, and the pseud
 reporter address. A moderator role (v0: single address; later: karma-weighted jury)
 sets the tier, adjusting reporter karma.
 
-## Content layer — how reports become readable
+## Content layer: how reports become readable
 
 The chain holds a hash and a pointer; the bytes live elsewhere. Without this, a report
 is a diary entry nobody else can read.
@@ -96,14 +94,14 @@ is a diary entry nobody else can read.
 Each report gets a **fresh content key**. What happens to that key is the whole
 visibility model:
 
-- **Public** — the key is published in the bundle's keyring, so anyone can read it.
-- **Journalists only** — the key is wrapped per recipient with **ECIES**
+- **Public:** the key is published in the bundle's keyring, so anyone can read it.
+- **Journalists only:** the key is wrapped per recipient with **ECIES**
   (ephemeral secp256k1 ECDH → HKDF-SHA256 → AES-256-GCM). Only a listed private key
   opens it; everyone else sees the report as locked.
 
 Because `reportHash` covers the *encrypted* bundle, any reader can recompute it and
 compare against the chain. The feed does this on every fetch and shows
-`⚠️ Content does NOT match the on-chain fingerprint` when it fails — so a hostile
+`⚠️ Content does NOT match the on-chain fingerprint` when it fails, so a hostile
 gateway that swaps or edits a bundle is detected rather than believed. Malformed
 responses degrade to "unavailable" instead of throwing, so a bad gateway cannot crash
 the reader either.
@@ -115,7 +113,7 @@ the reader either.
 The public feed is where that verification surfaces. It filters by category,
 verification tier, time window, and area code, searches free text over readable bodies,
 and marks restricted bundles as locked rather than hiding them. Sample rows are labelled
-`sample` so a fictional report can never be mistaken for a real one — those rows must be
+`sample` so a fictional report can never be mistaken for a real one. Those rows must be
 removed before deployment ([#21](https://github.com/sailenceresw/khabardar/issues/21)).
 
 <br clear="right">
@@ -133,7 +131,7 @@ entities produce identical tags, so reports cluster (`reportsForEntity`), while 
 itself carries nothing about who filed it. Normalization is aggressive, so
 `"Block Development Office, Sitapur"` and `"block development office sitapur"` collide.
 
-**Honest limit:** this is not hiding the entity from a determined observer — the set of
+**Honest limit:** this is not hiding the entity from a determined observer. The set of
 public offices is enumerable, so tags are reversible by dictionary attack. That is an
 accepted trade-off: *the accused is not the secret, the reporter is.* What it does buy
 is keeping entity names out of restricted reports entirely and out of casual chain
@@ -141,7 +139,7 @@ scraping.
 
 Separately, `corroborate(reportId)` lets a witness back a report; the contract blocks
 self-corroboration and double-voting, and auto-promotes to `CommunityCorroborated` at
-3 independent corroborations. **This is only as sybil-resistant as the caller set** —
+3 independent corroborations. **This is only as sybil-resistant as the caller set**, so
 production must gate it behind proof-of-personhood
 ([#10](https://github.com/sailenceresw/khabardar/issues/10)).
 
@@ -149,9 +147,9 @@ production must gate it behind proof-of-personhood
 
 | Mode | How | Anonymity |
 |---|---|---|
-| **Device key** (default) | secp256k1 key generated on-device from a BIP-39 phrase | Strongest — tied to nothing else |
+| **Device key** (default) | secp256k1 key generated on-device from a BIP-39 phrase | Strongest, tied to nothing else |
 | **Recovery phrase** | Same key, restorable on a new device from 12 words | Same as above |
-| **WalletConnect** (opt-in) | Sign with an external wallet | **Weaker** — see below |
+| **WalletConnect** (opt-in) | Sign with an external wallet | **Weaker**, see below |
 
 There is deliberately **no email/phone login**. An auth provider is one subpoena away
 from deanonymizing every reporter; a BIP-39 phrase gives the same "don't lose
@@ -159,7 +157,7 @@ everything with your phone" benefit with nothing held by anyone but the user.
 
 **WalletConnect** is available for people who already manage keys, but it is never the
 default and never required. The screen shows an unmissable warning *above* the connect
-control, because a reused wallet carries a public history — exchange withdrawals tie it
+control, because a reused wallet carries a public history. Exchange withdrawals tie it
 to KYC, and reusing it later can retroactively expose past reports. Requires
 `EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID`; without it the screen says so and the device key
 keeps working.
@@ -173,7 +171,7 @@ device keypair ──owns──▶ counterfactual smart account (SimpleAccount)
       ▼                             ▼
 UserOperation{ callData: submitReport(hash, category, geohash) }
       │
-      ├─▶ pm_sponsorUserOperation  (Pimlico verifying paymaster — sponsor pays)
+      ├─▶ pm_sponsorUserOperation  (Pimlico verifying paymaster: sponsor pays)
       └─▶ eth_sendUserOperation    (Pimlico bundler → EntryPoint v0.7 on Linea)
 ```
 
@@ -196,14 +194,14 @@ The relayer is an interface (`src/relayer/`) with two implementations:
    [Linea faucet](https://docs.linea.build/get-started/how-to/get-testnet-eth)).
 4. Set in `.env`: `EXPO_PUBLIC_GASLESS_PROVIDER=pimlico`,
    `EXPO_PUBLIC_PIMLICO_API_KEY`, `EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS`.
-5. Finish the two marked TODOs in `pimlicoRelayer.ts` — counterfactual account
+5. Finish the two marked TODOs in `pimlicoRelayer.ts`: counterfactual account
    derivation ([#3](https://github.com/sailenceresw/khabardar/issues/3)) and receipt
-   polling ([#4](https://github.com/sailenceresw/khabardar/issues/4)) — or replace the
+   polling ([#4](https://github.com/sailenceresw/khabardar/issues/4)). Or replace the
    class body with permissionless.js's `createSmartAccountClient`, which handles both.
 
 Alternative providers (same interface, different config): thirdweb, Etherspot Prime,
 Biconomy, or self-hosted [Arka](https://github.com/etherspot/arka) if operator
-independence from a commercial paymaster is required — likely the right endgame for an
+independence from a commercial paymaster is required, likely the right endgame for an
 anti-corruption tool.
 
 ### Privacy note on sponsored gas
@@ -226,12 +224,12 @@ paymaster accounting context and is deliberately *excluded from calldata*, spons
 receive counts rather than per-report ledgers, and any pool below `MIN_SCOPE_REPORTS`
 (50) goes unnamed in the UI even though it still pays.
 
-## Organizations — the accountable side
+## Organizations: the accountable side
 
 `Organization` (`packages/shared/src/org.ts`, `apps/mobile/src/org.ts`) is a **named**
 account for newsrooms, NGOs, oversight bodies, researchers, and funders. It is stored
 under separate keys, with a separate lifecycle, from reporter identity, and the two are
-never returned together — an org account is billable and contactable, a reporter account
+never returned together. An org account is billable and contactable, a reporter account
 is a device key and nothing else. Joining them would break the product's central
 guarantee.
 
@@ -250,7 +248,7 @@ has moved past `Unverified`**:
 
 The review queue (`/moderation`) lists everything not yet adjudicated, oldest first,
 with each report's integrity-check result. A moderator can change a report's **tier**
-but can **never edit or delete the report** — the content is anchored on-chain, so
+but can **never edit or delete the report**. The content is anchored on-chain, so
 moderation adds judgement on top of an immutable record rather than rewriting it. Every
 decision is logged with a reason.
 
@@ -265,7 +263,7 @@ Two things about this are deliberately unfinished and should not be glossed over
 
 On detecting AI-generated reports: **do not ship a naive AI-text detector.** They have
 high false-positive rates on second-language English writers, which describes a large
-share of the intended users — it would systematically silence exactly the people this
+share of the intended users, so it would systematically silence exactly the people this
 exists for. The defensible stack is provenance (C2PA capture signatures), personhood
 (RLN / anonymous credentials), and corroboration. AI belongs in triage, never as judge.
 
@@ -274,7 +272,7 @@ exists for. The defensible stack is provenance (C2PA capture signatures), person
 <img src="./media/tips.png" width="300" align="right" alt="Tip channel: send an encrypted message to a chosen journalist or NGO">
 
 `/tips` sends an end-to-end encrypted message to a named journalist or NGO. Unlike a
-report, a tip is **never anchored on-chain** — it is a private message, not a public
+report, a tip is **never anchored on-chain**. It is a private message, not a public
 record. Sealing uses the same ECIES construction as restricted bundles, so only the
 recipient's private key opens it, and only a short preview + digest stay on the device.
 
@@ -299,13 +297,13 @@ backend cannot silently swap in its own key and read every restricted report.
 <img src="./media/settings.png" width="300" align="right" alt="Settings screen with English and Hindi language options">
 
 English + Hindi (`apps/mobile/src/i18n/`). Locale auto-detects from the device and can
-be switched in Settings. All UI strings go through `t()` — add a language by dropping a
-new JSON file.
+be switched in Settings. All UI strings go through `t()`, so adding a language means
+dropping in a new JSON file.
 
 Language coverage is not cosmetic here. The people best placed to report corruption are
 often not comfortable in English, and a tool that only speaks English selects for the
 wrong reporters. Expanding beyond Hindi and English, and adding voice-first input, is
-[#26](https://github.com/sailenceresw/khabardar/issues/26) — with the hard constraint
+[#26](https://github.com/sailenceresw/khabardar/issues/26), with the hard constraint
 that speech recognition must run **on-device**, since a cloud speech API would receive
 the reporter's voice and IP address together.
 

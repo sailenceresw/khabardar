@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before filing, check [CONTRIBUTING.md](https://github.com/sailenceresw/khabardar/blob/master/CONTRIBUTING.md#things-that-will-be-declined)
-        — a few categories of proposal are declined on principle (third-party auth,
+        Before filing, check [CONTRIBUTING.md](https://github.com/sailenceresw/khabardar/blob/master/CONTRIBUTING.md#things-that-will-be-declined).
+        A few categories of proposal are declined on principle (third-party auth,
         cloud processing of report content, analytics SDKs, AI-text detection).
 
   - type: textarea
