@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security or anonymity vulnerability
+    url: https://github.com/sailenceresw/khabardar/security/advisories/new
+    about: >
+      Report privately. Anything that could deanonymize a reporter must never be filed
+      as a public issue.
+  - name: Security policy and known weaknesses
+    url: https://github.com/sailenceresw/khabardar/blob/master/SECURITY.md
+    about: Read this first — several gaps are already documented and tracked.
