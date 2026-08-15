@@ -1,0 +1,54 @@
+name: Feature request
+description: Propose a capability or a change in behaviour
+labels: ["type:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, check [CONTRIBUTING.md](https://github.com/sailenceresw/khabardar/blob/master/CONTRIBUTING.md#things-that-will-be-declined)
+        — a few categories of proposal are declined on principle (third-party auth,
+        cloud processing of report content, analytics SDKs, AI-text detection).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: Who is stuck, and on what? Describe the situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+    validations:
+      required: true
+
+  - type: textarea
+    id: anonymity
+    attributes:
+      label: Anonymity impact
+      description: >
+        Does this add a network request, a stored file, a log line, or any new metadata?
+        Could it narrow a reporter's anonymity set? An honest "I think it leaks X" is a
+        better proposal than one that does not mention it.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Anonymity / identity
+        - Compose and submit
+        - Public feed
+        - Moderation
+        - Tip channel
+        - Chain / relayer
+        - Content store / evidence
+        - Organization / billing
+        - i18n
+        - Tooling and CI
+    validations:
+      required: true

@@ -1,282 +1,132 @@
-# Khabardar (खबरदार)
+<div align="center">
 
-Anonymous anti-corruption reporting. Compose a report, attach evidence, and anchor a
-tamper-proof fingerprint of it on the Linea blockchain — without revealing who you are,
-without holding any cryptocurrency, and without the app ever learning your name, phone
-number, or email.
+# Khabardar &nbsp;·&nbsp; खबरदार
 
-> **Status: v0.** Working end-to-end: compose → encrypt → upload to the content layer →
-> anchor hash + CID via a gasless transaction → read back in a public feed with an
-> integrity check. Also wired: entity clustering, a moderation review queue, an
-> encrypted tip channel, BIP-39 recovery, and an optional WalletConnect identity.
-> The relayer and content store default to local mocks so everything runs with **no
-> credentials**. See [Roadmap](#roadmap--current-stubs) for what is still missing.
+**Anonymous anti-corruption reporting, anchored on-chain.**
+
+Compose a report, attach evidence, and anchor a tamper-proof fingerprint of it on the
+Linea blockchain — without revealing who you are, without holding any cryptocurrency,
+and without the app ever learning your name, phone number, or email.
+
+[![CI](https://github.com/sailenceresw/khabardar/actions/workflows/ci.yml/badge.svg)](https://github.com/sailenceresw/khabardar/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](./LICENSE)
+[![Node](https://img.shields.io/badge/node-20-339933?logo=node.js&logoColor=white)](./.nvmrc)
+[![Expo](https://img.shields.io/badge/Expo-React_Native-000020?logo=expo&logoColor=white)](https://expo.dev)
+[![Linea](https://img.shields.io/badge/chain-Linea-121212)](https://linea.build)
+[![Status](https://img.shields.io/badge/status-v0_prototype-orange)](#status)
+
+[Quickstart](#quickstart) ·
+[How it works](#how-it-works) ·
+[Architecture](./docs/ARCHITECTURE.md) ·
+[Roadmap](#roadmap) ·
+[Security](./SECURITY.md) ·
+[Contributing](./CONTRIBUTING.md)
+
+</div>
 
 ---
 
-## Monorepo layout
+> [!WARNING]
+> **Do not use this for real reports yet.** Khabardar is a v0 prototype. It has not been
+> audited, and it has no anonymising network transport — a targeted user could be
+> deanonymized at the network layer no matter how good the cryptography is. If you are
+> genuinely at risk, use [SecureDrop](https://securedrop.org) or
+> [GlobaLeaks](https://www.globaleaks.org). See [SECURITY.md](./SECURITY.md).
 
-```
-khabardar/
-├── apps/
-│   └── mobile/            # Expo (React Native) app — iOS, Android, web preview
-│       ├── app/           # expo-router screens (feed, compose, moderation, tips, …)
-│       └── src/
-│           ├── content/   # encrypted blob store (IPFS/mock) + ECIES key wrapping
-│           ├── feed/      # network index, demo seed, fetch+decrypt+integrity check
-│           ├── relayer/    # gasless submission (mock / Pimlico)
-│           ├── wallet/     # optional WalletConnect v2
-│           └── …          # identity, recovery, crypto, evidence, moderation, tips, i18n
-├── packages/
-│   ├── contracts/         # Hardhat + Solidity (ReportRegistry.sol) → Linea
-│   └── shared/            # chain config, ABI, TypeScript types shared app↔contracts
-├── .env.example           # every env var documented
-└── package.json           # npm workspaces root
-```
+## Screenshots
 
-## Why React Native (Expo) and not Flutter
+<div align="center">
+<table>
+<tr>
+<td width="25%"><img src="./docs/media/onboarding.png" alt="Onboarding: no name, phone, or email is ever requested"></td>
+<td width="25%"><img src="./docs/media/home.png" alt="Home screen showing a derived codename instead of an address"></td>
+<td width="25%"><img src="./docs/media/compose.png" alt="Composing a report with category and visibility controls"></td>
+<td width="25%"><img src="./docs/media/moderation.png" alt="Moderation review queue"></td>
+</tr>
+<tr>
+<td align="center"><sub><b>No signup</b><br>A device key is the whole identity</sub></td>
+<td align="center"><sub><b>Codename, not address</b><br>Karma is earned, never bought</sub></td>
+<td align="center"><sub><b>Compose</b><br>Entity name never leaves the device</sub></td>
+<td align="center"><sub><b>Moderation</b><br>Tier can change; content cannot</sub></td>
+</tr>
+</table>
 
-Both are fine cross-platform frameworks; the deciding factor is the **blockchain layer**:
+<img src="./docs/media/wallet.png" width="45%" alt="Wallet screen showing an anonymity warning above the connect control">
 
-1. **The entire Ethereum/AA toolchain is TypeScript-first.** viem, permissionless.js,
-   Pimlico/thirdweb/Biconomy SDKs — all TS. Dart bindings (web3dart) lag badly on
-   ERC-4337/EIP-7702 support; we would end up hand-rolling UserOperation plumbing.
-2. **One language across the monorepo.** The app imports the contract ABI and types
-   directly from `@khabardar/shared`; contract changes surface as compile errors in the
-   app.
-3. **Expo's security-relevant modules** (SecureStore → Keychain/Keystore, expo-crypto,
-   ImageManipulator for EXIF-free re-encode) cover our anonymity primitives out of the
-   box, plus EAS OTA updates let us ship security fixes without store review delays.
+<sub>The optional wallet screen. The warning sits <b>above</b> the control, because the
+honest answer to "can I use my own wallet?" is "yes, and it will weaken you."</sub>
 
-## Architecture
+</div>
 
-### Anonymity model (prior art: GlobaLeaks / SecureDrop)
+## Status
 
-The design borrows two principles from GlobaLeaks and SecureDrop, the reference
-implementations for anonymous whistleblowing:
+Working end-to-end today: compose → encrypt → upload to the content layer → anchor hash
++ CID via a gasless transaction → read back in a public feed with an integrity check.
+Also wired: entity clustering, a moderation review queue, an encrypted tip channel,
+BIP-39 recovery, and an optional WalletConnect identity.
 
-- **The platform must not be able to deanonymize its users** (SecureDrop: no accounts,
-  source codenames, Tor-only). Khabardar's analogue: no signup, a **device-bound
-  secp256k1 keypair** generated locally in the secure enclave/Keystore is the entire
-  identity. The UI shows a derived codename (e.g. `silent-heron-42`), never the address.
-- **Metadata is as dangerous as content** (GlobaLeaks strips file metadata server-side;
-  SecureDrop sanitizes documents). Khabardar strips **client-side, before anything is
-  stored**: photos are re-encoded through expo-image-manipulator (EXIF/GPS/device tags
-  do not survive re-encode), the picker is called with `exif: false`, and Android
-  location permissions are **blocked in the manifest** so precise geolocation cannot
-  even be requested.
+The relayer and content store default to local mocks, so **everything runs with no
+credentials**.
 
-Concrete guarantees in this scaffold:
-
-| Threat | Mitigation |
+| | |
 |---|---|
-| Identity leakage at signup | No PII collected — device keypair only (`src/identity.ts`) |
-| EXIF/GPS in evidence | Re-encode pipeline (`src/evidence.ts`) |
-| Precise location in report | Geohash hard-capped at 4 chars ≈ city level (`src/geo.ts`) |
-| Device seizure | AES-256-GCM at rest + **panic delete** wipes drafts, evidence, keys, identity (`src/panic.ts`) |
-| Content on a public chain | Only `keccak256` fingerprints go on-chain, never content |
-| Network observation | **Future work:** Tor/onion or mixnet transport (see Roadmap) |
+| ✅ **Built and verified** | Anonymity core, chain layer (23 contract tests), content layer, public feed, moderation, tips, gasless abstraction, i18n (EN + HI) |
+| 🟡 **Wired but unproven** | Real Pimlico submission, real IPFS pinning, evidence upload from compose, feed at scale |
+| ❌ **Not started** | Anonymising transport, proof-of-personhood, C2PA provenance, stealth mode, billing backend, security audit |
 
-### Blockchain layer (Linea)
+Full honest breakdown in [BUSINESS.md](./BUSINESS.md). Open work is in
+[Issues](https://github.com/sailenceresw/khabardar/issues) — the
+[`blocker:mainnet`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Ablocker%3Amainnet)
+label marks the hard gates.
 
-- **Chains:** Linea Sepolia testnet (`59141`) now; Linea mainnet (`59144`) later.
-- **Why Linea:** post-Pectra Linea supports **EIP-7702** natively and serves ERC-4337
-  bundler methods on `rpc.linea.build`; the AA provider ecosystem (Pimlico, thirdweb,
-  Etherspot, Biconomy, Arka) is first-class. Status Network — previously the "gasless
-  L2" on the Linea stack — **merged into Linea (April 2026)**, so we build against
-  Linea directly and borrow Status's ideas rather than their SDK:
-  - **Karma:** non-transferable reputation (`ReportRegistry.karma`) — credibility that
-    cannot be bought or transferred, only earned through verified reports.
-  - **RLN-style rate limiting:** planned — sybil-resistant per-epoch submission limits
-    to keep a gasless endpoint spam-free (see Roadmap).
-- **`ReportRegistry.sol`** stores per report: `reportHash` (fingerprint of the encrypted
-  bundle), `cid` (pointer to that bundle in the content layer), category, visibility,
-  verification tier, coarse geohash, blinded `entityTag`, timestamp, and the
-  pseudonymous reporter address. A moderator role (v0: single address; later:
-  karma-weighted jury) sets the tier, adjusting reporter karma.
+## Quickstart
 
-### Content layer — how reports become readable
-
-The chain holds a hash and a pointer; the bytes live elsewhere. Without this, a report
-is a diary entry nobody else can read.
-
-| Layer | Holds |
-|---|---|
-| Device | plaintext, only while composing |
-| Content store (IPFS/Arweave) | the **encrypted** bundle + evidence blobs |
-| Chain | `reportHash` + `cid` + coarse metadata |
-
-Each report gets a **fresh content key**. What happens to that key is the whole
-visibility model:
-
-- **Public** — the key is published in the bundle's keyring, so anyone can read it.
-- **Journalists only** — the key is wrapped per recipient with **ECIES**
-  (ephemeral secp256k1 ECDH → HKDF-SHA256 → AES-256-GCM). Only a listed private key
-  opens it; everyone else sees the report as locked.
-
-Because `reportHash` covers the *encrypted* bundle, any reader can recompute it and
-compare against the chain. The feed does this on every fetch and shows
-`⚠️ Content does NOT match the on-chain fingerprint` when it fails — so a hostile
-gateway that swaps or edits a bundle is detected rather than believed. Malformed
-responses degrade to "unavailable" instead of throwing, so a bad gateway cannot crash
-the reader either.
-
-`EXPO_PUBLIC_CONTENT_STORE` selects `mock` (default, local, no credentials) or `ipfs`.
-
-### Linking reports without deanonymizing anyone
-
-Several people reporting the same office is the strongest signal the system has. Doing
-that naively means publishing the accused entity's name on-chain.
-
-Instead, the entity name **stays on the device** and only
-`keccak256("khabardar/entity-tag/v1" | normalized(name))` is published. Identical
-entities produce identical tags, so reports cluster (`reportsForEntity`), while the tag
-itself carries nothing about who filed it. Normalization is aggressive, so
-`"Block Development Office, Sitapur"` and `"block development office sitapur"` collide.
-
-**Honest limit:** this is not hiding the entity from a determined observer — the set of
-public offices is enumerable, so tags are reversible by dictionary attack. That is an
-accepted trade-off: *the accused is not the secret, the reporter is.* What it does buy
-is keeping entity names out of restricted reports entirely and out of casual chain
-scraping.
-
-Separately, `corroborate(reportId)` lets a witness back a report; the contract blocks
-self-corroboration and double-voting, and auto-promotes to `CommunityCorroborated` at
-3 independent corroborations. **This is only as sybil-resistant as the caller set** —
-production must gate it behind proof-of-personhood (RLN / anonymous credentials).
-
-### Identity: three options, one default
-
-| Mode | How | Anonymity |
-|---|---|---|
-| **Device key** (default) | secp256k1 key generated on-device from a BIP-39 phrase | Strongest — tied to nothing else |
-| **Recovery phrase** | Same key, restorable on a new device from 12 words | Same as above |
-| **WalletConnect** (opt-in) | Sign with an external wallet | **Weaker** — see below |
-
-There is deliberately **no email/phone login**. An auth provider is one subpoena away
-from deanonymizing every reporter; a BIP-39 phrase gives the same "don't lose
-everything with your phone" benefit with nothing held by anyone but the user.
-
-**WalletConnect** is available for people who already manage keys, but it is never the
-default and never required. The screen shows an unmissable warning *above* the connect
-control, because a reused wallet carries a public history — exchange withdrawals tie it
-to KYC, and reusing it later can retroactively expose past reports. Requires
-`EXPO_PUBLIC_WALLETCONNECT_PROJECT_ID`; without it the screen says so and the device key
-keeps working.
-
-### Gasless flow (nobody holds ETH)
-
-```
-device keypair ──owns──▶ counterfactual smart account (SimpleAccount)
-      │                             │
-      │ signs userOpHash            │ sender of UserOperation
-      ▼                             ▼
-UserOperation{ callData: submitReport(hash, category, geohash) }
-      │
-      ├─▶ pm_sponsorUserOperation  (Pimlico verifying paymaster — sponsor pays)
-      └─▶ eth_sendUserOperation    (Pimlico bundler → EntryPoint v0.7 on Linea)
-```
-
-The relayer is an interface (`src/relayer/`) with two implementations:
-
-- **`MockRelayer` (default):** runs the identical encode → sign pipeline, then simulates
-  the bundler locally. No network, no credentials. This is what the scaffold demo uses.
-- **`PimlicoRelayer`:** real integration points against Pimlico's bundler/paymaster
-  JSON-RPC on Linea Sepolia, env-gated. Written against raw `pm_sponsorUserOperation` /
-  `eth_sendUserOperation` so the protocol surface is explicit; swap in permissionless.js
-  to productionize.
-
-**What a real gasless setup needs** (~15 min):
-
-1. Create an API key at [dashboard.pimlico.io](https://dashboard.pimlico.io).
-2. Add a **sponsorship policy** scoped to your deployed `ReportRegistry` address
-   (so the paymaster only ever sponsors report submissions), and fund it.
-3. Deploy the contract: `npm run contracts:deploy:sepolia` (needs
-   `DEPLOYER_PRIVATE_KEY` + Sepolia ETH from the [Linea faucet](https://docs.linea.build/get-started/how-to/get-testnet-eth)).
-4. Set in `.env`: `EXPO_PUBLIC_GASLESS_PROVIDER=pimlico`,
-   `EXPO_PUBLIC_PIMLICO_API_KEY`, `EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS`.
-5. Finish the two marked TODOs in `pimlicoRelayer.ts` (counterfactual account
-   derivation + receipt polling) — or replace the class body with permissionless.js's
-   `createSmartAccountClient`, which handles both.
-
-Alternative providers (same interface, different config): thirdweb, Etherspot Prime,
-Biconomy, or self-hosted [Arka](https://github.com/etherspot/arka) if operator
-independence from a commercial paymaster is required — likely the right endgame for an
-anti-corruption tool.
-
-### Privacy note on sponsored gas
-
-A paymaster sees the UserOperations it sponsors (sender address, calldata, IP of the
-submitting client). Since calldata is only ever a hash + category + coarse geohash,
-content stays private, but **network-level anonymity (Tor) is required before mainnet**
-to prevent IP↔pseudonym linkage by relayer infrastructure.
-
-### Sponsored gas pools and attribution
-
-Organizations can fund submission gas for a region or category
-(`packages/shared/src/sponsor.ts`, `apps/mobile/src/sponsorPools.ts`). Reporters never
-see a payment step; the pool only decides who reimburses the paymaster.
-
-**Attribution is aggregate only, by design.** A per-report sponsor tag would be a side
-channel: a narrowly-scoped sponsor would shrink a report's anonymity set below what the
-reporter consented to by publishing a coarse geohash. So `sponsorPoolId` travels as
-paymaster accounting context and is deliberately *excluded from calldata*, sponsors
-receive counts rather than per-report ledgers, and any pool below `MIN_SCOPE_REPORTS`
-(50) goes unnamed in the UI even though it still pays.
-
-### Organizations — the accountable side
-
-`Organization` (`packages/shared/src/org.ts`, `apps/mobile/src/org.ts`) is a **named**
-account for newsrooms, NGOs, oversight bodies, researchers, and funders. It is stored
-under separate keys, with a separate lifecycle, from reporter identity, and the two are
-never returned together — an org account is billable and contactable, a reporter account
-is a device key and nothing else. Joining them would break the product's central
-guarantee.
-
-Accreditation is not self-serve: a new org gets Community entitlements regardless of
-selected plan until a human verifies it, because analytics over a whistleblower corpus
-should never be one signup form away. Plans and entitlements gate corpus export
-(`apps/mobile/src/export.ts`), which excludes restricted reports and never exports
-reporter addresses.
-
-See [BUSINESS.md](./BUSINESS.md) for the revenue model, unit economics, and a
-completed / in-progress / not-started status breakdown.
-
-## Getting started
-
-Prereqs: Node 20 (`.nvmrc`), npm 10.
+Requires Node 20 (see [`.nvmrc`](./.nvmrc)) and npm 10. No API keys, no wallet, no
+testnet funds.
 
 ```bash
-npm install                    # installs all workspaces
+git clone https://github.com/sailenceresw/khabardar.git
+cd khabardar
+npm install
 
-# Contracts
-npm run contracts:compile
-npm run contracts:test         # 23 passing
-
-# Mobile app (mock relayer — no credentials needed)
-npm run mobile:web             # dev server with hot reload
-npm run mobile:start           # QR code for Expo Go on a device
-
-# Static web build — no file watcher, always starts (see Troubleshooting)
-npm run web:export  --workspace apps/mobile
-npm run web:static  --workspace apps/mobile   # serves dist/ on :8085
-
-# Headless smoke test of the whole submission slice (no simulator/Metro needed)
-npm run verify:slice --workspace apps/mobile
+npm run contracts:test                        # 23 passing
+npm run verify:slice --workspace apps/mobile  # headless end-to-end slice
+npm run mobile:web                            # dev server with hot reload
 ```
 
-`verify:slice` runs the real `cryptoUtils` / `encoding` / `evidence` / `content` /
-`MockRelayer` modules under Node (with `expo-crypto`, AsyncStorage, SecureStore and
-the image modules shimmed) and asserts the full path: encrypt → decrypt round-trip →
+Then walk the slice: create identity → **New report** → fill category/body/area →
+**Review & submit** → watch it anchor (simulated tx via `MockRelayer`) → the status
+screen shows the report fingerprint and tx hash.
+
+<details>
+<summary><b>Other ways to run it</b></summary>
+
+```bash
+npm run mobile:start                          # QR code for Expo Go on a device
+
+# Static web build — no file watcher, always starts
+npm run web:export --workspace apps/mobile
+npm run web:static --workspace apps/mobile    # serves dist/ on :8085
+```
+
+**`verify:slice`** runs the real `cryptoUtils` / `encoding` / `evidence` / `content` /
+`MockRelayer` modules under Node (with `expo-crypto`, AsyncStorage, SecureStore and the
+image modules shimmed) and asserts the full path: encrypt → decrypt round-trip →
 deterministic keccak256 fingerprint → blinded entity tag → evidence upload returning a
 resolvable CID → ABI-encoded `submitReport()` calldata → device-key signature → relay
-result. It's the fastest way to confirm the chain-facing logic still works, and is
+result. It is the fastest way to confirm the chain-facing logic still works, and is
 CI-safe.
 
-### Troubleshooting: Metro hangs on Windows
+To go against the real testnet, copy `.env.example` → `.env` and follow
+[gasless setup](./docs/ARCHITECTURE.md#gasless-flow-nobody-holds-eth).
 
-On Windows **without Watchman**, Metro falls back to a recursive `fs.watch` watcher
-that intermittently never finishes starting, failing after a 240-second timeout with:
+</details>
+
+<details>
+<summary><b>Troubleshooting: Metro hangs on Windows</b></summary>
+
+On Windows **without Watchman**, Metro falls back to a recursive `fs.watch` watcher that
+intermittently never finishes starting, failing after a 240-second timeout with:
 
 ```
 Failed to construct transformer: Error: Failed to start watch mode.
@@ -292,106 +142,143 @@ Two fixes, either works:
 2. **Skip the watcher entirely** with `web:export` + `web:static` above. No hot reload,
    but it always starts — this is the reliable path for verification and screenshots.
 
-Try the end-to-end slice: create identity → New report → fill category/body/area →
-Review & submit → watch it "anchor" (simulated tx via MockRelayer) → status screen
-shows the report fingerprint + tx hash.
+</details>
 
-To go against the real testnet, follow [gasless setup](#gasless-flow-nobody-holds-eth)
-and copy `.env.example` → `.env`.
+## How it works
 
-## i18n
+Three layers, and the split between them is the whole design:
 
-English + Hindi (`apps/mobile/src/i18n/`). Locale auto-detects from the device and can
-be switched in Settings. All UI strings go through `t()` — add a language by dropping a
-new JSON file.
+| Layer | Holds | Who can read it |
+|---|---|---|
+| **Device** | plaintext, only while composing | you |
+| **Content store** (IPFS) | the **encrypted** bundle + evidence blobs | whoever holds the content key |
+| **Chain** (Linea) | `reportHash` + `cid` + coarse metadata | everyone, forever |
 
-## Verification & moderation
+Content never touches the chain — only a `keccak256` fingerprint and a pointer. Because
+the fingerprint covers the *encrypted* bundle, any reader can recompute it and compare
+against the chain, so a hostile gateway that swaps a bundle is **detected rather than
+believed**.
 
-Reports move through explicit tiers, and **nothing is presented as credible until it
-has moved past `Unverified`**:
+```
+device keypair ──owns──▶ counterfactual smart account
+      │                             │
+      │ signs userOpHash            │ sender of UserOperation
+      ▼                             ▼
+UserOperation{ callData: submitReport(hash, category, geohash) }
+      │
+      ├─▶ pm_sponsorUserOperation  (verifying paymaster — a sponsor pays the gas)
+      └─▶ eth_sendUserOperation    (bundler → EntryPoint v0.7 on Linea)
+```
 
-`Unverified → UnderReview → CommunityCorroborated → Verified` (or `Disputed`)
+Nobody holds ETH. A sponsor reimburses the paymaster, and the reporter never sees a
+payment step.
 
-The review queue (`/moderation`) lists everything not yet adjudicated, oldest first,
-with each report's integrity-check result. A moderator can change a report's **tier**
-but can **never edit or delete the report** — the content is anchored on-chain, so
-moderation adds judgement on top of an immutable record rather than rewriting it. Every
-decision is logged with a reason.
+### What protects the reporter
 
-Two things about this are deliberately unfinished and should not be glossed over:
+| Threat | Mitigation |
+|---|---|
+| Identity leakage at signup | No PII collected — device keypair only (`src/identity.ts`) |
+| EXIF/GPS in evidence | Client-side re-encode before anything is stored (`src/evidence.ts`) |
+| Precise location in report | Geohash hard-capped at 4 chars ≈ city level (`src/geo.ts`) |
+| Device seizure | AES-256-GCM at rest + **panic delete** wipes drafts, evidence, keys, identity (`src/panic.ts`) |
+| Content on a public chain | Only fingerprints go on-chain, never content |
+| Network observation | **Not yet mitigated** — [#9](https://github.com/sailenceresw/khabardar/issues/9) is the biggest open gap |
 
-- The in-app "moderator mode" toggle is a **local dev affordance**. The real gate is the
-  contract's `onlyModerator` check; the toggle grants nothing on-chain.
-- The decision log is **on-device only**. Production must publish decisions (or their
-  hashes) so moderators are auditable by the same public being asked to trust them. A
-  moderation system nobody can audit is just censorship with extra steps.
+Three design decisions that are easy to get wrong, and why they went this way:
 
-On detecting AI-generated reports: **do not ship a naive AI-text detector.** They have
-high false-positive rates on second-language English writers, which describes a large
-share of the intended users — it would systematically silence exactly the people this
-exists for. The defensible stack is provenance (C2PA capture signatures), personhood
-(RLN / anonymous credentials), and corroboration. AI belongs in triage, never as judge.
+- **No email or phone login, ever.** An auth provider is one subpoena away from
+  deanonymizing every reporter. A BIP-39 phrase gives the same recovery benefit with
+  nothing held by anyone but the user.
+- **Entity names stay on the device.** Only a blinded `keccak256` tag is published, so
+  reports about the same office cluster without naming it on-chain. This is reversible
+  by dictionary attack, and that is an accepted trade-off — *the accused is not the
+  secret, the reporter is.*
+- **Sponsor attribution is aggregate only.** A per-report sponsor tag would shrink a
+  report's anonymity set below what the reporter consented to, so `sponsorPoolId` is
+  deliberately excluded from calldata.
 
-## Tip channel
+→ Full detail in **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**.
 
-`/tips` sends an end-to-end encrypted message to a named journalist or NGO. Unlike a
-report, a tip is **never anchored on-chain** — it is a private message, not a public
-record. Sealing uses the same ECIES construction as restricted bundles, so only the
-recipient's private key opens it, and only a short preview + digest stay on the device.
+## Project structure
 
-Three gaps to close before anyone relies on it, all documented in `src/tips.ts`:
+```
+khabardar/
+├── apps/
+│   └── mobile/            # Expo (React Native) — iOS, Android, web preview
+│       ├── app/           # expo-router screens (feed, compose, moderation, tips, …)
+│       └── src/
+│           ├── content/   # encrypted blob store (IPFS/mock) + ECIES key wrapping
+│           ├── feed/      # network index, demo seed, fetch+decrypt+integrity check
+│           ├── relayer/   # gasless submission (mock / Pimlico)
+│           ├── wallet/    # optional WalletConnect v2
+│           └── …          # identity, recovery, crypto, evidence, moderation, tips, i18n
+├── packages/
+│   ├── contracts/         # Hardhat + Solidity (ReportRegistry.sol) → Linea
+│   └── shared/            # chain config, ABI, TypeScript types shared app↔contracts
+├── docs/
+│   └── ARCHITECTURE.md    # anonymity model, chain, content, gasless, moderation
+├── BUSINESS.md            # revenue model, unit economics, honest build status
+└── .env.example           # every env var documented
+```
 
-- **Transport.** Tips are sealed but not delivered over an anonymising transport yet.
-  Network metadata is what deanonymizes people, not ciphertext.
-- **Padding.** Message length currently leaks; tips should be padded to fixed buckets.
-- **Forward secrecy.** A recipient key compromise retroactively opens past tips.
+## Roadmap
 
-Recipient keys in `src/content/recipients.ts` are **demo placeholders**. Production must
-publish them somewhere independently verifiable (DNS TXT, a well-known URI on the
-organisation's own domain, or an on-chain registry) and pin them in-app, so a compromised
-backend cannot silently swap in its own key and read every restricted report.
+Tracked as [issues](https://github.com/sailenceresw/khabardar/issues), grouped by phase:
 
-## Roadmap / current stubs
+| Phase | Focus |
+|---|---|
+| [`v0.1-testnet`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.1-testnet) | Stop being a mock — deploy to Linea Sepolia, real sponsored gas, real IPFS, evidence upload wired, CI |
+| [`v0.2-anonymity`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.2-anonymity) | Tor transport, proof-of-personhood, tip padding and forward secrecy, verifiable recipient keys, stealth mode |
+| [`v0.3-scale`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.3-scale) | Real indexer, karma-weighted jury, publicly auditable moderation log, large/audio/document evidence |
+| [`v1.0-launch`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av1.0-launch) | Demo data removed, external audit, org billing backend, C2PA provenance, more languages |
 
-- **Tor/onion transport** — not yet wired, and the largest remaining gap. Route relayer,
-  RPC, and content-store traffic through Tor (Arti has mobile bindings). SecureDrop
-  treats this as non-negotiable and so should we before any mainnet launch.
-- **RLN rate limiting / proof-of-personhood** — needed to make corroboration and karma
-  actually sybil-resistant, and to keep a gasless endpoint from being drained.
-- **Karma-weighted jury** — replace the single moderator address; stake karma on
-  verdicts so bad reviewers lose standing.
-- **Real indexer** — `ChainNetworkIndex` scans `eth_getLogs`, which will not survive
-  real volume. Swap for Ponder/subgraph behind the same `NetworkIndex` interface.
-- **Counterfactual smart account** — `PimlicoRelayer` still uses the owner EOA as
-  `sender`; the SimpleAccount factory derivation is marked as integration point 1.
-- **Evidence at scale** — blobs are encrypted and uploaded, but large files need
-  expo-file-system streaming rather than AsyncStorage + base64.
-- **Audio/document evidence** — photo pipeline is wired; audio/docs follow the same
-  strip → encrypt → hash → upload path.
-- **Offline drafts** — drafts work offline already; submission queueing/retry on
-  reconnect is not yet automatic.
-- **Stealth mode** — disguise UI, duress PIN, screenshot blocking. A recognisable
-  anti-corruption app on a seized phone is itself evidence against its user.
-- **Org accreditation + billing backend** — accreditation is currently a local flag with
-  a dev toggle, and there is no billing, seat management, or API-key issuance. The paid
-  surfaces (analytics, case management, public API) are declared in the entitlement model
-  but not built.
-- **Evidence upload wiring** — `uploadEvidence` returns CIDs but is not yet called from
-  the compose flow; evidence still resolves locally.
+**The three that matter most**, because without them nothing else is safe to use:
 
-## Security & threat-model caveats (v0)
+1. **[Anonymising transport](https://github.com/sailenceresw/khabardar/issues/9)** —
+   the largest remaining gap. Every other protection is downstream of this one.
+2. **[Proof-of-personhood](https://github.com/sailenceresw/khabardar/issues/10)** —
+   corroboration and karma are only as sybil-resistant as the account set.
+3. **[Independent audit](https://github.com/sailenceresw/khabardar/issues/22)** — the
+   "do not use this yet" notice should only be removed by someone outside this project.
 
-- The web build's SecureStore fallback is localStorage — **dev preview only**.
-- `MockRelayer` fabricates tx hashes and `MockContentStore` writes locally; nothing is
+## Known limitations
+
+Stated plainly, because a security tool that oversells itself is worse than one that
+does not exist:
+
+- **No anonymising transport.** Currently the weakest link in the entire design.
+- `MockRelayer` fabricates tx hashes and `MockContentStore` writes locally — nothing is
   on-chain or on IPFS until real providers are configured.
-- **No anonymising transport yet.** Network-level metadata (your IP contacting a relayer,
-  a gateway, or an RPC) is currently the weakest link in the whole design and would
-  deanonymize a targeted user regardless of how good the cryptography is.
-- Corroboration is only as sybil-resistant as the caller set until RLN lands.
-- Entity tags are reversible by dictionary attack — see the trade-off note above.
-- A single moderator address is a centralization point — acceptable for testnet only.
-- Demo recipient keys, sample feed rows, and demo sponsor pools must be removed before
-  any real deployment.
-- Org accreditation is a local flag; the dev toggle grants nothing on a real deployment,
-  where accreditation belongs server-side next to the billing relationship.
-- No security audit has been performed. Do not use for real reports yet.
+- Corroboration is not sybil-resistant. Entity tags are reversible by dictionary attack.
+- A single moderator address is a centralization point — testnet only.
+- The moderation decision log is device-local, so moderators are not yet auditable.
+- The web build's SecureStore fallback is localStorage — **dev preview only**.
+- Demo recipient keys, sample feed rows, and demo sponsor pools ship in this build and
+  must be removed before any real deployment.
+- **No security audit has been performed.**
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md). The one rule: **a change must not make it
+easier to identify a reporter.** Everything else is negotiable.
+
+Good first issues are labelled
+[`P2`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3AP2);
+the design questions worth arguing about are
+[`type:research`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Atype%3Aresearch).
+
+By participating you agree to the [Code of Conduct](./CODE_OF_CONDUCT.md).
+
+## Licence
+
+[AGPL-3.0](./LICENSE). Copyleft is deliberate: anyone who runs a modified Khabardar as a
+service must publish their changes. For a tool whose users are trusting the code with
+their safety, a silently modified fork is precisely the threat.
+
+## Prior art
+
+[SecureDrop](https://securedrop.org) and [GlobaLeaks](https://www.globaleaks.org) are the
+reference implementations for anonymous whistleblowing, and this project borrows their
+two central principles: the platform must not be able to deanonymize its users, and
+metadata is as dangerous as content. They are audited and deployed; this is not. Use
+them for anything real.

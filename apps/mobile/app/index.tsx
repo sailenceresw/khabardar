@@ -82,7 +82,10 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   footerLinks: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    columnGap: spacing.lg,
+    rowGap: spacing.sm,
     marginTop: spacing.lg,
   },
   link: { color: colors.info, fontSize: 15, fontWeight: "600" },
