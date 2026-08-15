@@ -14,7 +14,7 @@ or sexual identity and orientation.
 
 Behaviour that helps:
 
-- Being kind and patient with people whose first language is not English — a large share
+- Being kind and patient with people whose first language is not English, since a large share
   of this project's intended users and contributors are in that position, and English
   fluency is not a proxy for the quality of an idea
 - Giving and accepting constructive feedback gracefully
@@ -26,8 +26,8 @@ Behaviour that is not acceptable:
 - Sexualised language or imagery, and sexual attention or advances of any kind
 - Trolling, insulting or derogatory comments, and personal or political attacks
 - Public or private harassment
-- Publishing others' private information — physical address, email address, or anything
-  that could identify a contributor — without their explicit permission
+- Publishing others' private information (physical address, email address, or anything
+  that could identify a contributor) without their explicit permission
 - **Attempting to identify, deanonymize, or pressure anyone who has used, tested, or
   reported through this software.** Given what this project is for, this is treated as
   the most serious violation possible, and there is no warning step for it
@@ -47,12 +47,12 @@ where appropriate.
 
 ## Enforcement guidelines
 
-1. **Correction** — a private, written warning explaining the violation. A public
+1. **Correction:** a private, written warning explaining the violation. A public
    apology may be requested.
-2. **Warning** — consequences for continued behaviour, with no interaction with those
+2. **Warning:** consequences for continued behaviour, with no interaction with those
    involved for a set period.
-3. **Temporary ban** — from any interaction with the community for a set period.
-4. **Permanent ban** — from any public interaction with the project.
+3. **Temporary ban:** from any interaction with the community for a set period.
+4. **Permanent ban:** from any public interaction with the project.
 
 Attempts to deanonymize users start at step 4.
 

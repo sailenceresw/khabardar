@@ -7,4 +7,4 @@ contact_links:
       as a public issue.
   - name: Security policy and known weaknesses
     url: https://github.com/sailenceresw/khabardar/blob/master/SECURITY.md
-    about: Read this first — several gaps are already documented and tracked.
+    about: Read this first, since several gaps are already documented and tracked.

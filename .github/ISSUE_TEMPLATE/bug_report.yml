@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        **If this is a security or anonymity issue, stop.** Do not file it here —
-        report it privately via
+        **If this is a security or anonymity issue, stop.** Do not file it here.
+        Report it privately via
         [Security → Report a vulnerability](https://github.com/sailenceresw/khabardar/security/advisories/new).
         See [SECURITY.md](https://github.com/sailenceresw/khabardar/blob/master/SECURITY.md).
 
@@ -64,7 +64,7 @@ body:
     attributes:
       label: Relevant config
       description: >
-        Node version, and any non-default env — EXPO_PUBLIC_CONTENT_STORE,
+        Node version, and any non-default env such as EXPO_PUBLIC_CONTENT_STORE,
         EXPO_PUBLIC_GASLESS_PROVIDER. Never paste an API key or a recovery phrase.
       placeholder: "Node 20.11, EXPO_PUBLIC_CONTENT_STORE=mock"
 

@@ -34,4 +34,4 @@
 ## What this does not do
 
 <!-- Known gaps, TODOs left in place, follow-up issues. Being explicit here is the
-     project's habit — see the "current stubs" section in the README. -->
+     project's habit. See the "current stubs" section in the README. -->

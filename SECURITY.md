@@ -1,7 +1,7 @@
 # Security policy
 
 Khabardar is software for people who may be at risk. A vulnerability here is not a
-service outage — it is potentially somebody's safety. Please treat it accordingly, and
+service outage. It is potentially somebody's safety. Please treat it accordingly, and
 we will too.
 
 ## Do not use this for real reports yet
@@ -10,8 +10,8 @@ we will too.
 anonymising network transport.** A targeted user could be deanonymized at the network
 layer regardless of how well the cryptography works.
 
-If you are in actual danger, use a tool that has been audited and deployed in the field
-— [SecureDrop](https://securedrop.org) or [GlobaLeaks](https://www.globaleaks.org) —
+If you are in actual danger, use a tool that has been audited and deployed in the field,
+such as [SecureDrop](https://securedrop.org) or [GlobaLeaks](https://www.globaleaks.org),
 and reach a journalist or organisation that already runs one.
 
 We will remove this notice when the items tagged
@@ -30,7 +30,7 @@ Please include:
 
 - What the issue is, and which file or component it lives in
 - How to reproduce it
-- What an attacker gains — especially whether it can deanonymize a reporter
+- What an attacker gains, especially whether it can deanonymize a reporter
 - Any suggested fix
 
 You will get an acknowledgement within **7 days**. This is a small project; that is a
@@ -50,7 +50,7 @@ Ranked by how much we care, which is not the same as how severe a scanner would 
    BIP-39 derivation, key storage in SecureStore/Keychain/Keystore.
 3. **Integrity failures.** Anything that lets a hostile gateway or indexer serve altered
    content without tripping the on-chain fingerprint check.
-4. **Contract bugs** in `ReportRegistry.sol` — access control, corroboration and karma
+4. **Contract bugs** in `ReportRegistry.sol`: access control, corroboration and karma
    manipulation, moderation authority.
 5. **Panic delete gaps.** Anything that survives a wipe: temp files, caches, OS-level
    copies, notification history.
@@ -65,7 +65,7 @@ worse impact than we have described, but they are not news:
 - **Corroboration and karma are not sybil-resistant.** Tracked in
   [#10](https://github.com/sailenceresw/khabardar/issues/10).
 - **Entity tags are reversible by dictionary attack.** The set of public offices is
-  enumerable. This is an accepted trade-off — the accused is not the secret, the
+  enumerable. This is an accepted trade-off: the accused is not the secret, the
   reporter is.
 - **Single moderator address.** Centralization point, testnet only. Tracked in
   [#16](https://github.com/sailenceresw/khabardar/issues/16).
@@ -79,7 +79,7 @@ worse impact than we have described, but they are not news:
 
 ## Out of scope
 
-- The mock relayer and mock content store fabricating data — that is what mocks do
+- The mock relayer and mock content store fabricating data, which is what mocks do
 - Missing rate limits on a build with no deployed backend
 - Automated scanner output with no demonstrated impact
 - Dependency CVEs with no reachable path in this codebase (tell us anyway if you have a
@@ -87,6 +87,6 @@ worse impact than we have described, but they are not news:
 
 ## Disclosure
 
-Report privately, give us a reasonable window to fix it, then publish whatever you like
-— we would rather the finding be public than quiet. If we go silent on you, publish. A
+Report privately, give us a reasonable window to fix it, then publish whatever you like.
+We would rather the finding be public than quiet. If we go silent on you, publish. A
 maintainer who stops answering is not a reason to sit on a bug that puts people at risk.
