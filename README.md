@@ -68,8 +68,9 @@ credentials**.
 
 | | |
 |---|---|
-| ✅ **Built and verified** | Anonymity core, chain layer (23 contract tests), content layer, public feed, moderation, tips, gasless abstraction, i18n (EN + HI) |
-| 🟡 **Wired but unproven** | Real Pimlico submission, real IPFS pinning, evidence upload from compose, feed at scale |
+| ✅ **Built and verified** | Anonymity core, chain layer (23 contract tests), content layer, public feed, moderation, tips, gasless abstraction, evidence upload path in compose, mobile UI design system + screen polish, i18n (EN + HI) |
+| 🟡 **Coded, unproven on live infra** | Pimlico SimpleAccount + UserOp receipt polling, IPFS pin implementation — need Sepolia deploy (#2), sponsorship policy (#5), live pin provider (#6) |
+| 🔧 **Open polish** | Recovery/wallet design-system alignment ([#33](https://github.com/sailenceresw/khabardar/issues/33)), report status presentation ([#34](https://github.com/sailenceresw/khabardar/issues/34)) |
 | ❌ **Not started** | Anonymising transport, proof-of-personhood, C2PA provenance, stealth mode, billing backend, security audit |
 
 Full honest breakdown in [BUSINESS.md](./BUSINESS.md). Open work is in
@@ -225,10 +226,17 @@ Tracked as [issues](https://github.com/sailenceresw/khabardar/issues), grouped b
 
 | Phase | Focus |
 |---|---|
-| [`v0.1-testnet`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.1-testnet) | Stop being a mock: deploy to Linea Sepolia, real sponsored gas, real IPFS, evidence upload wired, CI |
+| [`v0.1-testnet`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.1-testnet) | Stop being a mock: deploy to Linea Sepolia, real sponsored gas, real IPFS; UI polish remaining (#33, #34) |
 | [`v0.2-anonymity`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.2-anonymity) | Tor transport, proof-of-personhood, tip padding and forward secrecy, verifiable recipient keys, stealth mode |
 | [`v0.3-scale`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.3-scale) | Real indexer, karma-weighted jury, publicly auditable moderation log, large/audio/document evidence |
 | [`v1.0-launch`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av1.0-launch) | Demo data removed, external audit, org billing backend, C2PA provenance, more languages |
+
+**Recently closed (code complete, not always live-proven):**
+[#3](https://github.com/sailenceresw/khabardar/issues/3) SimpleAccount derivation,
+[#4](https://github.com/sailenceresw/khabardar/issues/4) UserOp receipt polling,
+[#7](https://github.com/sailenceresw/khabardar/issues/7) evidence upload in compose,
+[#8](https://github.com/sailenceresw/khabardar/issues/8) CI,
+[#31](https://github.com/sailenceresw/khabardar/issues/31) / [#32](https://github.com/sailenceresw/khabardar/issues/32) mobile UI polish.
 
 **The three that matter most**, because without them nothing else is safe to use:
 
