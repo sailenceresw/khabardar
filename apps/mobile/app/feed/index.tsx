@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
   REPORT_CATEGORY_KEYS,
@@ -10,8 +10,19 @@ import {
   type FeedReport,
 } from "@khabardar/shared";
 import { getNetworkIndex, resolveFeedReports, type FeedQuery } from "../../src/feed";
-import { Body, Card, Screen, TierBadge, Title } from "../../src/ui";
-import { colors, radius, spacing } from "../../src/theme";
+import {
+  Body,
+  Card,
+  Chip,
+  EmptyState,
+  Field,
+  LoadingBlock,
+  Screen,
+  SectionHeader,
+  TierBadge,
+  Title,
+} from "../../src/ui";
+import { colors, spacing } from "../../src/theme";
 import { t } from "../../src/i18n";
 
 const CATEGORIES = Object.values(ReportCategory).filter(
@@ -45,9 +56,6 @@ export default function FeedScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Structural filters run at the index (and would run server-side against
-      // a real indexer); text search runs locally because bodies are only
-      // readable after decryption.
       const query: FeedQuery = { category, tier, region: region.trim() || undefined, since };
       const rows = await getNetworkIndex().list(query);
       setReports(await resolveFeedReports(rows));
@@ -65,8 +73,6 @@ export default function FeedScreen() {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return reports;
-    // Locked reports can never match a text query — we cannot read them, and
-    // guessing from metadata would be misleading.
     return reports.filter((r) => (r.body ?? "").toLowerCase().includes(q));
   }, [reports, search]);
 
@@ -88,10 +94,8 @@ export default function FeedScreen() {
       <Body dim>{t("feed.subtitle")}</Body>
 
       <Card>
-        <TextInput
-          style={styles.input}
+        <Field
           placeholder={t("feed.searchPlaceholder")}
-          placeholderTextColor={colors.textDim}
           value={search}
           onChangeText={setSearch}
           autoCapitalize="none"
@@ -99,13 +103,9 @@ export default function FeedScreen() {
 
         <Body dim>{t("feed.filterCategory")}</Body>
         <View style={styles.chips}>
-          <FilterChip
-            label={t("feed.all")}
-            active={category === undefined}
-            onPress={() => setCategory(undefined)}
-          />
+          <Chip label={t("feed.all")} active={category === undefined} onPress={() => setCategory(undefined)} />
           {CATEGORIES.map((c) => (
-            <FilterChip
+            <Chip
               key={c}
               label={t(REPORT_CATEGORY_KEYS[c])}
               active={category === c}
@@ -116,9 +116,9 @@ export default function FeedScreen() {
 
         <Body dim>{t("feed.filterTier")}</Body>
         <View style={styles.chips}>
-          <FilterChip label={t("feed.all")} active={tier === undefined} onPress={() => setTier(undefined)} />
+          <Chip label={t("feed.all")} active={tier === undefined} onPress={() => setTier(undefined)} />
           {TIER_FILTERS.map((tr) => (
-            <FilterChip
+            <Chip
               key={tr}
               label={t(`tier.${TIER_SLUGS[tr]}`)}
               active={tier === tr}
@@ -129,12 +129,12 @@ export default function FeedScreen() {
 
         <Body dim>{t("feed.filterDate")}</Body>
         <View style={styles.chips}>
-          <FilterChip label={t("feed.anyTime")} active={since === undefined} onPress={() => setSince(undefined)} />
+          <Chip label={t("feed.anyTime")} active={since === undefined} onPress={() => setSince(undefined)} />
           {DATE_RANGES.map((d) => {
             const value = Date.now() - d.ms;
             const active = since !== undefined && Math.abs(since - value) < 60_000;
             return (
-              <FilterChip
+              <Chip
                 key={d.key}
                 label={t(`feed.range.${d.key}`)}
                 active={active}
@@ -144,11 +144,9 @@ export default function FeedScreen() {
           })}
         </View>
 
-        <Body dim>{t("feed.filterRegion")}</Body>
-        <TextInput
-          style={styles.input}
+        <Field
+          label={t("feed.filterRegion")}
           placeholder={t("feed.regionPlaceholder")}
-          placeholderTextColor={colors.textDim}
           value={region}
           onChangeText={setRegion}
           autoCapitalize="none"
@@ -163,16 +161,12 @@ export default function FeedScreen() {
       </Card>
 
       {loading ? (
-        <Card>
-          <ActivityIndicator color={colors.accent} />
-        </Card>
+        <LoadingBlock label={t("common.loading")} />
       ) : visible.length === 0 ? (
-        <Card>
-          <Body dim>{t("feed.empty")}</Body>
-        </Card>
+        <EmptyState title={t("feed.empty")} />
       ) : (
         <>
-          <Body dim>{t("feed.resultCount", { count: visible.length })}</Body>
+          <SectionHeader title={t("feed.resultCount", { count: visible.length })} />
           {visible.map((r) => (
             <Pressable key={r.onChainReportId} onPress={() => router.push(`/feed/${r.onChainReportId}`)}>
               <Card>
@@ -192,10 +186,10 @@ export default function FeedScreen() {
                 )}
 
                 <View style={styles.row}>
-                  <Body dim>
+                  <Text style={styles.meta}>
                     {r.reporterCodename} · {r.coarseGeohash || "—"} ·{" "}
                     {t("feed.corroborations", { count: r.corroborations })}
-                  </Body>
+                  </Text>
                   {r.demo ? <Text style={styles.demoTag}>{t("feed.sample")}</Text> : null}
                 </View>
               </Card>
@@ -203,29 +197,7 @@ export default function FeedScreen() {
           ))}
         </>
       )}
-
-      <Pressable onPress={() => router.push("/")}>
-        <Text style={styles.link}>{t("feed.backHome")}</Text>
-      </Pressable>
     </Screen>
-  );
-}
-
-function FilterChip({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress}>
-      <View style={[styles.chip, active && styles.chipActive]}>
-        <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
-      </View>
-    </Pressable>
   );
 }
 
@@ -234,26 +206,9 @@ function truncate(s: string, n: number): string {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.sm },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.sm },
-  chip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-  },
-  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  chipText: { color: colors.textDim, fontSize: 13 },
-  chipTextActive: { color: colors.accentText, fontWeight: "600" },
+  meta: { color: colors.textMuted, fontSize: 12, flex: 1 },
   demoTag: { color: colors.textDim, fontSize: 11, fontStyle: "italic" },
-  link: { color: colors.info, fontSize: 15, fontWeight: "600", textAlign: "center" },
-  input: {
-    color: colors.text,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.sm,
-    padding: spacing.md,
-    fontSize: 15,
-    marginBottom: spacing.sm,
-  },
+  link: { color: colors.info, fontSize: 14, fontWeight: "600" },
 });
