@@ -7,26 +7,35 @@
     "createIdentity": "Create anonymous identity",
     "creating": "Creating identity…",
     "yourCodename": "Your codename",
-    "continue": "Continue"
+    "continue": "Continue",
+    "step1": "A key is created on this device — no signup, no email.",
+    "step2": "You write a report and attach evidence. Everything is encrypted here first.",
+    "step3": "Only a fingerprint goes on-chain. Your name never does.",
+    "readyHint": "Write down your recovery phrase in Settings when you can. It is the only way to restore this identity."
   },
   "home": {
     "title": "Reports",
-    "empty": "No reports yet. Anything you compose stays encrypted on this device until you submit it.",
+    "empty": "Anything you compose stays encrypted on this device until you submit it.",
+    "emptyTitle": "No reports yet",
     "newReport": "New report",
     "karma": "Karma",
-    "codename": "Codename"
+    "karmaHint": "Local count of reports you have anchored. On-chain karma comes later.",
+    "codename": "Codename",
+    "myReports": "My reports"
   },
   "compose": {
     "title": "New report",
     "categoryLabel": "Category",
     "bodyLabel": "What happened?",
     "bodyPlaceholder": "Describe the incident. Do not include your own name or details that identify you.",
+    "bodyMin": "Add at least %{min} characters so the report is useful.",
     "entityLabel": "Office or official involved (optional)",
     "entityPlaceholder": "e.g. Block Development Office, Sitapur",
     "entityHelp": "This name stays on your device. Only a blinded tag is published, so other reports about the same office can be grouped with yours without naming it on the blockchain.",
     "locationLabel": "Area (coarse)",
     "locationPlaceholder": "e.g. tsj9 — a 4-character geohash, city level only",
     "locationHelp": "Only a coarse area code is recorded — never your precise location.",
+    "locationInvalid": "Use up to 4 geohash characters (letters and digits).",
     "evidenceLabel": "Evidence",
     "addPhoto": "Add photo",
     "evidenceNote": "Metadata (EXIF, GPS, device info) is stripped and the file is encrypted before it is stored.",
