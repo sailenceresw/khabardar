@@ -141,7 +141,7 @@ export class PimlicoRelayer implements GaslessRelayer {
     });
 
     // Partial UserOp — gas fields filled by the paymaster response.
-    const userOp partial: Record<string, unknown> = {
+    const userOp: Record<string, unknown> = {
       sender,
       nonce: `0x${nonce.toString(16)}`,
       callData,
