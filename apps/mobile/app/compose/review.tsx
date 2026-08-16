@@ -16,6 +16,7 @@ export default function ReviewScreen() {
 
   const [report, setReport] = useState<AnonymousReport | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sponsor, setSponsor] = useState<string | null>(null);
 
@@ -29,13 +30,26 @@ export default function ReviewScreen() {
     if (!report) return;
     setSubmitting(true);
     setError(null);
+    setProgressLabel(null);
 
     const submittingReport: AnonymousReport = { ...report, status: "submitting" };
     await upsertReport(submittingReport);
 
     try {
-      const { reportHash, cid, relay, sponsorName, evidence } = await publishReport(report);
+      const { reportHash, cid, relay, sponsorName, evidence } = await publishReport(report, {
+        onEvidenceProgress: ({ current, total }) => {
+          if (total <= 1) {
+            setProgressLabel(t("review.uploadingEvidenceOne"));
+          } else {
+            setProgressLabel(t("review.uploadingEvidence", { current, total }));
+          }
+        },
+      });
+
+      // Evidence finished — now the chain anchor step.
+      setProgressLabel(t("review.submitting"));
       setSponsor(sponsorName);
+
       const anchored: AnonymousReport = {
         ...report,
         status: "anchored",
@@ -54,6 +68,7 @@ export default function ReviewScreen() {
       await upsertReport({ ...report, status: "failed" });
       setError(e instanceof Error ? e.message : String(e));
       setSubmitting(false);
+      setProgressLabel(null);
     }
   }
 
@@ -95,7 +110,11 @@ export default function ReviewScreen() {
       ) : null}
 
       <Button
-        label={submitting ? t("review.submitting") : t("review.submit")}
+        label={
+          submitting
+            ? progressLabel ?? t("review.submitting")
+            : t("review.submit")
+        }
         onPress={submit}
         loading={submitting}
       />
