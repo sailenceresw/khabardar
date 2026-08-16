@@ -86,8 +86,51 @@ export async function uploadEvidence(item: EvidenceItem): Promise<EvidenceItem> 
   return { ...item, cid: put.cid };
 }
 
-export async function uploadAllEvidence(items: EvidenceItem[]): Promise<EvidenceItem[]> {
-  return Promise.all(items.map(uploadEvidence));
+export type UploadProgress = {
+  current: number;
+  total: number;
+  itemId: string;
+};
+
+/**
+ * Upload every evidence item to the content layer.
+ *
+ * Sequential (not Promise.all) so progress is meaningful on slow connections
+ * and so one failed blob does not leave the others half-uploaded with no
+ * record of which ones succeeded.
+ *
+ * If any item fails, the whole call throws after attempting the rest. Callers
+ * must not submit a report whose evidence array is missing CIDs — a partial
+ * set would silently drop photos from every other reader's view.
+ */
+export async function uploadAllEvidence(
+  items: EvidenceItem[],
+  onProgress?: (p: UploadProgress) => void
+): Promise<EvidenceItem[]> {
+  if (items.length === 0) return [];
+
+  const results: EvidenceItem[] = [];
+  const failures: { id: string; error: string }[] = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    onProgress?.({ current: i + 1, total: items.length, itemId: item.id });
+    try {
+      results.push(await uploadEvidence(item));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      failures.push({ id: item.id, error: msg });
+    }
+  }
+
+  if (failures.length > 0) {
+    const detail = failures.map((f) => `${f.id}: ${f.error}`).join("; ");
+    throw new Error(
+      `Failed to upload ${failures.length} of ${items.length} evidence items. ${detail}`
+    );
+  }
+
+  return results;
 }
 
 export async function deleteEvidence(item: EvidenceItem): Promise<void> {
