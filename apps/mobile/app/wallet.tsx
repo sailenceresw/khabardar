@@ -70,13 +70,9 @@ export default function WalletScreen() {
       <Body dim>{t("wallet.intro")}</Body>
 
       {/* Warning stays ABOVE any connect control — anonymity trade-off, not a convenience toggle. */}
-      <Notice tone="danger">
-        <Text style={styles.warnTitle}>{t("wallet.warningTitle")}</Text>
-        {"\n"}
-        {t("wallet.warningBody")}
-      </Notice>
-
-      <Card>
+      <Card style={{ borderColor: colors.danger, backgroundColor: colors.dangerMuted }}>
+        <Title>{t("wallet.warningTitle")}</Title>
+        <Body>{t("wallet.warningBody")}</Body>
         <Caption>{t("wallet.risk1")}</Caption>
         <Caption>{t("wallet.risk2")}</Caption>
         <Caption>{t("wallet.risk3")}</Caption>
@@ -135,7 +131,6 @@ export default function WalletScreen() {
 }
 
 const styles = StyleSheet.create({
-  warnTitle: { color: colors.danger, fontWeight: "700", fontSize: 15 },
   uriBox: {
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.sm,
