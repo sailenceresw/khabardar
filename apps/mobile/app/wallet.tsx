@@ -8,7 +8,17 @@ import {
   isWalletConnectConfigured,
   type WalletSession,
 } from "../src/wallet";
-import { Body, Button, Card, Mono, Screen, Title } from "../src/ui";
+import {
+  Body,
+  Button,
+  Card,
+  Caption,
+  Mono,
+  Notice,
+  Screen,
+  SectionHeader,
+  Title,
+} from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
@@ -48,6 +58,7 @@ export default function WalletScreen() {
     try {
       await disconnectWallet();
       setSession(null);
+      setAcknowledged(false);
     } finally {
       setBusy(false);
     }
@@ -56,28 +67,23 @@ export default function WalletScreen() {
   return (
     <Screen>
       <Title>{t("wallet.title")}</Title>
+      <Body dim>{t("wallet.intro")}</Body>
 
-      <Card>
-        <Body dim>{t("wallet.intro")}</Body>
-      </Card>
-
-      {/* The warning is deliberately unmissable and sits ABOVE the connect
-          control — connecting is a real anonymity trade-off, not a convenience
-          toggle. */}
-      <Card style={{ borderColor: colors.danger }}>
+      {/* Warning stays ABOVE any connect control — anonymity trade-off, not a convenience toggle. */}
+      <Card style={{ borderColor: colors.danger, backgroundColor: colors.dangerMuted }}>
         <Title>{t("wallet.warningTitle")}</Title>
         <Body>{t("wallet.warningBody")}</Body>
-        <View style={styles.bullets}>
-          <Body>• {t("wallet.risk1")}</Body>
-          <Body>• {t("wallet.risk2")}</Body>
-          <Body>• {t("wallet.risk3")}</Body>
-        </View>
+        <Caption>{t("wallet.risk1")}</Caption>
+        <Caption>{t("wallet.risk2")}</Caption>
+        <Caption>{t("wallet.risk3")}</Caption>
         <Body dim>{t("wallet.recommendation")}</Body>
       </Card>
 
+      <SectionHeader title={session ? t("wallet.connectedAs") : t("wallet.connect")} />
+
       {session ? (
-        <Card>
-          <Body dim>{t("wallet.connectedAs")}</Body>
+        <Card style={{ borderColor: colors.accent }}>
+          <Caption>{t("wallet.usingWallet")}</Caption>
           <Mono>{session.address}</Mono>
           {session.peerName ? <Body dim>{session.peerName}</Body> : null}
           <Body dim>{t("wallet.connectedNote")}</Body>
@@ -89,9 +95,7 @@ export default function WalletScreen() {
           />
         </Card>
       ) : !configured ? (
-        <Card>
-          <Body dim>{t("wallet.notConfigured")}</Body>
-        </Card>
+        <Notice tone="warn">{t("wallet.notConfigured")}</Notice>
       ) : (
         <Card>
           {!acknowledged ? (
@@ -105,7 +109,7 @@ export default function WalletScreen() {
               <Button label={t("wallet.connect")} onPress={connect} loading={busy} />
               {uri ? (
                 <>
-                  <Body dim>{t("wallet.scanUri")}</Body>
+                  <Caption>{t("wallet.scanUri")}</Caption>
                   <ScrollView horizontal style={styles.uriBox}>
                     <Text selectable style={styles.uriText}>
                       {uri}
@@ -115,26 +119,29 @@ export default function WalletScreen() {
               ) : null}
             </>
           )}
-          {error ? <Body>{error}</Body> : null}
+          {error ? <Notice tone="danger">{error}</Notice> : null}
         </Card>
       )}
 
-      <Card>
-        <Body dim>{t("wallet.defaultNote")}</Body>
-      </Card>
+      <Notice tone="info">{t("wallet.defaultNote")}</Notice>
 
-      <Button label={t("common.back")} onPress={() => router.back()} variant="secondary" />
+      <Button label={t("common.back")} onPress={() => router.back()} variant="ghost" />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  bullets: { gap: spacing.xs, marginVertical: spacing.sm },
   uriBox: {
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: spacing.sm,
-    maxHeight: 60,
+    maxHeight: 64,
   },
-  uriText: { color: colors.textDim, fontFamily: Platform.OS === "web" ? "monospace" : undefined, fontSize: 11 },
+  uriText: {
+    color: colors.textDim,
+    fontFamily: Platform.OS === "web" ? "monospace" : undefined,
+    fontSize: 11,
+  },
 });
