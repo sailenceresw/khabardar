@@ -55,6 +55,8 @@
     "anchored": "Anchored on-chain",
     "failed": "Submission failed",
     "txHash": "Transaction",
+    "userOpHash": "UserOperation",
+    "pendingNote": "Waiting for the bundler to include this on Linea. You can leave this screen — the operation is recorded and can be retried if it times out.",
     "reportHash": "Report fingerprint",
     "onChainId": "On-chain ID",
     "viewOnExplorer": "View on Lineascan",

@@ -2,7 +2,9 @@ import { MockRelayer } from "./mockRelayer";
 import { PimlicoRelayer } from "./pimlicoRelayer";
 import type { GaslessRelayer } from "./types";
 
-export type { GaslessRelayer, RelayResult, SubmitReportParams } from "./types";
+export type { GaslessRelayer, RelayResult, RelayStatus, SubmitReportParams } from "./types";
+export { savePendingOp, loadPendingOp, clearPendingOp, listPendingOps } from "./pendingOps";
+export type { PendingUserOp } from "./pendingOps";
 
 let instance: GaslessRelayer | null = null;
 
