@@ -6,7 +6,7 @@ import { publicKeyring, wrappedKeyring } from "./content/contentKeys";
 import { DEMO_RECIPIENTS } from "./content/recipients";
 import type { StoredBundle } from "./content/types";
 import { entityTagFor } from "./entityTag";
-import { uploadAllEvidence } from "./evidence";
+import { uploadAllEvidence, type UploadProgress } from "./evidence";
 import { appendMirrorRow } from "./feed/localChainMirror";
 import { getRelayer, type RelayResult } from "./relayer";
 import { getActiveSigner } from "./signer";
@@ -34,6 +34,11 @@ export interface PublishResult {
   sponsorName: string | null;
 }
 
+export interface PublishOptions {
+  /** Called once per evidence item as it is uploaded to the content layer. */
+  onEvidenceProgress?: (p: UploadProgress) => void;
+}
+
 /**
  * The end-to-end publish path:
  *   1. Build the canonical bundle (body + evidence fingerprints).
@@ -47,12 +52,17 @@ export interface PublishResult {
  * can recompute the hash and confirm it matches the on-chain anchor — that is
  * what makes tampering detectable after the fact.
  */
-export async function publishReport(report: AnonymousReport): Promise<PublishResult> {
+export async function publishReport(
+  report: AnonymousReport,
+  options: PublishOptions = {}
+): Promise<PublishResult> {
   const signer = await getActiveSigner();
 
   // 1. Push encrypted evidence blobs to the content layer first, so the bundle
   // can point at them. Their bytes were already ciphertext before this call.
-  const evidence = await uploadAllEvidence(report.evidence);
+  // Sequential + progress so large photos on bad connections stay visible to the user,
+  // and so a single failure never silently drops evidence from the submitted report.
+  const evidence = await uploadAllEvidence(report.evidence, options.onEvidenceProgress);
 
   // 2. Canonical bundle. Evidence contributes its hash and pointer — never its bytes.
   const bundle: ReportBundle = {
