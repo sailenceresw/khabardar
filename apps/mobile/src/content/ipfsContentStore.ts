@@ -11,16 +11,21 @@ import type { ContentStore, PutResult, StoredBundle } from "./types";
  * publishes it (Public reports) or wraps it to a named recipient
  * (JournalistsOnly).
  *
- * What a real setup needs (see README "Content layer"):
+ * What a real setup needs (see README "Content layer" / issue #6):
  *  - EXPO_PUBLIC_CONTENT_STORE=ipfs
  *  - EXPO_PUBLIC_IPFS_API_URL     — pinning endpoint, e.g. https://api.web3.storage/upload
  *  - EXPO_PUBLIC_IPFS_API_TOKEN   — service token for that endpoint
  *  - EXPO_PUBLIC_IPFS_GATEWAY_URL — read gateway, e.g. https://w3s.link/ipfs
  *
- * Operational caveat worth planning for: pinning services are a censorship and
- * correlation chokepoint. A production deployment should pin to more than one
- * provider, and route uploads over Tor so the upload IP is not linkable to the
- * reporter. Neither is wired here.
+ * Validation checklist (#6):
+ *  1. put() a real encrypted bundle → receive a CID
+ *  2. get() that CID through the gateway → decrypt → integrity check vs on-chain hash
+ *  3. Gateway returning garbage → get() returns null ("unavailable"), never throws
+ *  4. Swapped bundle → feed integrity check shows the fingerprint mismatch warning
+ *
+ * Operational caveat: pinning services are a censorship and correlation
+ * chokepoint. Production should pin to more than one provider and route uploads
+ * over Tor. Neither is wired here.
  */
 export class IpfsContentStore implements ContentStore {
   readonly name = "ipfs";
@@ -46,28 +51,43 @@ export class IpfsContentStore implements ContentStore {
     });
 
     if (!res.ok) {
-      throw new Error(`IPFS put failed: ${res.status} ${await res.text()}`);
+      const detail = await res.text().catch(() => "");
+      throw new Error(`IPFS put failed: ${res.status} ${detail.slice(0, 300)}`);
     }
 
-    const json = (await res.json()) as { cid?: string; Hash?: string; value?: { cid?: string } };
+    let json: { cid?: string; Hash?: string; value?: { cid?: string } };
+    try {
+      json = (await res.json()) as typeof json;
+    } catch {
+      throw new Error("IPFS put failed: response was not JSON");
+    }
+
     // Different providers name this field differently.
     const cid = json.cid ?? json.Hash ?? json.value?.cid;
-    if (!cid) throw new Error("IPFS put failed: no CID in response");
+    if (!cid || typeof cid !== "string") {
+      throw new Error("IPFS put failed: no CID in response");
+    }
 
     return { cid, sizeBytes: body.length, simulated: false };
   }
 
   async get(cid: string): Promise<StoredBundle | null> {
-    const res = await fetch(`${this.config.gatewayUrl}/${cid}`);
-    if (res.status === 404) return null;
-    if (!res.ok) return null;
+    // A gateway is untrusted. Any failure mode (network, 404, non-JSON,
+    // well-formed JSON that is not a bundle) degrades to null so the feed can
+    // show "unavailable" instead of crashing the reader. Integrity of a
+    // well-formed bundle is checked separately against the on-chain hash in
+    // feed/resolve.ts — a swapped blob trips the fingerprint warning there.
+    try {
+      const base = this.config.gatewayUrl.replace(/\/$/, "");
+      const res = await fetch(`${base}/${cid}`);
+      if (!res.ok) return null;
 
-    // A gateway is untrusted: malformed or non-bundle responses degrade to
-    // "unavailable" rather than throwing, so a bad gateway cannot crash the
-    // reader. Integrity of well-formed bundles is checked separately against
-    // the on-chain hash in feed/resolve.ts.
-    const bundle = safeJsonParse<StoredBundle>(await res.text());
-    if (!bundle || !bundle.blob || !bundle.keyring) return null;
-    return bundle;
+      const text = await res.text();
+      const bundle = safeJsonParse<StoredBundle>(text);
+      if (!bundle || !bundle.blob || !bundle.keyring) return null;
+      return bundle;
+    } catch {
+      return null;
+    }
   }
 }

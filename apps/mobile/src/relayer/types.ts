@@ -24,11 +24,18 @@ export interface SubmitReportParams {
   signer: ReportSigner;
 }
 
+export type RelayStatus = "pending" | "anchored" | "failed";
+
 export interface RelayResult {
+  /** Bundle/tx hash once included; may be the userOpHash while still pending. */
   txHash: string;
+  /** ERC-4337 userOpHash — useful for receipt polling and resume. */
+  userOpHash?: string;
   onChainReportId: number;
   explorerUrl: string;
   simulated: boolean;
+  /** pending = submitted but not yet included; anchored = receipt seen; failed = timed out / reverted. */
+  status?: RelayStatus;
 }
 
 export interface GaslessRelayer {

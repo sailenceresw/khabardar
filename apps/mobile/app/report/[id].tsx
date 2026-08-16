@@ -20,7 +20,12 @@ export default function ReportStatusScreen() {
 
   if (!report) return <Screen scroll={false}><Body dim> </Body></Screen>;
 
-  const tone = { draft: "dim", submitting: "info", anchored: "success", failed: "danger" } as const;
+  const tone = {
+    draft: "dim",
+    submitting: "info",
+    anchored: "success",
+    failed: "danger",
+  } as const;
 
   return (
     <Screen>
@@ -37,21 +42,28 @@ export default function ReportStatusScreen() {
           <Mono>{report.reportHash}</Mono>
           {report.txHash ? (
             <>
-              <Body dim>{t("status.txHash")}</Body>
+              <Body dim>
+                {report.status === "submitting"
+                  ? t("status.userOpHash")
+                  : t("status.txHash")}
+              </Body>
               <Mono>{report.txHash}</Mono>
             </>
           ) : null}
-          {report.onChainReportId !== undefined ? (
+          {report.onChainReportId !== undefined && report.onChainReportId >= 0 ? (
             <Body dim>
               {t("status.onChainId")}: #{report.onChainReportId}
             </Body>
           ) : null}
-          {report.txHash ? (
+          {report.txHash && report.status === "anchored" ? (
             <Button
               label={t("status.viewOnExplorer")}
               variant="secondary"
               onPress={() => Linking.openURL(`${ACTIVE_CHAIN.explorerUrl}/tx/${report.txHash}`)}
             />
+          ) : null}
+          {report.status === "submitting" ? (
+            <Body dim>{t("status.pendingNote")}</Body>
           ) : null}
         </Card>
       ) : null}
