@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { StyleSheet, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 import {
   REPORT_CATEGORY_KEYS,
   TIER_SLUGS,
@@ -16,8 +16,21 @@ import {
   setModeratorMode,
   type ModerationDecision,
 } from "../src/moderation";
-import { Body, Button, Card, Screen, TierBadge, Title } from "../src/ui";
-import { colors, radius, spacing } from "../src/theme";
+import {
+  Body,
+  Button,
+  Card,
+  Caption,
+  EmptyState,
+  Field,
+  LoadingBlock,
+  Notice,
+  Screen,
+  SectionHeader,
+  TierBadge,
+  Title,
+} from "../src/ui";
+import { colors, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
 const QUEUE_TIERS = [
@@ -27,7 +40,6 @@ const QUEUE_TIERS = [
 ];
 
 export default function ModerationScreen() {
-  const router = useRouter();
   const [moderator, setModerator] = useState(false);
   const [reports, setReports] = useState<FeedReport[]>([]);
   const [log, setLog] = useState<ModerationDecision[]>([]);
@@ -47,8 +59,6 @@ export default function ModerationScreen() {
       setLog(decisions);
 
       const resolved = await resolveFeedReports(rows);
-      // The queue is everything not yet finally adjudicated, oldest first —
-      // a report that has waited longest should be seen first.
       setReports(
         resolved
           .filter((r) => QUEUE_TIERS.includes(r.tier) && !r.demo)
@@ -85,31 +95,22 @@ export default function ModerationScreen() {
   return (
     <Screen>
       <Title>{t("moderation.title")}</Title>
+      <Body dim>{t("moderation.intro")}</Body>
 
-      <Card>
-        <Body dim>{t("moderation.intro")}</Body>
-      </Card>
-
-      <Card style={{ borderColor: colors.info }}>
-        <Body dim>{t("moderation.devModeNote")}</Body>
-        <Button
-          label={moderator ? t("moderation.leaveModeratorMode") : t("moderation.enterModeratorMode")}
-          onPress={toggleModerator}
-          variant="secondary"
-        />
-      </Card>
+      <Notice tone="info">{t("moderation.devModeNote")}</Notice>
+      <Button
+        label={moderator ? t("moderation.leaveModeratorMode") : t("moderation.enterModeratorMode")}
+        onPress={toggleModerator}
+        variant={moderator ? "danger" : "secondary"}
+      />
 
       {loading ? (
-        <Card>
-          <ActivityIndicator color={colors.accent} />
-        </Card>
+        <LoadingBlock label={t("common.loading")} />
       ) : reports.length === 0 ? (
-        <Card>
-          <Body dim>{t("moderation.queueEmpty")}</Body>
-        </Card>
+        <EmptyState title={t("moderation.queueEmpty")} />
       ) : (
         <>
-          <Body dim>{t("moderation.queueCount", { count: reports.length })}</Body>
+          <SectionHeader title={t("moderation.queueCount", { count: reports.length })} />
           {reports.map((r) => (
             <Card key={r.onChainReportId}>
               <View style={styles.row}>
@@ -127,23 +128,21 @@ export default function ModerationScreen() {
                 <Body>{r.body}</Body>
               )}
 
-              <Body dim>
+              <Caption>
                 {r.reporterCodename} · {r.coarseGeohash || "—"} ·{" "}
                 {t("feed.corroborations", { count: r.corroborations })}
-              </Body>
+              </Caption>
 
-              <Body dim>
+              <Caption>
                 {r.integrityVerified
                   ? `✅ ${t("feed.integrityOk")}`
                   : `⚠️ ${t("feed.integrityFail")}`}
-              </Body>
+              </Caption>
 
               {moderator ? (
                 <>
-                  <TextInput
-                    style={styles.input}
+                  <Field
                     placeholder={t("moderation.reasonPlaceholder")}
-                    placeholderTextColor={colors.textDim}
                     value={reasons[r.onChainReportId] ?? ""}
                     onChangeText={(v) => setReasons((p) => ({ ...p, [r.onChainReportId]: v }))}
                   />
@@ -176,7 +175,7 @@ export default function ModerationScreen() {
                   </View>
                 </>
               ) : (
-                <Body dim>{t("moderation.readOnly")}</Body>
+                <Caption>{t("moderation.readOnly")}</Caption>
               )}
             </Card>
           ))}
@@ -185,20 +184,16 @@ export default function ModerationScreen() {
 
       {log.length > 0 ? (
         <Card>
-          <Body dim>{t("moderation.auditLog")}</Body>
+          <SectionHeader title={t("moderation.auditLog")} />
           {log.slice(0, 8).map((d, i) => (
-            <Body key={`${d.reportId}-${d.decidedAt}-${i}`} dim>
+            <Caption key={`${d.reportId}-${d.decidedAt}-${i}`}>
               #{d.reportId}: {t(`tier.${TIER_SLUGS[d.fromTier]}`)} → {t(`tier.${TIER_SLUGS[d.toTier]}`)}
               {d.reason ? ` — ${d.reason}` : ""}
-            </Body>
+            </Caption>
           ))}
           <Body dim>{t("moderation.auditNote")}</Body>
         </Card>
       ) : null}
-
-      <Pressable onPress={() => router.push("/")}>
-        <Text style={styles.link}>{t("feed.backHome")}</Text>
-      </Pressable>
     </Screen>
   );
 }
@@ -207,13 +202,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   actions: { flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" },
   flex: { flex: 1, minWidth: 100 },
-  link: { color: colors.info, fontSize: 15, fontWeight: "600", textAlign: "center" },
-  input: {
-    color: colors.text,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.sm,
-    padding: spacing.md,
-    fontSize: 14,
-    marginTop: spacing.sm,
-  },
 });
