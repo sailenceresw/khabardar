@@ -44,6 +44,8 @@
     "gasNote": "Submission is free — gas is sponsored. You do not need any cryptocurrency.",
     "submit": "Submit anonymously",
     "submitting": "Anchoring on Linea…",
+    "uploadingEvidence": "Uploading evidence %{current} of %{total}…",
+    "uploadingEvidenceOne": "Uploading evidence…",
     "sponsoredBy": "Gas for reports in this area is sponsored by %{name}."
   },
   "status": {
