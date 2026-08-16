@@ -17,7 +17,7 @@ measurable governance outcome, the numbers below are defensible.
 ## 1. Status: what is actually built
 
 Verified as of this commit: mobile typecheck clean, 23/23 contract tests passing,
-headless end-to-end slice passing, full UI walkthrough exercised in-browser.
+headless end-to-end slice path present, UI walkthrough paths polished for mock mode.
 
 ### Completed and verified
 
@@ -30,7 +30,9 @@ headless end-to-end slice passing, full UI walkthrough exercised in-browser.
 | **Public feed** | Browse, read, and verify others' reports. Filters: category, verification tier, region prefix, date range. Free-text search over readable bodies. Locked-report handling for restricted bundles. Clearly-labelled fictional sample rows. |
 | **Moderation** | Working review queue, oldest-first. Start review / verify / reject with mandatory reason, local audit log. Moderators can change status but can never edit or delete a report. |
 | **Tip channel** | Real ECIES sealing to a chosen journalist/NGO public key, sealed payload to content store, sent-tips list with digests. |
-| **Gasless** | `GaslessRelayer` abstraction. Mock relayer (default, no credentials) performs real encoding and signing. Pimlico ERC-4337 relayer with every integration point wired and documented. |
+| **Gasless code path** | `GaslessRelayer` abstraction. Mock relayer (default, no credentials) performs real encoding and signing. Pimlico ERC-4337 relayer: counterfactual SimpleAccount derivation, UserOp construction with `initCode` when needed, receipt polling with pending persistence, status UI fields. **Not yet proven against live Sepolia.** |
+| **Evidence upload path** | Compose → sequential upload with progress + partial-failure handling → CIDs in bundle before hash. Wired in app code; live IPFS still needs a real provider (#6). |
+| **Mobile UI/UX** | Shared design system (`Chip`, `Field`, `Notice`, `EmptyState`, `LoadingBlock`, section headers). Polished home, onboarding, compose, feed, tips, moderation, org, settings. EN + HI for the new copy. Open polish left: recovery/wallet (#33), status presentation (#34). |
 | **Wallet option** | WalletConnect v2 as an explicitly non-default alternative signer, behind an unmissable anonymity-tradeoff warning and an acknowledgement gate. |
 | **Monetization scaffolding** | Organization account type (kind, plan, entitlements, accreditation) stored entirely separately from reporter identity. Sponsored gas pools with aggregate-only attribution. Entitlement-gated CSV/JSON corpus export. |
 | **i18n** | Full English + Hindi across every screen. |
@@ -39,12 +41,11 @@ headless end-to-end slice passing, full UI walkthrough exercised in-browser.
 
 | Area | Honest state |
 |---|---|
-| **Real chain submission** | Mock relayer is the default. Pimlico path is wired but has never run against live Sepolia — needs an API key and a funded sponsorship policy. `PimlicoRelayer` still uses the owner EOA as `sender`; counterfactual smart-account derivation is marked as integration point 1 and is unfinished. |
-| **Real content storage** | `IpfsContentStore` is written against a standard pin API but untested against a live provider. Mock store is the default. |
-| **Evidence to IPFS** | `uploadEvidence` exists and returns CIDs but is not yet called from the compose flow — evidence still resolves locally. |
-| **Feed at scale** | `ChainNetworkIndex` reads via `eth_getLogs`, which will not survive real volume. Needs a proper indexer. |
-| **Moderation authority** | Single moderator address on-chain; the in-app moderator toggle is a local dev affordance that grants nothing. Audit log is device-local, which is insufficient. |
-| **Org accreditation & billing** | Accreditation is a local flag with a dev toggle. No billing backend, no seat management, no API key issuance. |
+| **Real chain submission** | Mock relayer is still the default. Pimlico path is implemented in code (#3, #4 closed) but has **never run against live Sepolia** — needs deployer key (#2), API key, and a funded sponsorship policy scoped to `ReportRegistry` (#5). |
+| **Real content storage** | `IpfsContentStore` is written against a standard pin API but untested against a live provider (#6). Mock store is the default. |
+| **Feed at scale** | `ChainNetworkIndex` reads via `eth_getLogs`, which will not survive real volume. Needs a proper indexer (#15). |
+| **Moderation authority** | Single moderator address on-chain; the in-app moderator toggle is a local dev affordance that grants nothing. Audit log is device-local, which is insufficient (#16, #17). |
+| **Org accreditation & billing** | Accreditation is a local flag with a dev toggle. No billing backend, no seat management, no API key issuance (#23). |
 
 ### Not started
 
