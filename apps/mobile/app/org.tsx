@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { StyleSheet, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 import {
   ORG_KIND_KEYS,
   ORG_PLAN_KEYS,
@@ -16,15 +16,25 @@ import { devSetAccredited, getOrg, registerOrg, signOutOrg } from "../src/org";
 import { listPools } from "../src/sponsorPools";
 import { getNetworkIndex, resolveFeedReports } from "../src/feed";
 import { exportCsv, ExportNotEntitledError } from "../src/export";
-import { Body, Button, Card, Screen, Title } from "../src/ui";
-import { colors, radius, spacing } from "../src/theme";
+import {
+  Body,
+  Button,
+  Card,
+  Caption,
+  Chip,
+  Field,
+  Notice,
+  Screen,
+  SectionHeader,
+  Title,
+} from "../src/ui";
+import { colors, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
 const KINDS = Object.values(OrgKind);
 const PLANS = Object.values(OrgPlan);
 
 export default function OrgScreen() {
-  const router = useRouter();
   const [org, setOrg] = useState<Organization | null>(null);
   const [pools, setPools] = useState<SponsorPool[]>([]);
   const [busy, setBusy] = useState(false);
@@ -69,9 +79,7 @@ export default function OrgScreen() {
       const lines = csv.split("\n").length - 1;
       setNote(t("org.exportDone", { count: lines }));
     } catch (e) {
-      setNote(
-        e instanceof ExportNotEntitledError ? t("org.exportNotEntitled") : t("common.error")
-      );
+      setNote(e instanceof ExportNotEntitledError ? t("org.exportNotEntitled") : t("common.error"));
     } finally {
       setBusy(false);
     }
@@ -82,38 +90,32 @@ export default function OrgScreen() {
   return (
     <Screen>
       <Title>{t("org.title")}</Title>
-
-      <Card style={{ borderColor: colors.info }}>
-        <Body dim>{t("org.separationWarning")}</Body>
-      </Card>
+      <Notice tone="info">{t("org.separationWarning")}</Notice>
 
       {!org ? (
         <Card>
-          <Body dim>{t("org.registerTitle")}</Body>
-          <TextInput
-            style={styles.input}
+          <Caption>{t("org.registerTitle")}</Caption>
+          <Field
             placeholder={t("org.namePlaceholder")}
-            placeholderTextColor={colors.textDim}
             value={name}
             onChangeText={setName}
           />
-          <TextInput
-            style={styles.input}
+          <Field
             placeholder={t("org.emailPlaceholder")}
-            placeholderTextColor={colors.textDim}
             autoCapitalize="none"
             value={email}
             onChangeText={setEmail}
+            keyboardType="email-address"
           />
 
-          <Body dim>{t("org.kindLabel")}</Body>
+          <Caption>{t("org.kindLabel")}</Caption>
           <View style={styles.chips}>
             {KINDS.map((k) => (
               <Chip key={k} label={t(ORG_KIND_KEYS[k])} active={kind === k} onPress={() => setKind(k)} />
             ))}
           </View>
 
-          <Body dim>{t("org.planLabel")}</Body>
+          <Caption>{t("org.planLabel")}</Caption>
           <View style={styles.chips}>
             {PLANS.map((p) => (
               <Chip
@@ -131,8 +133,8 @@ export default function OrgScreen() {
         </Card>
       ) : (
         <>
-          <Card>
-            <Body dim>{t("org.signedInAs")}</Body>
+          <Card style={{ borderColor: org.accredited ? colors.success : colors.border }}>
+            <Caption>{t("org.signedInAs")}</Caption>
             <Title>{org.name}</Title>
             <Body dim>
               {t(ORG_KIND_KEYS[org.kind])} · {t(ORG_PLAN_KEYS[org.plan])}
@@ -144,7 +146,7 @@ export default function OrgScreen() {
           </Card>
 
           <Card>
-            <Body dim>{t("org.entitlements")}</Body>
+            <SectionHeader title={t("org.entitlements")} />
             <Body>
               {t("org.seats")}: {entitlements.seats}
             </Body>
@@ -163,23 +165,21 @@ export default function OrgScreen() {
           </Card>
 
           <Card>
-            <Body dim>{t("org.exportTitle")}</Body>
+            <Caption>{t("org.exportTitle")}</Caption>
             <Body dim>{t("org.exportNote")}</Body>
-            {note ? <Body>{note}</Body> : null}
+            {note ? <Notice tone={note.includes("Exported") || note.includes("निर्यात") ? "success" : "warn"}>{note}</Notice> : null}
             <Button label={t("org.export")} onPress={doExport} loading={busy} variant="secondary" />
           </Card>
 
-          <Card style={{ borderColor: colors.info }}>
-            <Body dim>{t("org.devAccreditNote")}</Body>
-            <Button
-              label={org.accredited ? t("org.devUnaccredit") : t("org.devAccredit")}
-              variant="secondary"
-              onPress={async () => {
-                await devSetAccredited(!org.accredited);
-                await load();
-              }}
-            />
-          </Card>
+          <Notice tone="info">{t("org.devAccreditNote")}</Notice>
+          <Button
+            label={org.accredited ? t("org.devUnaccredit") : t("org.devAccredit")}
+            variant="secondary"
+            onPress={async () => {
+              await devSetAccredited(!org.accredited);
+              await load();
+            }}
+          />
 
           <Button
             label={t("org.signOut")}
@@ -192,61 +192,28 @@ export default function OrgScreen() {
         </>
       )}
 
+      <SectionHeader title={t("org.poolsTitle")} />
       <Card>
-        <Body dim>{t("org.poolsTitle")}</Body>
         {pools.map((p) => (
           <View key={p.id} style={styles.poolRow}>
             <Body>{p.displayName}</Body>
-            <Body dim>
+            <Caption>
               {t("org.poolScope", { region: p.regionPrefix || t("org.nationwide") })} ·{" "}
               {t("org.poolFunded", { count: p.fundedCount })}
-            </Body>
-            <Body dim>
+            </Caption>
+            <Caption>
               ${p.spentUsd.toFixed(2)} / ${p.budgetUsd.toFixed(2)} ·{" "}
               {t("org.poolRemaining", { count: estimatedRemainingReports(p) })}
-            </Body>
+            </Caption>
           </View>
         ))}
         <Body dim>{t("org.poolsAttributionNote")}</Body>
       </Card>
-
-      <Pressable onPress={() => router.push("/")}>
-        <Text style={styles.link}>{t("feed.backHome")}</Text>
-      </Pressable>
     </Screen>
-  );
-}
-
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress}>
-      <View style={[styles.chip, active && styles.chipActive]}>
-        <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
-      </View>
-    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.sm },
-  chip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-  },
-  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  chipText: { color: colors.textDim, fontSize: 13 },
-  chipTextActive: { color: colors.accentText, fontWeight: "600" },
-  input: {
-    color: colors.text,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.sm,
-    padding: spacing.md,
-    fontSize: 15,
-    marginBottom: spacing.sm,
-  },
-  poolRow: { gap: 2, marginBottom: spacing.sm },
-  link: { color: colors.info, fontSize: 15, fontWeight: "600", textAlign: "center" },
+  poolRow: { gap: 2, marginBottom: spacing.md, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
 });

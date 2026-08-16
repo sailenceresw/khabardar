@@ -3,7 +3,7 @@ import { Alert, Platform, View, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useApp } from "../src/state/AppContext";
 import { panicDelete } from "../src/panic";
-import { Body, Button, Card, Screen, Title } from "../src/ui";
+import { Body, Button, Card, Notice, Screen, SectionHeader, Title } from "../src/ui";
 import { colors, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
@@ -40,8 +40,8 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
+      <SectionHeader title={t("settings.language")} />
       <Card>
-        <Body dim>{t("settings.language")}</Body>
         <View style={styles.row}>
           <View style={styles.flex}>
             <Button
@@ -60,27 +60,23 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
+      <SectionHeader title={t("recovery.title")} />
       <Card>
-        <Body dim>{t("recovery.title")}</Body>
-        <Button
-          label={t("recovery.open")}
-          variant="secondary"
-          onPress={() => router.push("/recovery")}
-        />
+        <Body dim>{t("recovery.explainer")}</Body>
+        <Button label={t("recovery.open")} variant="secondary" onPress={() => router.push("/recovery")} />
       </Card>
 
+      <SectionHeader title={t("wallet.title")} />
       <Card>
-        <Body dim>{t("wallet.title")}</Body>
-        <Button
-          label={t("wallet.open")}
-          variant="secondary"
-          onPress={() => router.push("/wallet")}
-        />
+        <Body dim>{t("wallet.defaultNote")}</Body>
+        <Button label={t("wallet.open")} variant="secondary" onPress={() => router.push("/wallet")} />
       </Card>
 
+      <SectionHeader title={t("settings.dangerZone")} />
       <Card style={{ borderColor: colors.danger }}>
         <Title>{t("settings.panicTitle")}</Title>
         <Body dim>{t("settings.panicExplainer")}</Body>
+        <Notice tone="danger">{t("settings.panicConfirmBody")}</Notice>
         <Button label={t("settings.panicButton")} variant="danger" onPress={confirmWipe} loading={wiping} />
       </Card>
     </Screen>
