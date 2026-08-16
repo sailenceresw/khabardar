@@ -84,6 +84,45 @@ export function Divider() {
   return <View style={styles.divider} />;
 }
 
+export function LoadingBlock({ label }: { label?: string }) {
+  return (
+    <Card style={styles.loadingCard}>
+      <ActivityIndicator color={colors.accent} />
+      {label ? <Caption>{label}</Caption> : null}
+    </Card>
+  );
+}
+
+export function Notice({
+  children,
+  tone = "info",
+}: {
+  children: React.ReactNode;
+  tone?: "info" | "danger" | "success" | "warn";
+}) {
+  const border =
+    tone === "danger"
+      ? colors.danger
+      : tone === "success"
+        ? colors.success
+        : tone === "warn"
+          ? colors.accent
+          : colors.info;
+  const bg =
+    tone === "danger"
+      ? colors.dangerMuted
+      : tone === "success"
+        ? colors.successMuted
+        : tone === "warn"
+          ? colors.accentMuted
+          : colors.infoMuted;
+  return (
+    <Card style={{ borderColor: border, backgroundColor: bg }}>
+      <Body dim>{children}</Body>
+    </Card>
+  );
+}
+
 export function EmptyState({
   title,
   body,
@@ -98,7 +137,7 @@ export function EmptyState({
       <Text style={styles.emptyTitle}>{title}</Text>
       {body ? <Body dim>{body}</Body> : null}
       {action ? (
-        <View style={{ marginTop: spacing.sm }}>
+        <View style={{ marginTop: spacing.sm, alignSelf: "stretch" }}>
           <Button label={action.label} onPress={action.onPress} />
         </View>
       ) : null}
@@ -194,10 +233,6 @@ export function Button({
   );
 }
 
-/**
- * Verification tier badge. Visual weight tracks credibility:
- * unverified must never read as endorsed; disputed must be unmistakable.
- */
 export function TierBadge({ tier }: { tier: VerificationTier }) {
   const map: Record<VerificationTier, { tone: "dim" | "info" | "success" | "danger"; key: string }> = {
     [VerificationTier.Unverified]: { tone: "dim", key: "tier.unverified" },
@@ -279,6 +314,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     marginVertical: spacing.xs,
   },
+  loadingCard: { alignItems: "center", paddingVertical: spacing.lg, gap: spacing.sm },
   emptyCard: { alignItems: "center", paddingVertical: spacing.lg },
   emptyTitle: {
     color: colors.text,
