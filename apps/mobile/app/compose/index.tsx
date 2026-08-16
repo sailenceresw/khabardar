@@ -12,13 +12,15 @@ import {
 import { useApp } from "../../src/state/AppContext";
 import { pickAndSecurePhoto, deleteEvidence } from "../../src/evidence";
 import { isValidCoarseGeohash, truncateGeohash } from "../../src/geo";
-import { Body, Button, Card, Screen } from "../../src/ui";
+import { Body, Button, Card, Chip, Screen } from "../../src/ui";
 import { colors, radius, spacing } from "../../src/theme";
 import { t } from "../../src/i18n";
 
 const CATEGORIES = Object.values(ReportCategory).filter(
   (v): v is ReportCategory => typeof v === "number"
 );
+
+const MIN_BODY = 20;
 
 export default function ComposeScreen() {
   const router = useRouter();
@@ -37,7 +39,7 @@ export default function ComposeScreen() {
     try {
       const item = await pickAndSecurePhoto();
       if (item) setEvidence((prev) => [...prev, item]);
-    } catch (e) {
+    } catch {
       const msg = t("common.error");
       Platform.OS === "web" ? window.alert(msg) : Alert.alert(msg);
     } finally {
@@ -64,7 +66,10 @@ export default function ComposeScreen() {
     };
   }
 
-  const valid = body.trim().length >= 20 && (geohash.trim() === "" || isValidCoarseGeohash(geohash.trim()));
+  const bodyLen = body.trim().length;
+  const bodyOk = bodyLen >= MIN_BODY;
+  const geoOk = geohash.trim() === "" || isValidCoarseGeohash(geohash.trim());
+  const valid = bodyOk && geoOk;
 
   async function saveDraft() {
     await upsertReport(buildReport());
@@ -83,13 +88,12 @@ export default function ComposeScreen() {
         <Body dim>{t("compose.categoryLabel")}</Body>
         <View style={styles.chips}>
           {CATEGORIES.map((c) => (
-            <Pressable key={c} onPress={() => setCategory(c)}>
-              <View style={[styles.chip, category === c && styles.chipActive]}>
-                <Text style={[styles.chipText, category === c && styles.chipTextActive]}>
-                  {t(REPORT_CATEGORY_KEYS[c])}
-                </Text>
-              </View>
-            </Pressable>
+            <Chip
+              key={c}
+              label={t(REPORT_CATEGORY_KEYS[c])}
+              active={category === c}
+              onPress={() => setCategory(c)}
+            />
           ))}
         </View>
       </Card>
@@ -98,13 +102,12 @@ export default function ComposeScreen() {
         <Body dim>{t("compose.visibilityLabel")}</Body>
         <View style={styles.chips}>
           {[Visibility.Public, Visibility.JournalistsOnly].map((v) => (
-            <Pressable key={v} onPress={() => setVisibility(v)}>
-              <View style={[styles.chip, visibility === v && styles.chipActive]}>
-                <Text style={[styles.chipText, visibility === v && styles.chipTextActive]}>
-                  {t(VISIBILITY_KEYS[v])}
-                </Text>
-              </View>
-            </Pressable>
+            <Chip
+              key={v}
+              label={t(VISIBILITY_KEYS[v])}
+              active={visibility === v}
+              onPress={() => setVisibility(v)}
+            />
           ))}
         </View>
         <Body dim>
@@ -115,16 +118,24 @@ export default function ComposeScreen() {
       </Card>
 
       <Card>
-        <Body dim>{t("compose.bodyLabel")}</Body>
+        <View style={styles.labelRow}>
+          <Body dim>{t("compose.bodyLabel")}</Body>
+          <Text style={[styles.counter, bodyOk ? styles.counterOk : styles.counterWarn]}>
+            {bodyLen}/{MIN_BODY}
+          </Text>
+        </View>
         <TextInput
           style={styles.textArea}
           multiline
           numberOfLines={6}
           placeholder={t("compose.bodyPlaceholder")}
-          placeholderTextColor={colors.textDim}
+          placeholderTextColor={colors.textMuted}
           value={body}
           onChangeText={setBody}
         />
+        {!bodyOk && bodyLen > 0 ? (
+          <Text style={styles.hint}>{t("compose.bodyMin", { min: MIN_BODY })}</Text>
+        ) : null}
       </Card>
 
       <Card>
@@ -132,7 +143,7 @@ export default function ComposeScreen() {
         <TextInput
           style={styles.input}
           placeholder={t("compose.entityPlaceholder")}
-          placeholderTextColor={colors.textDim}
+          placeholderTextColor={colors.textMuted}
           value={entityName}
           onChangeText={setEntityName}
         />
@@ -144,24 +155,28 @@ export default function ComposeScreen() {
         <TextInput
           style={styles.input}
           placeholder={t("compose.locationPlaceholder")}
-          placeholderTextColor={colors.textDim}
+          placeholderTextColor={colors.textMuted}
           autoCapitalize="none"
           value={geohash}
           onChangeText={setGeohash}
           maxLength={4}
         />
         <Body dim>{t("compose.locationHelp")}</Body>
+        {!geoOk ? <Text style={styles.hint}>{t("compose.locationInvalid")}</Text> : null}
       </Card>
 
       <Card>
-        <Body dim>{t("compose.evidenceLabel")}</Body>
+        <Body dim>
+          {t("compose.evidenceLabel")}
+          {evidence.length > 0 ? ` · ${evidence.length}` : ""}
+        </Body>
         {evidence.map((item) => (
           <View key={item.id} style={styles.evidenceRow}>
             <Body>
               📷 {(item.sizeBytes / 1024).toFixed(0)} KB — {item.sha256.slice(0, 12)}…
             </Body>
-            <Pressable onPress={() => removePhoto(item)}>
-              <Text style={{ color: colors.danger }}>✕</Text>
+            <Pressable onPress={() => removePhoto(item)} hitSlop={8}>
+              <Text style={{ color: colors.danger, fontWeight: "700" }}>✕</Text>
             </Pressable>
           </View>
         ))}
@@ -177,20 +192,17 @@ export default function ComposeScreen() {
 
 const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  chip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-  },
-  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  chipText: { color: colors.textDim, fontSize: 14 },
-  chipTextActive: { color: colors.accentText, fontWeight: "600" },
+  labelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  counter: { fontSize: 12, fontWeight: "600" },
+  counterOk: { color: colors.success },
+  counterWarn: { color: colors.textDim },
+  hint: { color: colors.danger, fontSize: 12 },
   textArea: {
     color: colors.text,
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: spacing.md,
     minHeight: 120,
     textAlignVertical: "top",
@@ -200,6 +212,8 @@ const styles = StyleSheet.create({
     color: colors.text,
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: spacing.md,
     fontSize: 15,
   },
