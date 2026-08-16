@@ -11,7 +11,19 @@ import {
 import { getNetworkIndex, resolveFeedReport } from "../../src/feed";
 import { updateMirrorRow } from "../../src/feed/localChainMirror";
 import { useApp } from "../../src/state/AppContext";
-import { Body, Button, Card, Mono, Screen, TierBadge, Title } from "../../src/ui";
+import {
+  Body,
+  Button,
+  Card,
+  Caption,
+  Divider,
+  LoadingBlock,
+  Mono,
+  Notice,
+  Screen,
+  TierBadge,
+  Title,
+} from "../../src/ui";
 import { colors, spacing } from "../../src/theme";
 import { t } from "../../src/i18n";
 
@@ -23,10 +35,16 @@ export default function FeedReportScreen() {
   const [report, setReport] = useState<FeedReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   async function load() {
-    const row = await getNetworkIndex().get(Number(id));
-    setReport(row ? await resolveFeedReport(row) : null);
+    setLoading(true);
+    try {
+      const row = await getNetworkIndex().get(Number(id));
+      setReport(row ? await resolveFeedReport(row) : null);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -34,21 +52,25 @@ export default function FeedReportScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  if (loading) {
+    return (
+      <Screen>
+        <LoadingBlock label={t("common.loading")} />
+      </Screen>
+    );
+  }
+
   if (!report) {
     return (
       <Screen>
-        <Body dim>{t("common.loading")}</Body>
+        <Notice tone="warn">{t("feed.unavailable")}</Notice>
+        <Button label={t("feed.backToFeed")} onPress={() => router.push("/feed")} variant="secondary" />
       </Screen>
     );
   }
 
   const isOwn = identity?.address?.toLowerCase() === report.reporter.toLowerCase();
 
-  /**
-   * Corroboration in mock mode updates the local mirror. With a real relayer
-   * this becomes a sponsored `corroborate(reportId)` call — the contract
-   * enforces one-per-account and blocks self-corroboration.
-   */
   async function corroborate() {
     if (!report) return;
     setBusy(true);
@@ -74,11 +96,7 @@ export default function FeedReportScreen() {
         <TierBadge tier={report.tier} />
       </View>
 
-      {report.demo ? (
-        <Card style={{ borderColor: colors.info }}>
-          <Body dim>{t("feed.sampleNotice")}</Body>
-        </Card>
-      ) : null}
+      {report.demo ? <Notice tone="info">{t("feed.sampleNotice")}</Notice> : null}
 
       <Card>
         {report.locked ? (
@@ -93,22 +111,33 @@ export default function FeedReportScreen() {
       </Card>
 
       <Card>
-        <Body dim>{t("feed.reporter")}</Body>
+        <Caption>{t("feed.reporter")}</Caption>
         <Body>{report.reporterCodename}</Body>
-        <Body dim>{t("feed.area")}</Body>
+        <Divider />
+        <Caption>{t("feed.area")}</Caption>
         <Body>{report.coarseGeohash || "—"}</Body>
-        <Body dim>{t("feed.submittedAt")}</Body>
+        <Divider />
+        <Caption>{t("feed.submittedAt")}</Caption>
         <Body>{new Date(report.timestamp).toLocaleString()}</Body>
         {report.evidenceCount !== undefined ? (
           <>
-            <Body dim>{t("compose.evidenceLabel")}</Body>
+            <Divider />
+            <Caption>{t("compose.evidenceLabel")}</Caption>
             <Body>{report.evidenceCount}</Body>
           </>
         ) : null}
       </Card>
 
-      <Card>
-        <Body dim>{t("feed.integrity")}</Body>
+      <Card
+        style={{
+          borderColor: report.demo
+            ? colors.border
+            : report.integrityVerified
+              ? colors.success
+              : colors.danger,
+        }}
+      >
+        <Caption>{t("feed.integrity")}</Caption>
         <Body>
           {report.demo
             ? t("feed.integritySample")
@@ -116,9 +145,9 @@ export default function FeedReportScreen() {
               ? `✅ ${t("feed.integrityOk")}`
               : `⚠️ ${t("feed.integrityFail")}`}
         </Body>
-        <Body dim>{t("status.reportHash")}</Body>
+        <Caption>{t("status.reportHash")}</Caption>
         <Mono>{report.reportHash}</Mono>
-        <Body dim>{t("feed.cid")}</Body>
+        <Caption>{t("feed.cid")}</Caption>
         <Mono>{report.cid}</Mono>
       </Card>
 
@@ -128,7 +157,7 @@ export default function FeedReportScreen() {
           {t("feed.threshold", { n: CORROBORATION_THRESHOLD })}
         </Body>
         <Body dim>{t("feed.corroborateHelp")}</Body>
-        {note ? <Body>{note}</Body> : null}
+        {note ? <Notice tone="success">{note}</Notice> : null}
         <Button
           label={t("feed.corroborate")}
           onPress={corroborate}
@@ -136,14 +165,19 @@ export default function FeedReportScreen() {
           disabled={isOwn || report.demo}
           variant="secondary"
         />
-        {isOwn ? <Body dim>{t("feed.cannotCorroborateOwn")}</Body> : null}
+        {isOwn ? <Caption>{t("feed.cannotCorroborateOwn")}</Caption> : null}
       </Card>
 
-      <Button label={t("feed.backToFeed")} onPress={() => router.push("/feed")} variant="secondary" />
+      <Button label={t("feed.backToFeed")} onPress={() => router.push("/feed")} variant="ghost" />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.sm },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
 });
