@@ -15,6 +15,7 @@ function RootStack() {
         headerTintColor: colors.text,
         headerTitleStyle: { fontWeight: "700" },
         contentStyle: { backgroundColor: colors.bg },
+        headerShadowVisible: false,
       }}
     >
       <Stack.Screen name="index" options={{ title: t("appName") }} />
@@ -29,6 +30,7 @@ function RootStack() {
       <Stack.Screen name="feed/[id]" options={{ title: t("feed.reportTitle") }} />
       <Stack.Screen name="recovery" options={{ title: t("recovery.title") }} />
       <Stack.Screen name="wallet" options={{ title: t("wallet.title") }} />
+      <Stack.Screen name="org" options={{ title: t("org.title") }} />
     </Stack>
   );
 }
