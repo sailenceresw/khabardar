@@ -65,3 +65,12 @@ export function configFromEnv(): TransportConfig {
     },
   };
 }
+
+export {
+  loadTransportPrefs,
+  saveTransportPrefs,
+  applySavedTransportPrefs,
+} from "./prefs";
+export type { TransportPrefs } from "./prefs";
+export { getAnonymityStatus } from "./status";
+export type { AnonymityStatus } from "./status";
