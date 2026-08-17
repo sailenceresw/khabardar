@@ -1,4 +1,5 @@
 import { safeJsonParse } from "../safeJson";
+import { getTransport, transportFetch } from "../transport";
 import type { ContentStore, PutResult, StoredBundle } from "./types";
 
 /**
@@ -17,6 +18,13 @@ import type { ContentStore, PutResult, StoredBundle } from "./types";
  *  - EXPO_PUBLIC_IPFS_API_TOKEN   — service token for that endpoint
  *  - EXPO_PUBLIC_IPFS_GATEWAY_URL — read gateway, e.g. https://w3s.link/ipfs
  *
+ * Optional onion endpoints (preferred when transport mode === "tor"):
+ *  - EXPO_PUBLIC_IPFS_API_ONION_URL
+ *  - EXPO_PUBLIC_IPFS_GATEWAY_ONION_URL
+ *
+ * All network calls go through the transport abstraction so onion endpoints
+ * are preferred and protection status is honest.
+ *
  * Validation checklist (#6):
  *  1. put() a real encrypted bundle → receive a CID
  *  2. get() that CID through the gateway → decrypt → integrity check vs on-chain hash
@@ -25,23 +33,29 @@ import type { ContentStore, PutResult, StoredBundle } from "./types";
  *
  * Operational caveat: pinning services are a censorship and correlation
  * chokepoint. Production should pin to more than one provider and route uploads
- * over Tor. Neither is wired here.
+ * over Tor (Orbot VPN + optional onion endpoints).
  */
 export class IpfsContentStore implements ContentStore {
   readonly name = "ipfs";
 
   constructor(
     private readonly config: {
+      /** Clearnet API URL (kept for backwards compatibility / token auth) */
       apiUrl: string;
       apiToken: string;
+      /** Clearnet gateway URL */
       gatewayUrl: string;
     }
   ) {}
 
   async put(bundle: StoredBundle): Promise<PutResult> {
     const body = JSON.stringify(bundle);
+    const transport = getTransport();
 
-    const res = await fetch(this.config.apiUrl, {
+    // Prefer onion endpoint when the active transport is tor and one is configured
+    const apiUrl = transport.resolve("ipfsApi") ?? this.config.apiUrl;
+
+    const res = await transportFetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -78,8 +92,14 @@ export class IpfsContentStore implements ContentStore {
     // well-formed bundle is checked separately against the on-chain hash in
     // feed/resolve.ts — a swapped blob trips the fingerprint warning there.
     try {
-      const base = this.config.gatewayUrl.replace(/\/$/, "");
-      const res = await fetch(`${base}/${cid}`);
+      const transport = getTransport();
+      const gatewayBase =
+        (transport.resolve("ipfsGateway") ?? this.config.gatewayUrl).replace(
+          /\/$/,
+          ""
+        );
+
+      const res = await transportFetch(`${gatewayBase}/${cid}`);
       if (!res.ok) return null;
 
       const text = await res.text();
