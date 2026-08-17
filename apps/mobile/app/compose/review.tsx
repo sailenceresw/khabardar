@@ -1,13 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { AnonymousReport } from "@khabardar/shared";
 import { REPORT_CATEGORY_KEYS, VISIBILITY_KEYS } from "@khabardar/shared";
 import { useApp } from "../../src/state/AppContext";
 import { loadReport } from "../../src/drafts";
 import { publishReport } from "../../src/submitReport";
-import { Body, Button, Card, Screen, Title } from "../../src/ui";
+import { Body, Button, Card, Caption, Notice, Screen, Title } from "../../src/ui";
 import { colors } from "../../src/theme";
 import { t } from "../../src/i18n";
+import {
+  applySavedTransportPrefs,
+  getAnonymityStatus,
+  type AnonymityStatus,
+} from "../../src/transport";
 
 export default function ReviewScreen() {
   const router = useRouter();
@@ -19,15 +24,33 @@ export default function ReviewScreen() {
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sponsor, setSponsor] = useState<string | null>(null);
+  const [anonymity, setAnonymity] = useState<AnonymityStatus | null>(null);
+  /** User explicitly chose to submit without Tor after seeing the warning. */
+  const [acceptedClearnet, setAcceptedClearnet] = useState(false);
+
+  const refreshAnonymity = useCallback(async () => {
+    await applySavedTransportPrefs();
+    setAnonymity(getAnonymityStatus());
+  }, []);
 
   useEffect(() => {
     if (id) loadReport(id).then(setReport);
   }, [id]);
 
+  useEffect(() => {
+    refreshAnonymity();
+  }, [refreshAnonymity]);
+
   if (!report) return <Screen scroll={false}><Body dim> </Body></Screen>;
+
+  const isProtected = anonymity?.protected === true;
+  const needsTorAck = anonymity !== null && !isProtected && !acceptedClearnet;
 
   async function submit() {
     if (!report) return;
+    // Block accidental clearnet submit until the user acknowledges.
+    if (needsTorAck) return;
+
     setSubmitting(true);
     setError(null);
     setProgressLabel(null);
@@ -79,6 +102,32 @@ export default function ReviewScreen() {
         <Body>{t("review.warning")}</Body>
       </Card>
 
+      {/* Pre-submit Tor / network protection status */}
+      {anonymity ? (
+        isProtected ? (
+          <Notice tone="success">{t("review.torWarningProtected")}</Notice>
+        ) : (
+          <Card style={{ borderColor: colors.danger }}>
+            <Title>{t("review.torWarningTitle")}</Title>
+            <Body>{t("review.torWarningBody")}</Body>
+            <Button
+              label={t("review.torWarningOpenSettings")}
+              variant="secondary"
+              onPress={() => router.push("/settings")}
+            />
+            {!acceptedClearnet ? (
+              <Button
+                label={t("review.torWarningContinueAnyway")}
+                variant="danger"
+                onPress={() => setAcceptedClearnet(true)}
+              />
+            ) : (
+              <Caption>{t("review.torWarningContinueAnyway")}</Caption>
+            )}
+          </Card>
+        )
+      ) : null}
+
       <Card>
         <Body dim>{t("compose.categoryLabel")}</Body>
         <Body>{t(REPORT_CATEGORY_KEYS[report.category])}</Body>
@@ -117,6 +166,8 @@ export default function ReviewScreen() {
         }
         onPress={submit}
         loading={submitting}
+        // Disable primary submit until protected or user explicitly continues
+        disabled={needsTorAck || submitting}
       />
     </Screen>
   );
