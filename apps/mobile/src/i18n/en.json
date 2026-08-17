@@ -1,1 +1,37 @@
-PLACEHOLDER
+{
+  "appName": "Khabardar",
+  "tagline": "Report corruption. Stay anonymous.",
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "english": "English",
+    "hindi": "हिन्दी",
+    "dangerZone": "Danger zone",
+    "panicTitle": "Panic delete",
+    "panicExplainer": "Immediately and permanently erases all drafts, evidence files, and your identity key from this device. On-chain fingerprints cannot be deleted, but nothing links them to this device once local data is gone.",
+    "panicButton": "Erase everything now",
+    "panicConfirmTitle": "Erase everything?",
+    "panicConfirmBody": "This cannot be undone. All drafts, evidence, and your identity will be destroyed.",
+    "panicConfirmYes": "Erase",
+    "panicConfirmNo": "Cancel",
+    "panicDone": "All local data erased.",
+    "transportTitle": "Anonymising transport",
+    "transportExplainer": "Khabardar never collects your name or phone number, but network traffic can still reveal your IP. On Android, use Orbot in VPN mode to route this app through Tor.",
+    "torMode": "Tor mode",
+    "torModeHint": "Prefer onion endpoints and treat traffic as Tor-routed when Orbot is active.",
+    "orbotActive": "Orbot is active",
+    "orbotActiveHint": "Turn this on only after Orbot VPN mode is running and Khabardar is included.",
+    "transportProtected": "Traffic is currently protected through Tor (Orbot active).",
+    "transportUnprotected": "Traffic is not currently routed through Tor.",
+    "orbotInstallHint": "Install Orbot from Google Play or F-Droid, enable VPN mode, and include Khabardar. Then toggle “Orbot is active” above."
+  },
+  "common": {
+    "back": "Back",
+    "settings": "Settings",
+    "moderation": "Moderation",
+    "tips": "Tip channel",
+    "feed": "Public feed",
+    "loading": "Loading…",
+    "error": "Something went wrong"
+  }
+}
