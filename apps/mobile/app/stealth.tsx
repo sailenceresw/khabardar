@@ -1,8 +1,9 @@
 import React, { useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as ScreenCapture from "expo-screen-capture";
 import {
+  applyLauncherDisguise,
   DisguiseMode,
   getStealthConfig,
   MIN_PIN_LENGTH,
@@ -78,7 +79,18 @@ export default function StealthScreen() {
   }
 
   async function chooseDisguise(mode: DisguiseMode) {
+    const previous = config?.disguise ?? DisguiseMode.None;
+    const applied = await applyLauncherDisguise(mode);
     setConfig(await saveStealthConfig({ disguise: mode }));
+    setError(null);
+    // `applied` only reports the home-screen icon, which is Android-only; the
+    // in-app disguise is saved either way. Keying the note off it alone told
+    // anyone who picked None on iOS or web — where it is always false — that
+    // "the lock-screen disguise is on", moments after they turned it off.
+    if (applied) setNote(t("stealth.saved"));
+    else if (mode !== DisguiseMode.None) setNote(t("stealth.launcherUnchanged"));
+    else if (previous !== DisguiseMode.None) setNote(t("stealth.launcherResetFailed"));
+    else setNote(t("stealth.saved"));
   }
 
   async function toggleCapture() {
@@ -93,7 +105,16 @@ export default function StealthScreen() {
     }
   }
 
-  if (!config) return <Screen scroll={false}><Body dim> </Body></Screen>;
+  if (!config) {
+    return (
+      <Screen scroll={false}>
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.accent} />
+          <Body dim>{t("common.loading")}</Body>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
@@ -101,6 +122,7 @@ export default function StealthScreen() {
 
       <Card style={{ borderColor: colors.info }}>
         <Body dim>{t("stealth.intro")}</Body>
+        <Body dim>{t("stealth.launcherLimit")}</Body>
       </Card>
 
       {error ? (
@@ -187,6 +209,7 @@ export default function StealthScreen() {
 }
 
 const styles = StyleSheet.create({
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   chip: {
     borderWidth: 1,

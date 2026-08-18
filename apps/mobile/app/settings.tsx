@@ -88,6 +88,31 @@ export default function SettingsScreen() {
         />
       </Card>
 
+      <Card>
+        <Body dim>{t("settings.otherTitle")}</Body>
+        <Body dim>{t("settings.otherExplainer")}</Body>
+        <Button
+          label={t("common.moderation")}
+          variant="secondary"
+          onPress={() => router.push("/moderation")}
+        />
+        <Button
+          label={t("org.open")}
+          variant="secondary"
+          onPress={() => router.push("/org")}
+        />
+        <Button
+          label={t("cases.title")}
+          variant="secondary"
+          onPress={() => router.push("/cases")}
+        />
+        <Button
+          label={t("analytics.title")}
+          variant="secondary"
+          onPress={() => router.push("/analytics")}
+        />
+      </Card>
+
       <Card style={{ borderColor: colors.danger }}>
         <Body dim>{t("net.title")}</Body>
         <Body dim>{t("net.warning")}</Body>

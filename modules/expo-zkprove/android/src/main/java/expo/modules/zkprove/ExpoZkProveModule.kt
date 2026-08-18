@@ -1,6 +1,7 @@
 package expo.modules.zkprove
 
 import expo.modules.kotlin.exception.CodedException
+import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import kotlinx.coroutines.Dispatchers
@@ -41,7 +42,9 @@ class ExpoZkProveModule : Module() {
      * failed proof is an ordinary outcome — a truncated artifact, a stale
      * Merkle root — and the user needs to be told which.
      */
-    AsyncFunction("prove") { wasmPath: String, zkeyPath: String, inputsJson: String ->
+    // `Coroutine` rather than a plain AsyncFunction: the body of a plain one is
+    // not a suspend context, so `withContext` will not compile there.
+    AsyncFunction("prove") Coroutine { wasmPath: String, zkeyPath: String, inputsJson: String ->
       if (!ZkNative.available) throw ProverUnavailableException()
 
       val raw = withContext(Dispatchers.Default) {
@@ -57,8 +60,8 @@ class ExpoZkProveModule : Module() {
       )
     }
 
-    AsyncFunction("validateZkey") { zkeyPath: String ->
-      if (!ZkNative.available) return@AsyncFunction false
+    AsyncFunction("validateZkey") Coroutine { zkeyPath: String ->
+      if (!ZkNative.available) return@Coroutine false
       withContext(Dispatchers.Default) { ZkNative.nativeValidateZkey(zkeyPath) }
     }
   }

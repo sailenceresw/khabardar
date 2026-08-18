@@ -54,10 +54,19 @@ public class ExpoZkProveModule: Module {
       // Field elements stay strings across the bridge: 254 bits do not survive
       // a JS number, and a rounded identity secret proves membership for
       // someone who does not exist.
-      return [
-        "points": json["points"] as? [String] ?? [],
-        "publicSignals": json["publicSignals"] as? [String] ?? []
-      ]
+      //
+      // Missing arrays are an error, not an empty proof. Defaulting to [] here
+      // would hand JS a well-formed result carrying no proof, which is then
+      // submitted and rejected on-chain with nothing to explain why. Android
+      // throws in this case; iOS has to agree.
+      guard
+        let points = json["points"] as? [String],
+        let publicSignals = json["publicSignals"] as? [String]
+      else {
+        throw ProvingFailedException("the prover returned no proof points")
+      }
+
+      return ["points": points, "publicSignals": publicSignals]
     }
 
     AsyncFunction("validateZkey") { (zkeyPath: String) -> Bool in

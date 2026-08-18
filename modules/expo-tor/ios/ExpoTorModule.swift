@@ -27,17 +27,20 @@ public class ExpoTorModule: Module {
     /// carries this method for both.
     Function("isSupported") { true }
 
-    AsyncFunction("start") { () -> Int in
+    AsyncFunction("start") { (bridges: String?) -> Int in
       // Application Support and Caches are inside the app sandbox and excluded
       // from iCloud backup below. Arti keeps consensus data and — more
       // sensitively — its guard selection here; a backed-up guard set is
       // linkable across devices and restores.
       let cacheDir = try Self.directory(.cachesDirectory, name: "tor")
       let stateDir = try Self.directory(.applicationSupportDirectory, name: "tor")
+      let bridgePaste = bridges ?? ""
 
       let port: Int32 = cacheDir.path.withCString { cachePtr in
         stateDir.path.withCString { statePtr in
-          khabardar_tor_start(cachePtr, statePtr)
+          bridgePaste.withCString { bridgesPtr in
+            khabardar_tor_start(cachePtr, statePtr, bridgesPtr)
+          }
         }
       }
 
@@ -78,6 +81,13 @@ public class ExpoTorModule: Module {
     /// Fails rather than falling back when Tor is not running. A transport that
     /// silently degrades to a direct connection is worse than one that does not
     /// exist, because the user has been told they are protected.
+    // iOS alternate icons need pre-bundled PNG assets this build does not
+    // carry. Returning false is honest: the lock-screen disguise still
+    // works, the home-screen icon does not change.
+    AsyncFunction("setLauncherDisguise") { (_mode: String) -> Bool in
+      false
+    }
+
     AsyncFunction("request") { (
       url: String,
       method: String,

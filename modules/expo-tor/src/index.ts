@@ -54,9 +54,9 @@ export function getStatus(): TorStatus {
  * Tor is censored and bridges are needed. Callers must show progress rather
  * than a spinner that looks like a hang.
  */
-export async function startTor(): Promise<number> {
+export async function startTor(bridges?: string): Promise<number> {
   if (!native) throw new TorUnavailableError();
-  return native.start();
+  return native.start(bridges ?? "");
 }
 
 export async function stopTor(): Promise<void> {
@@ -74,6 +74,15 @@ export async function stopTor(): Promise<void> {
  * Returns false when Tor is not running, rather than throwing, so a caller can
  * decide whether the absence of isolation is disqualifying.
  */
+export async function setLauncherDisguise(mode: string): Promise<boolean> {
+  if (!native || typeof native.setLauncherDisguise !== "function") return false;
+  try {
+    return await native.setLauncherDisguise(mode);
+  } catch {
+    return false;
+  }
+}
+
 export async function newCircuit(): Promise<boolean> {
   if (!native) return false;
   return native.newCircuit();

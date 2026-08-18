@@ -37,4 +37,9 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, "node_modules"),
 ];
 
+// Watchman is installed on this machine but `watch-project` / `query` hang
+// for minutes on the monorepo (see README troubleshooting). A hung watcher
+// looks like a dead app. Metro's own crawler is slower and actually starts.
+config.resolver.useWatchman = false;
+
 module.exports = config;

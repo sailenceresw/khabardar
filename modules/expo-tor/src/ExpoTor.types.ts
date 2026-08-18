@@ -29,8 +29,15 @@ export interface ExpoTorNativeModule {
    * Tor as available right up until it crashes.
    */
   isSupported(): boolean;
-  /** Bootstraps Tor. Resolves with the SOCKS port. Slow — 10–60s is normal. */
-  start(): Promise<number>;
+  /**
+   * Bootstraps Tor. Resolves with the SOCKS port. Slow — 10–60s is normal.
+   *
+   * `bridges` is a paste of vanilla bridge lines (newline-separated). Empty or
+   * omitted connects to the public Tor network. Lines that name a pluggable
+   * transport (obfs4, snowflake, …) are refused — this build does not ship
+   * those binaries.
+   */
+  start(bridges?: string): Promise<number>;
   stop(): Promise<void>;
   /**
    * Move subsequent requests onto fresh circuits. Resolves false when Tor is
@@ -39,6 +46,12 @@ export interface ExpoTorNativeModule {
    */
   newCircuit(): Promise<boolean>;
   getStatus(): TorStatus;
+  /**
+   * Switch the home-screen icon/label. Resolves true only when the platform
+   * actually applied it. False on iOS and on Android builds that were not
+   * prebuilt with the stealth aliases.
+   */
+  setLauncherDisguise(mode: string): Promise<boolean>;
   request(
     url: string,
     method: string,

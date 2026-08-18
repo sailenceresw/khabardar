@@ -66,6 +66,21 @@ on web, which cannot load native code, and false on an Android build assembled
 without the Rust step — the module is present, the `.so` is not, and reporting
 that as available until it crashed would be the worst of both.
 
+## Bridges
+
+`start(bridges)` accepts a paste of **vanilla** bridge lines (address, port,
+fingerprint). Empty means the public Tor network.
+
+This is how the app reaches Tor when directory authorities are blocked. It is
+not how the app hides from a network that is looking for Tor: that needs a
+pluggable transport (obfs4, snowflake), and those need a binary we do not
+ship. Lines that name one of those transports are refused with the transport
+in the error. Accepting them and then dying inside Arti would look like Tor
+itself was broken.
+
+The paste is stored in the keystore by the app, not here. A bridge list is
+identifying.
+
 ## Building
 
 ```bash

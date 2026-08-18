@@ -568,17 +568,15 @@ report, a tip is **never anchored on-chain** — it is a private message, not a 
 record. Sealing uses the same ECIES construction as restricted bundles, so only the
 recipient's private key opens it, and only a short preview + digest stay on the device.
 
-Three gaps to close before anyone relies on it, all documented in `src/tips.ts`:
+What is still open, documented in `src/tips.ts`:
 
-- **Transport.** Tips are sealed but not delivered over an anonymising transport yet.
-  Network metadata is what deanonymizes people, not ciphertext.
-- **Padding.** Message length currently leaks; tips should be padded to fixed buckets.
 - **Forward secrecy.** A recipient key compromise retroactively opens past tips.
-
-Recipient keys in `src/content/recipients.ts` are **demo placeholders**. Production must
-publish them somewhere independently verifiable (DNS TXT, a well-known URI on the
-organisation's own domain, or an on-chain registry) and pin them in-app, so a compromised
-backend cannot silently swap in its own key and read every restricted report.
+  Needs a ratchet or per-tip recipient subkeys.
+- **A real recipient directory.** Keys in `src/content/recipients.ts` are demo
+  placeholders. Production must publish them somewhere independently
+  verifiable (DNS TXT, a well-known URI on the organisation's own domain, or
+  an on-chain registry) and pin them in-app, so a compromised backend cannot
+  silently swap in its own key and read every restricted report.
 
 ## Surviving a seized phone
 
@@ -686,9 +684,11 @@ and links every restore of that backup to the same user.
   is tested against a plain-TCP connector; Arti's own bootstrap and circuit handling are
   exercised only by Arti's test suite, not ours. Until someone runs a dev build on a phone
   and watches a report land, treat "works" as unproven.
-- **Bridges and pluggable transports** — plain Tor is blocked in several of the places this
-  app is for. Arti supports bridges and obfs4; the module does not configure them yet, so
-  bootstrap simply fails where Tor is censored. This is the next thing to build.
+- **Pluggable transports** — vanilla bridges are wired (paste lines from
+  bridges.torproject.org on `/network`). They help when directory authorities
+  are blocked. They do **not** hide that the traffic is Tor from a DPI box.
+  obfs4, snowflake and meek still need a transport binary this build does not
+  ship; those lines are refused by name rather than left to fail inside Arti.
 - **RLN proof-of-personhood** — `IPersonhoodGate` is in the contract and corroboration is
   gated on it, with `AllowlistPersonhoodGate` as a working non-anonymous implementation
   for closed pilots. Real RLN needs a zk verifier contract and a prover, neither of which

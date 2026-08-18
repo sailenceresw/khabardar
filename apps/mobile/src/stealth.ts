@@ -6,6 +6,7 @@ import { pbkdf2 } from "@noble/hashes/pbkdf2";
 import { bytesToHex } from "@noble/ciphers/utils";
 import * as Crypto from "expo-crypto";
 import { utf8ToBytes } from "./cryptoUtils";
+import { setLauncherDisguise } from "expo-tor";
 import { safeJsonParse } from "./safeJson";
 
 /**
@@ -79,6 +80,22 @@ export async function saveStealthConfig(patch: Partial<StealthConfig>): Promise<
   const next = { ...(await getStealthConfig()), ...patch };
   await AsyncStorage.setItem(CONFIG_KEY, JSON.stringify(next));
   return next;
+}
+
+/**
+ * Ask the OS to change the home-screen icon and label.
+ *
+ * Returns whether the platform actually did it. False on iOS, on web, and
+ * on an Android build that was not prebuilt with the stealth aliases.
+ * A duress wipe must NOT call this with `none` — flipping the icon back
+ * to Khabardar is how an observer learns a wipe just happened.
+ */
+export async function applyLauncherDisguise(mode: DisguiseMode): Promise<boolean> {
+  try {
+    return await setLauncherDisguise(mode);
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------

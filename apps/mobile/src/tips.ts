@@ -7,6 +7,7 @@ import { bytesToUtf8, randomKey, utf8ToBytes } from "./cryptoUtils";
 import { wrapContentKey, type WrappedKey } from "./content/contentKeys";
 import { DEMO_RECIPIENTS, type Recipient } from "./content/recipients";
 import { getContentStore } from "./content";
+import { isolateNextRequests } from "./net/transport";
 import { safeJsonParse } from "./safeJson";
 
 /**
@@ -22,13 +23,11 @@ import { safeJsonParse } from "./safeJson";
  *
  * Length is padded to fixed buckets before sealing — see {@link padToBucket}.
  *
- * What v0 does NOT yet do, and must before this is safe to rely on:
- *  - Transport. The sealed payload is stored locally; there is no delivery.
- *    Real delivery has to run over an anonymising transport (Tor, a mixnet, or
- *    at minimum a relay that never sees the sender IP), because the network
- *    metadata is what deanonymises people, not the ciphertext.
- *  - Forward secrecy. A recipient key compromise retroactively opens every
- *    past tip to them. A ratchet (or per-tip recipient subkeys) fixes this.
+ * Delivery goes through the same content-store + transport seam as reports.
+ * `isolateNextRequests()` runs first, so two tips do not share a circuit.
+ * On the default mock store the "upload" never leaves the device — the UI
+ * must say so. Forward secrecy is still missing: a recipient key compromise
+ * retroactively opens every past tip to them.
  */
 
 /**
@@ -101,6 +100,8 @@ export interface SealedTip {
 /** Metadata kept locally so the sender can see what they sent, minus content. */
 export interface TipRecord extends Omit<SealedTip, "ciphertext" | "wrappedKey" | "nonce"> {
   preview: string;
+  /** True when the "upload" was the local mock store and never left the device. */
+  simulated?: boolean;
 }
 
 export function listRecipients(): Recipient[] {
@@ -141,27 +142,37 @@ export function sealTip(message: string, recipient: Recipient): SealedTip {
 }
 
 /**
- * Hand the sealed tip to the content layer. This is the closest v0 gets to
- * "sending" — see the transport caveat above; a real deployment replaces this
- * with an anonymising relay.
+ * Hand the sealed tip to the content layer, through the same transport
+ * seam as a report. Isolation runs first so two tips do not share a circuit.
+ *
+ * Errors propagate. Swallowing them as `status: "failed"` hid the reason
+ * — "Tor refused", "anonymity required", "pin failed" all looked the same.
  */
-export async function storeTip(tip: SealedTip): Promise<SealedTip> {
-  try {
-    const put = await getContentStore().put({
-      v: 1,
-      blob: { nonce: tip.nonce, ciphertext: tip.ciphertext },
-      keyring: { mode: "wrapped", recipients: [tip.wrappedKey] },
-    });
-    return { ...tip, cid: put.cid, status: "stored" };
-  } catch {
-    return { ...tip, status: "failed" };
-  }
+export async function storeTip(
+  tip: SealedTip
+): Promise<SealedTip & { simulated: boolean }> {
+  await isolateNextRequests();
+  const put = await getContentStore().put({
+    v: 1,
+    blob: { nonce: tip.nonce, ciphertext: tip.ciphertext },
+    keyring: { mode: "wrapped", recipients: [tip.wrappedKey] },
+  });
+  return { ...tip, cid: put.cid, status: "stored", simulated: put.simulated };
 }
 
-export async function sendTip(message: string, recipient: Recipient): Promise<SealedTip> {
-  const stored = await storeTip(sealTip(message, recipient));
-  await recordTip(stored, message);
-  return stored;
+export async function sendTip(
+  message: string,
+  recipient: Recipient
+): Promise<SealedTip & { simulated: boolean }> {
+  const sealed = sealTip(message, recipient);
+  try {
+    const stored = await storeTip(sealed);
+    await recordTip(stored, message, stored.simulated);
+    return stored;
+  } catch (e) {
+    await recordTip({ ...sealed, status: "failed" }, message, false);
+    throw e;
+  }
 }
 
 /**
@@ -169,7 +180,7 @@ export async function sendTip(message: string, recipient: Recipient): Promise<Se
  * kept short on purpose — a full local copy of every tip is exactly the kind of
  * evidence a device seizure would surface.
  */
-async function recordTip(tip: SealedTip, plaintext: string): Promise<void> {
+async function recordTip(tip: SealedTip, plaintext: string, simulated: boolean): Promise<void> {
   const record: TipRecord = {
     id: tip.id,
     recipientId: tip.recipientId,
@@ -179,6 +190,7 @@ async function recordTip(tip: SealedTip, plaintext: string): Promise<void> {
     cid: tip.cid,
     status: tip.status,
     preview: plaintext.slice(0, 40),
+    simulated,
   };
 
   const existing = await listTips();

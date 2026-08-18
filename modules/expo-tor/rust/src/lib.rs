@@ -56,6 +56,7 @@ mod android {
         _class: JClass,
         cache_dir: JString,
         state_dir: JString,
+        bridges: JString,
     ) -> jint {
         let cache: String = match env.get_string(&cache_dir) {
             Ok(s) => s.into(),
@@ -65,8 +66,12 @@ mod android {
             Ok(s) => s.into(),
             Err(_) => return -1,
         };
+        let bridges: String = match env.get_string(&bridges) {
+            Ok(s) => s.into(),
+            Err(_) => String::new(),
+        };
 
-        match service().start(PathBuf::from(cache), PathBuf::from(state)) {
+        match service().start(PathBuf::from(cache), PathBuf::from(state), &bridges) {
             Ok(port) => port as jint,
             Err(_) => -1,
         }
@@ -129,10 +134,13 @@ mod c_abi {
     ///
     /// # Safety
     /// `cache_dir` and `state_dir` must be valid NUL-terminated UTF-8.
+    /// `bridges` may be NULL (treated as no bridges) or a NUL-terminated
+    /// UTF-8 paste of vanilla bridge lines.
     #[no_mangle]
     pub unsafe extern "C" fn khabardar_tor_start(
         cache_dir: *const c_char,
         state_dir: *const c_char,
+        bridges: *const c_char,
     ) -> c_int {
         if cache_dir.is_null() || state_dir.is_null() {
             return -1;
@@ -146,8 +154,16 @@ mod c_abi {
             Ok(s) => PathBuf::from(s),
             Err(_) => return -1,
         };
+        let bridges = if bridges.is_null() {
+            ""
+        } else {
+            match CStr::from_ptr(bridges).to_str() {
+                Ok(s) => s,
+                Err(_) => return -1,
+            }
+        };
 
-        match service().start(cache, state) {
+        match service().start(cache, state, bridges) {
             Ok(port) => port as c_int,
             Err(_) => -1,
         }

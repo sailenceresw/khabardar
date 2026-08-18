@@ -17,8 +17,9 @@ extern "C" {
 ///
 /// @param cache_dir NUL-terminated UTF-8 path inside the app sandbox.
 /// @param state_dir NUL-terminated UTF-8 path inside the app sandbox.
+/// @param bridges NUL-terminated vanilla bridge paste, or NULL for none.
 /// @return the SOCKS port, or -1 on failure (see khabardar_tor_last_error).
-int32_t khabardar_tor_start(const char *cache_dir, const char *state_dir);
+int32_t khabardar_tor_start(const char *cache_dir, const char *state_dir, const char *bridges);
 
 /// Stop Tor and drop every circuit. In-flight requests fail rather than
 /// completing over a direct connection.

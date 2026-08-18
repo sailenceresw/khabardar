@@ -19,6 +19,8 @@
     "android": {
       "package": "org.khabardar.app",
       "_comment": "Location stays blocked at the manifest level so precise coordinates cannot even be requested — the app only ever handles a 4-character geohash the user types. RECORD_AUDIO is permitted because audio evidence exists, and is requested at the moment of recording, never at launch.",
+      "_commentAllowBackup": "Android Auto Backup must stay off: this app's local state is a record of which corruption reports a person filed. The mirror of submitted reports, follows, comments and the profile are plain JSON in AsyncStorage, and Auto Backup would upload them to that user's Google Drive — tying a Google account to those reports and putting them within reach of legal process. That is the exact harm this project exists to prevent, so no exclusion list is good enough here. Expo does not honour android.allowBackup as a config key; the expo-tor plugin writes android:allowBackup=false onto the manifest so a clean prebuild cannot silently turn it back on. The cost is that reinstalling loses local state, which is acceptable: the identity restores from the recovery phrase and the rest is a cache of on-chain data. Device-to-device transfer stays available and is governed by the same plugin's data-extraction rules.",
+      "allowBackup": false,
       "blockedPermissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"

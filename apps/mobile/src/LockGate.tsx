@@ -28,15 +28,38 @@ export function LockGate({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<StealthConfig | null>(null);
   const [locked, setLocked] = useState(false);
   const [ready, setReady] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    let active = true;
+
     (async () => {
-      const [cfg, configured] = await Promise.all([getStealthConfig(), isLockConfigured()]);
-      setConfig(cfg);
-      setLocked(cfg.lockEnabled && configured);
-      setReady(true);
+      try {
+        const [cfg, configured] = await Promise.all([getStealthConfig(), isLockConfigured()]);
+        if (!active) return;
+        setConfig(cfg);
+        setLocked(cfg.lockEnabled && configured);
+        setFailure(null);
+      } catch (e) {
+        // Deliberately not falling through to the app.
+        //
+        // If the PIN store cannot be read we do not know whether a lock is set,
+        // and guessing "unlocked" would walk straight past a security control
+        // the user switched on. But hanging on the blank placeholder below is
+        // just as wrong — that is a bricked app with nothing on screen. So say
+        // what happened and offer a retry.
+        if (!active) return;
+        setFailure(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (active) setReady(true);
+      }
     })();
-  }, []);
+
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
 
   const unlock = useCallback(async (pin: string): Promise<boolean> => {
     const outcome = await attemptUnlock(pin);
@@ -60,6 +83,20 @@ export function LockGate({ children }: { children: React.ReactNode }) {
   // Render nothing until the config is known, so the real UI never flashes
   // on screen before the lock has a chance to cover it.
   if (!ready) return <View style={styles.blank} />;
+
+  if (failure) {
+    return (
+      <View style={styles.lock}>
+        <Text style={styles.lockTitle}>{t("common.error")}</Text>
+        <Text style={styles.failureBody}>{t("stealth.lockUnreadable")}</Text>
+        <Text style={styles.failureDetail}>{failure}</Text>
+        <Pressable style={styles.retry} onPress={() => setAttempt((n) => n + 1)}>
+          <Text style={styles.retryLabel}>{t("common.retry")}</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   if (!locked || !config) return <>{children}</>;
 
   return config.disguise === DisguiseMode.Calculator ? (
@@ -218,6 +255,22 @@ function Key({
 
 const styles = StyleSheet.create({
   blank: { flex: 1, backgroundColor: colors.bg },
+  failureBody: { color: colors.text, fontSize: 15, textAlign: "center", marginTop: spacing.md },
+  failureDetail: {
+    color: colors.textDim,
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: spacing.sm,
+  },
+  retry: {
+    marginTop: spacing.lg,
+    alignSelf: "center",
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+  },
+  retryLabel: { color: colors.accentText, fontSize: 16, fontWeight: "600" },
   lock: { flex: 1, backgroundColor: colors.bg, justifyContent: "center", padding: spacing.lg },
   lockTitle: { color: colors.text, fontSize: 24, fontWeight: "700", textAlign: "center" },
   dots: {

@@ -11,6 +11,7 @@ import { clearSocial } from "./social";
 import { clearQueue } from "./submissionQueue";
 import { clearStealth } from "./stealth";
 import { deleteAllTips } from "./tips";
+import { clearBridges } from "./net/bridges";
 import { clearEgressLog } from "./net/transport";
 import { disconnectWallet } from "./wallet";
 
@@ -34,6 +35,9 @@ export async function panicDelete(): Promise<void> {
   // The egress log is a record of which hosts this device contacted and when —
   // useful to the user, and equally useful to whoever seizes the phone.
   await clearEgressLog();
+  // The bridge list is identifying: two people who share an uncommon
+  // bridge are one correlation away from each other.
+  await clearBridges();
 
   // An org account and a connected wallet are both identifying, so a duress
   // wipe must take them too. Cleared explicitly rather than leaving it to the

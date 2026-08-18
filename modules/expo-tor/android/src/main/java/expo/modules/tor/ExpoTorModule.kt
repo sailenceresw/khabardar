@@ -1,5 +1,7 @@
 package expo.modules.tor
 
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.util.Base64
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -51,7 +53,7 @@ class ExpoTorModule : Module() {
      */
     Function("isSupported") { TorNative.available }
 
-    AsyncFunction("start") { ->
+    AsyncFunction("start") { bridges: String? ->
       if (!TorNative.available) throw TorStartFailedException(MISSING_LIBRARY)
       // Private app storage. Arti keeps consensus data and — more sensitively —
       // its guard selection here; on shared storage another app could read it,
@@ -62,7 +64,11 @@ class ExpoTorModule : Module() {
       val cacheDir = context.cacheDir.resolve("tor").apply { mkdirs() }
       val stateDir = context.filesDir.resolve("tor").apply { mkdirs() }
 
-      val port = TorNative.nativeStart(cacheDir.absolutePath, stateDir.absolutePath)
+      val port = TorNative.nativeStart(
+        cacheDir.absolutePath,
+        stateDir.absolutePath,
+        bridges ?: "",
+      )
       if (port <= 0) {
         throw TorStartFailedException(TorNative.nativeLastError().ifEmpty { "bootstrap failed" })
       }
@@ -104,6 +110,66 @@ class ExpoTorModule : Module() {
         "socksPort" to TorNative.nativeSocksPort(),
         "lastError" to TorNative.nativeLastError().ifEmpty { null }
       )
+    }
+
+    /**
+     * Switch the home-screen icon and label.
+     *
+     * This is a weak control. The package name stays `org.khabardar.app`,
+     * Settings still lists the real app, and a forensic image sees every
+     * activity-alias. It only helps against someone glancing at the
+     * home screen. Returning false means the aliases are not in this
+     * build (prebuild was not re-run) — the JS side must not pretend.
+     *
+     * False also means nothing was changed. That guarantee is the point of the
+     * order below: the app must never be left with every launcher component
+     * disabled, because the only way back from a missing home-screen icon is a
+     * reinstall, and a reinstall destroys the identity and every stored report.
+     */
+    AsyncFunction("setLauncherDisguise") { mode: String ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      val pm = context.packageManager
+      val pkg = context.packageName
+      val wanted = when (mode) {
+        "calculator" -> "$pkg.MainActivityCalculator"
+        "notes" -> "$pkg.MainActivityNotes"
+        else -> "$pkg.MainActivity"
+      }
+      val all = listOf(
+        "$pkg.MainActivity",
+        "$pkg.MainActivityCalculator",
+        "$pkg.MainActivityNotes",
+      )
+      try {
+        // Resolve all three before touching any. The aliases ship disabled, so
+        // this needs MATCH_DISABLED_COMPONENTS to see them. A build without them
+        // fails here, with the launcher still intact, rather than part way
+        // through the loop.
+        for (name in all) {
+          pm.getActivityInfo(
+            ComponentName(pkg, name),
+            PackageManager.MATCH_DISABLED_COMPONENTS
+          )
+        }
+        // Enable first, disable second. Momentarily showing two icons is a
+        // cosmetic fault; the opposite order risks showing none.
+        pm.setComponentEnabledSetting(
+          ComponentName(pkg, wanted),
+          PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+          PackageManager.DONT_KILL_APP
+        )
+        for (name in all) {
+          if (name == wanted) continue
+          pm.setComponentEnabledSetting(
+            ComponentName(pkg, name),
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP
+          )
+        }
+        true
+      } catch (_: Exception) {
+        false
+      }
     }
 
     /**

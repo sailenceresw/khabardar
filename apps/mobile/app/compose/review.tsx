@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from "react";
+import { ActivityIndicator, View, StyleSheet } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { AnonymousReport } from "@khabardar/shared";
-import { REPORT_CATEGORY_KEYS, VISIBILITY_KEYS } from "@khabardar/shared";
+import { REPORT_CATEGORY_KEYS, VISIBILITY_KEYS, Visibility } from "@khabardar/shared";
 import { useApp } from "../../src/state/AppContext";
+import { journalistKeysArePlaceholders } from "../../src/content/recipients";
 import { loadReport } from "../../src/drafts";
 import { publishReport } from "../../src/submitReport";
 import { anchoredFrom, dequeue, enqueue } from "../../src/submissionQueue";
 import { Body, Button, Card, Screen, Title } from "../../src/ui";
-import { colors } from "../../src/theme";
+import { colors, spacing } from "../../src/theme";
 import { t } from "../../src/i18n";
 
 export default function ReviewScreen() {
@@ -25,7 +27,16 @@ export default function ReviewScreen() {
     if (id) loadReport(id).then(setReport);
   }, [id]);
 
-  if (!report) return <Screen scroll={false}><Body dim> </Body></Screen>;
+  if (!report) {
+    return (
+      <Screen scroll={false}>
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.accent} />
+          <Body dim>{t("common.loading")}</Body>
+        </View>
+      </Screen>
+    );
+  }
 
   async function submit() {
     if (!report) return;
@@ -61,6 +72,12 @@ export default function ReviewScreen() {
         <Title>{t("review.warningTitle")}</Title>
         <Body>{t("review.warning")}</Body>
       </Card>
+
+      {report.visibility === Visibility.JournalistsOnly && journalistKeysArePlaceholders() ? (
+        <Card style={{ borderColor: colors.danger }}>
+          <Body>{t("review.journalistsDemoWarning")}</Body>
+        </Card>
+      ) : null}
 
       <Card>
         <Body dim>{t("compose.categoryLabel")}</Body>
@@ -101,3 +118,7 @@ export default function ReviewScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm },
+});

@@ -116,11 +116,11 @@ export function torStatus(): TorStatus {
  * must show progress; a spinner with no explanation reads as a hang and people
  * turn the protection off.
  */
-export async function ensureTorRunning(): Promise<TorStatus> {
+export async function ensureTorRunning(bridges?: string): Promise<TorStatus> {
   const status = getStatus();
   if (status.state === "running") return status;
 
-  await startTor();
+  await startTor(bridges ?? "");
   return getStatus();
 }
 

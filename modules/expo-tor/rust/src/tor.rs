@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
+use arti_client::config::BridgeConfigBuilder;
 use arti_client::{TorClient, TorClientConfig};
 use tokio::runtime::Runtime;
 use tor_rtcompat::PreferredRuntime;
@@ -153,7 +154,16 @@ impl TorService {
     /// Arti keeps the consensus and directory data there; on shared storage it
     /// would be readable by other apps, and the set of guards it records is
     /// linkable across sessions.
-    pub fn start(&self, cache_dir: PathBuf, state_dir: PathBuf) -> Result<u16, String> {
+    ///
+    /// `bridges` is a newline-separated list of vanilla Tor bridge lines.
+    /// Empty means connect to the public network (the old behaviour). See
+    /// [`parse_bridge_lines`] for what is accepted and what is refused.
+    pub fn start(
+        &self,
+        cache_dir: PathBuf,
+        state_dir: PathBuf,
+        bridges: &str,
+    ) -> Result<u16, String> {
         if self.state() == TorState::Running {
             return Ok(self.socks_port());
         }
@@ -166,8 +176,9 @@ impl TorService {
             Err(e) => return Err(self.fail(format!("could not create async runtime: {e}"))),
         };
 
+        let bridges = bridges.to_owned();
         let result = runtime.block_on(async move {
-            let config = build_config(cache_dir, state_dir)?;
+            let config = build_config(cache_dir, state_dir, &bridges)?;
 
             let client = TorClient::create_bootstrapped(config)
                 .await
@@ -257,12 +268,86 @@ impl TorService {
     }
 }
 
-fn build_config(cache_dir: PathBuf, state_dir: PathBuf) -> Result<TorClientConfig, String> {
+/// Transports this build cannot run. Arti can parse these lines, but
+/// connecting through them needs an external pluggable-transport binary
+/// (lyrebird, snowflake-client) that we do not ship. Refusing here is
+/// better than letting bootstrap hang and then fail with an opaque error.
+const UNSUPPORTED_PTS: &[&str] = &[
+    "obfs4",
+    "obfs3",
+    "snowflake",
+    "meek",
+    "meek_lite",
+    "webtunnel",
+    "scramblesuit",
+];
+
+/// Parse a paste of bridge lines into Arti builders.
+///
+/// Accepts the same text a user copies from bridges.torproject.org:
+/// blank lines and `#` comments are ignored, a leading `Bridge ` is
+/// optional. Vanilla lines (`ip:port fingerprint`) are accepted.
+/// Lines that name a pluggable transport are refused with the transport
+/// in the error, so the UI can say exactly what this build cannot do.
+pub fn parse_bridge_lines(raw: &str) -> Result<Vec<BridgeConfigBuilder>, String> {
+    let mut out = Vec::new();
+    for (i, raw_line) in raw.lines().enumerate() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let line = line
+            .strip_prefix("Bridge ")
+            .or_else(|| line.strip_prefix("bridge "))
+            .unwrap_or(line)
+            .trim();
+
+        if let Some(pt) = first_token_is_pt(line) {
+            return Err(format!(
+                "bridge line {} uses the `{pt}` transport. This build can only use vanilla bridges (an IP, a port, and a fingerprint). `{pt}` needs a pluggable-transport binary we do not ship yet.",
+                i + 1
+            ));
+        }
+
+        let parsed: BridgeConfigBuilder = line.parse().map_err(|e| {
+            format!(
+                "bridge line {} is not a valid vanilla bridge: {e}",
+                i + 1
+            )
+        })?;
+        out.push(parsed);
+    }
+    Ok(out)
+}
+
+fn first_token_is_pt(line: &str) -> Option<&str> {
+    let token = line.split_whitespace().next()?;
+    UNSUPPORTED_PTS
+        .iter()
+        .copied()
+        .find(|pt| token.eq_ignore_ascii_case(pt))
+}
+
+fn build_config(
+    cache_dir: PathBuf,
+    state_dir: PathBuf,
+    bridges: &str,
+) -> Result<TorClientConfig, String> {
     let mut builder = TorClientConfig::builder();
     builder
         .storage()
         .cache_dir(arti_client::config::CfgPath::new_literal(cache_dir))
         .state_dir(arti_client::config::CfgPath::new_literal(state_dir));
+
+    let parsed = parse_bridge_lines(bridges)?;
+    if !parsed.is_empty() {
+        // Auto: use bridges because they are configured. We do not have a
+        // separate "force bridges" switch — if the user pasted lines, those
+        // are the only way this client is allowed onto the network.
+        for bridge in parsed {
+            builder.bridges().bridges().push(bridge);
+        }
+    }
 
     builder.build().map_err(|e| format!("invalid Tor config: {e}"))
 }
@@ -318,7 +403,56 @@ mod tests {
     #[test]
     fn config_accepts_private_directories() {
         let dir = std::env::temp_dir().join("khabardar-tor-test");
-        let config = build_config(dir.join("cache"), dir.join("state"));
+        let config = build_config(dir.join("cache"), dir.join("state"), "");
+        assert!(config.is_ok(), "config error: {:?}", config.err());
+    }
+
+    #[test]
+    fn empty_and_comments_are_not_bridges() {
+        let parsed = parse_bridge_lines("\n# a comment\n  \n").unwrap();
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn vanilla_bridge_line_parses() {
+        // Fictitious address. We only check that Arti accepts the syntax;
+        // we do not connect.
+        let line = "192.0.2.55:443 7DD62766BF2052432051D7B7E08A22F7E34A4543";
+        let parsed = parse_bridge_lines(line).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert!(
+            parsed[0]
+                .get_transport()
+                .map(|t| t.is_empty() || t == "bridge" || t == "-")
+                .unwrap_or(true)
+        );
+    }
+
+    #[test]
+    fn bridge_prefix_is_optional() {
+        let line = "Bridge 192.0.2.55:443 7DD62766BF2052432051D7B7E08A22F7E34A4543";
+        assert_eq!(parse_bridge_lines(line).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn obfs4_is_refused_with_the_transport_named() {
+        let line = "obfs4 192.0.2.55:38114 7DD62766BF2052432051D7B7E08A22F7E34A4543 cert=abcd iat-mode=0";
+        let err = parse_bridge_lines(line).unwrap_err();
+        assert!(err.contains("obfs4"), "error should name the transport: {err}");
+        assert!(err.contains("do not ship"), "error should be honest about why: {err}");
+    }
+
+    #[test]
+    fn snowflake_is_refused() {
+        let err = parse_bridge_lines("snowflake 192.0.2.55:443 fingerprint").unwrap_err();
+        assert!(err.contains("snowflake"));
+    }
+
+    #[test]
+    fn config_with_a_vanilla_bridge_builds() {
+        let dir = std::env::temp_dir().join("khabardar-tor-bridge-test");
+        let line = "192.0.2.55:443 7DD62766BF2052432051D7B7E08A22F7E34A4543";
+        let config = build_config(dir.join("cache"), dir.join("state"), line);
         assert!(config.is_ok(), "config error: {:?}", config.err());
     }
 }

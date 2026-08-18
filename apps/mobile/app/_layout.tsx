@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as ScreenCapture from "expo-screen-capture";
+import { ErrorBoundary } from "../src/ErrorBoundary";
 import { LockGate } from "../src/LockGate";
 import { WebDemoGate } from "../src/WebDemoGate";
 import { AppProvider, useApp } from "../src/state/AppContext";
@@ -77,17 +78,22 @@ function ScreenCaptureGuard() {
 
 export default function Layout() {
   return (
-    <AppProvider>
-      <StatusBar style="light" />
-      <ScreenCaptureGuard />
-      {/* Outermost on purpose: on web the disclosure has to come before the
-          PIN screen, because a lock screen implies protection this build
-          cannot provide. No-op on native. */}
-      <WebDemoGate>
-        <LockGate>
-          <RootStack />
-        </LockGate>
-      </WebDemoGate>
-    </AppProvider>
+    // Outside the provider so that a throw from AppProvider itself — a bad
+    // state read at startup, say — still lands on a readable screen rather
+    // than an empty one.
+    <ErrorBoundary>
+      <AppProvider>
+        <StatusBar style="light" />
+        <ScreenCaptureGuard />
+        {/* Outermost on purpose: on web the disclosure has to come before the
+            PIN screen, because a lock screen implies protection this build
+            cannot provide. No-op on native. */}
+        <WebDemoGate>
+          <LockGate>
+            <RootStack />
+          </LockGate>
+        </WebDemoGate>
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

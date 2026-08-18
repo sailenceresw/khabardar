@@ -9,6 +9,9 @@
 #
 # Verified rather than assumed — `readelf -d libkhabardar_zkprove.so` lists only
 # liblog, libdl, libm and libc under NEEDED.
+#
+# android/build.gradle repeats this in Groovy, for the Gradle path that never
+# runs this script. Change one, change the other.
 
 set -euo pipefail
 

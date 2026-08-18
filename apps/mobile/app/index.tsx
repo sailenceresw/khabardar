@@ -1,29 +1,99 @@
 import React, { useEffect } from "react";
-import { Pressable, Text, View, StyleSheet } from "react-native";
+import { ActivityIndicator, Pressable, Text, View, StyleSheet } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { REPORT_CATEGORY_KEYS } from "@khabardar/shared";
 import { useApp } from "../src/state/AppContext";
+import { readKarma } from "../src/karma";
+import { probeAnonymity } from "../src/net/transport";
 import { Badge, Body, Button, Card, Screen, Title } from "../src/ui";
 import { colors, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { identity, identityLoaded, reports, queue, flushing, refreshReports, retryQueued } = useApp();
+  const {
+    identity,
+    identityLoaded,
+    storageError,
+    reports,
+    queue,
+    flushing,
+    refreshIdentity,
+    refreshReports,
+    retryQueued,
+  } = useApp();
+
+  const [karma, setKarma] = React.useState<bigint | null>(null);
+  const [net, setNet] = React.useState(() => probeAnonymity());
 
   useEffect(() => {
-    if (identityLoaded && !identity) {
+    // A storage failure means onboarding cannot write an identity either —
+    // stay here and say so instead of bouncing into a flow that will fail.
+    if (identityLoaded && !identity && !storageError) {
       router.replace("/onboarding");
     }
-  }, [identityLoaded, identity, router]);
+  }, [identityLoaded, identity, storageError, router]);
+
+  // Deliberately not awaited by the render path: karma is a network read, and
+  // a home screen that waits on the chain is a home screen that hangs when the
+  // chain is unreachable. It fills in when it arrives, or stays unknown.
+  useEffect(() => {
+    if (!identity) return;
+    let active = true;
+    readKarma(identity.address as `0x${string}`).then((k) => {
+      if (active) setKarma(k);
+    });
+    return () => {
+      active = false;
+    };
+  }, [identity]);
 
   useFocusEffect(
     React.useCallback(() => {
       refreshReports();
+      setNet(probeAnonymity());
     }, [refreshReports])
   );
 
-  if (!identityLoaded || !identity) return <Screen scroll={false}><View /></Screen>;
+  // Never render an empty screen here. This branch is hit both while storage is
+  // being read and in the frame before the redirect to onboarding lands, and a
+  // bare <View/> in either case is indistinguishable from the app being broken.
+  if (!identityLoaded) {
+    return (
+      <Screen scroll={false}>
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.accent} />
+          <Body dim>{t("common.loading")}</Body>
+        </View>
+      </Screen>
+    );
+  }
+
+  // Storage is unreadable, so onboarding cannot write an identity either —
+  // saying so beats bouncing the user into a flow that will silently fail.
+  if (storageError) {
+    return (
+      <Screen scroll={false}>
+        <Card style={{ borderColor: colors.danger }}>
+          <Title>{t("common.error")}</Title>
+          <Body>{t("home.storageUnreadable")}</Body>
+          <Body dim>{storageError}</Body>
+          <Button label={t("common.retry")} onPress={refreshIdentity} />
+        </Card>
+      </Screen>
+    );
+  }
+
+  if (!identity) {
+    return (
+      <Screen scroll={false}>
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.accent} />
+          <Body dim>{t("common.loading")}</Body>
+        </View>
+      </Screen>
+    );
+  }
 
   const statusTone = { draft: "dim", submitting: "info", anchored: "success", failed: "danger" } as const;
 
@@ -33,8 +103,13 @@ export default function HomeScreen() {
         <Body dim>{t("home.codename")}</Body>
         <Title>{identity.codename}</Title>
         <Body dim>
-          {t("home.karma")}: 0
+          {t("home.karma")}: {karma === null ? t("home.karmaUnknown") : String(karma)}
         </Body>
+        {!net.verified ? (
+          <Pressable onPress={() => router.push("/network")}>
+            <Body dim>{t("home.networkUnprotected")}</Body>
+          </Pressable>
+        ) : null}
       </Card>
 
       <Button label={t("home.newReport")} onPress={() => router.push("/compose")} />
@@ -75,9 +150,7 @@ export default function HomeScreen() {
 
       <View style={styles.footerLinks}>
         <FooterLink label={t("common.settings")} onPress={() => router.push("/settings")} />
-        <FooterLink label={t("common.moderation")} onPress={() => router.push("/moderation")} />
         <FooterLink label={t("common.tips")} onPress={() => router.push("/tips")} />
-        <FooterLink label={t("org.open")} onPress={() => router.push("/org")} />
       </View>
     </Screen>
   );
@@ -93,6 +166,7 @@ function FooterLink({ label, onPress }: { label: string; onPress: () => void }) 
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm },
   footerLinks: {
     flexDirection: "row",
     justifyContent: "space-around",

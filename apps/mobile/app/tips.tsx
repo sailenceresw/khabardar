@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
+import { journalistKeysArePlaceholders } from "../src/content/recipients";
 import { listRecipients, listTips, sendTip, type TipRecord } from "../src/tips";
 import { Body, Button, Card, Mono, Screen, Title } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
@@ -34,11 +35,11 @@ export default function TipsScreen() {
     setResult(null);
     try {
       const tip = await sendTip(message.trim(), recipient);
-      setResult(
-        tip.status === "stored" ? t("tips.sealedStored") : t("tips.sealedOnly")
-      );
+      setResult(tip.simulated ? t("tips.sealedLocal") : t("tips.sealedStored"));
       setMessage("");
       await load();
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : t("tips.sealedOnly"));
     } finally {
       setBusy(false);
     }
@@ -57,6 +58,12 @@ export default function TipsScreen() {
       <Card style={{ borderColor: colors.info }}>
         <Body dim>{t("tips.transportWarning")}</Body>
       </Card>
+
+      {journalistKeysArePlaceholders() ? (
+        <Card style={{ borderColor: colors.danger }}>
+          <Body>{t("tips.demoKeysWarning")}</Body>
+        </Card>
+      ) : null}
 
       <Card>
         <Body dim>{t("tips.recipientLabel")}</Body>

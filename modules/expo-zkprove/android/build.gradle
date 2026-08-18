@@ -120,6 +120,33 @@ task buildZkProver(type: Exec) {
   commandLine(['cargo', 'ndk'] +
     enabledAbis.collectMany { ['-t', it] } +
     ['-o', "${projectDir}/src/main/jniLibs", 'build', '--release'])
+
+  /**
+   * Drop shared objects cargo-ndk copied that we never load.
+   *
+   * cargo-ndk copies every .so in the target directory, including ones built for
+   * Rust's own dependency graph. `libark_circom-<hash>.so` is the usual offender:
+   * the prover links it statically, so it is never opened at runtime and only
+   * adds to the APK.
+   *
+   * This duplicates scripts/prune-jnilibs.sh on purpose, and the two must stay in
+   * step. The script covers `npm run zk:build:android`, which calls cargo ndk
+   * without Gradle. This covers `expo run:android`, which calls Gradle without
+   * npm — the path a developer actually uses, and the one that was shipping the
+   * dead library. Written in Groovy rather than shelling out because a build
+   * machine is not guaranteed to have bash.
+   */
+  doLast {
+    def jniDir = file("${projectDir}/src/main/jniLibs")
+    if (!jniDir.exists()) return
+    def keep = 'libkhabardar_zkprove.so'
+    jniDir.eachFileRecurse { f ->
+      if (f.isFile() && f.name.endsWith('.so') && f.name != keep) {
+        logger.lifecycle("expo-zkprove: pruning ${f.name} (${(f.length() / 1024) as long} KiB)")
+        f.delete()
+      }
+    }
+  }
 }
 
 static def isWindows() {

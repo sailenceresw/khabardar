@@ -99,7 +99,8 @@ SHIMS["expo-tor"] = {
     socksPort: torStub.socksPort,
     lastError: null,
   }),
-  startTor: async () => {
+  setLauncherDisguise: async () => false,
+  startTor: async (_bridges?: string) => {
     torStub.state = "running";
     torStub.socksPort = 9150;
     return torStub.socksPort;
@@ -544,6 +545,62 @@ async function main() {
   // Leave the transport where the rest of the suite expects it.
   torStub.available = false;
   transportMod.setTransport(null);
+
+  // 14. Karma must not invent a number. A missing registry, or a failed read,
+  // is `null` — never `0`, which is a real on-chain value and would understate
+  // a reporter's standing if we used it as a fallback.
+  const { readKarma } = require("../src/karma");
+  const prevRegistry = process.env.EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS;
+  delete process.env.EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS;
+  const unknown = await readKarma(account.address);
+  assert(unknown === null, "karma without a registry must be unknown, not zero");
+  if (prevRegistry === undefined) delete process.env.EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS;
+  else process.env.EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS = prevRegistry;
+  console.log("14. karma read                  : unknown without a registry (OK)");
+
+  // 15. "Journalists only" must not be presented as real while the keys are
+  // placeholders. The help text and review warning both key off this flag.
+  const { journalistKeysArePlaceholders } = require("../src/content/recipients");
+  assert(
+    journalistKeysArePlaceholders() === true,
+    "placeholder journalist keys must still be flagged as placeholders"
+  );
+  console.log("15. journalist keys             : flagged as placeholders (OK)");
+
+  // 16. Vanilla bridges are accepted; obfuscated transports are refused by
+  // name rather than handed to Arti to fail later with nothing useful.
+  const { parseBridgePaste } = require("../src/net/bridges");
+  const vanilla = parseBridgePaste(
+    "# comment\nBridge 192.0.2.55:443 7DD62766BF2052432051D7B7E08A22F7E34A4543\n"
+  );
+  assert(vanilla.errors.length === 0, "a vanilla bridge line must be accepted");
+  assert(vanilla.vanilla.length === 1, "the Bridge prefix must be optional");
+  const obfs = parseBridgePaste(
+    "obfs4 192.0.2.55:38114 7DD62766BF2052432051D7B7E08A22F7E34A4543 cert=abcd iat-mode=0"
+  );
+  assert(obfs.vanilla.length === 0, "an obfs4 line must not be treated as vanilla");
+  assert(
+    obfs.errors.some((e: string) => e.includes("obfs4") && e.includes("do not ship")),
+    "the refusal must name the transport and say why"
+  );
+  console.log("16. bridge paste                : vanilla kept, obfs4 refused (OK)");
+
+  // 17. A tip upload must isolate first, same as a report, and the mock
+  // store must not be reported as a network delivery.
+  torStub.available = true;
+  torStub.state = "running";
+  torStub.socksPort = 9150;
+  torStub.circuitRotations = 0;
+  const { sendTip, getRecipient } = require("../src/tips");
+  const tipRecipient = getRecipient("demo-newsroom");
+  assert(!!tipRecipient, "demo recipient must exist for the tip path");
+  const sentTip = await sendTip("a sealed tip long enough to send", tipRecipient);
+  assert(sentTip.status === "stored", "a mock-store tip is stored locally");
+  assert(sentTip.simulated === true, "the mock store must not claim a network delivery");
+  assert(torStub.circuitRotations === 1, "a tip must rotate the circuit before leaving");
+  torStub.available = false;
+  transportMod.setTransport(null);
+  console.log("17. tip delivery                : isolated, marked local on mock store (OK)");
 
   console.log("\n✅ ALL SLICE STEPS PASSED — compose → encrypt → hash → encode → sign → gasless submit\n");
 }

@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
   clearEgressLog,
@@ -9,6 +9,7 @@ import {
   setRequireAnonymity,
   type EgressEntry,
 } from "../src/net/transport";
+import { loadBridgePaste, saveBridgePaste, serializeBridges } from "../src/net/bridges";
 import {
   ensureTorRunning,
   shutdownTor,
@@ -18,7 +19,7 @@ import {
 } from "../src/net/torTransport";
 import type { TorStatus } from "expo-tor";
 import { Badge, Body, Button, Card, Mono, Screen, Title } from "../src/ui";
-import { colors, spacing } from "../src/theme";
+import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
 /**
@@ -36,6 +37,8 @@ export default function NetworkScreen() {
   const [tor, setTor] = useState<TorStatus>({ state: "stopped", socksPort: 0 });
   const [busy, setBusy] = useState(false);
   const [torError, setTorError] = useState<string | null>(null);
+  const [bridgePaste, setBridgePaste] = useState("");
+  const [bridgeNote, setBridgeNote] = useState<string | null>(null);
 
   const probe = probeAnonymity();
 
@@ -44,6 +47,7 @@ export default function NetworkScreen() {
     setRequired(await getRequireAnonymity());
     setAvailability(torAvailability());
     setTor(torStatus());
+    setBridgePaste(await loadBridgePaste());
   }, []);
 
   useFocusEffect(
@@ -62,7 +66,19 @@ export default function NetworkScreen() {
     setTorError(null);
     try {
       if (tor.state === "running") await shutdownTor();
-      else await ensureTorRunning();
+      else {
+        // Persist before starting, not merely parse. The `load()` below refills
+        // this field from storage, so starting on unsaved text would blank the
+        // box the user just pasted into while Tor ran on those bridges — and the
+        // next start would then go to the public directory, which is the one
+        // thing bridges exist to avoid on a censored network.
+        const parsed = await saveBridgePaste(bridgePaste);
+        if (parsed.errors.length) {
+          setTorError(parsed.errors[0]);
+          return;
+        }
+        await ensureTorRunning(serializeBridges(parsed.vanilla));
+      }
     } catch (e) {
       setTorError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -124,6 +140,46 @@ export default function NetworkScreen() {
         )}
       </Card>
 
+      {availability === "available" ? (
+        <Card>
+          <Body dim>{t("net.bridgesTitle")}</Body>
+          <Body dim>{t("net.bridgesExplainer")}</Body>
+          <TextInput
+            style={styles.bridges}
+            multiline
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder={t("net.bridgesPlaceholder")}
+            placeholderTextColor={colors.textDim}
+            value={bridgePaste}
+            onChangeText={(text) => {
+              setBridgePaste(text);
+              setBridgeNote(null);
+            }}
+          />
+          {bridgeNote ? <Body dim>{bridgeNote}</Body> : null}
+          <Button
+            label={t("net.bridgesSave")}
+            variant="secondary"
+            onPress={async () => {
+              const parsed = await saveBridgePaste(bridgePaste);
+              if (parsed.errors.length) {
+                setBridgeNote(parsed.errors[0]);
+                return;
+              }
+              setBridgeNote(
+                parsed.vanilla.length
+                  ? t("net.bridgesSaved", { count: parsed.vanilla.length })
+                  : t("net.bridgesCleared")
+              );
+              if (tor.state === "running") {
+                setBridgeNote(t("net.bridgesRestart"));
+              }
+            }}
+          />
+        </Card>
+      ) : null}
+
       <Card>
         <Body dim>{t("net.requireTitle")}</Body>
         <Body dim>{t("net.requireExplainer")}</Body>
@@ -170,5 +226,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     gap: spacing.sm,
+  },
+  bridges: {
+    color: colors.text,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    minHeight: 96,
+    textAlignVertical: "top",
+    fontSize: 13,
+    fontFamily: "monospace",
   },
 });

@@ -7,14 +7,22 @@
     "createIdentity": "Create anonymous identity",
     "creating": "Creating identity…",
     "yourCodename": "Your codename",
-    "continue": "Continue"
+    "continue": "Continue",
+    "createFailed": "Your identity could not be created. Nothing was saved.",
+    "phraseUnavailable": "Your identity was created, but your 12 recovery words could not be read on this device. Open Settings → Recovery phrase and write them down before you rely on this device.",
+    "writeTheseDown": "Write these 12 words on paper before you continue. They are the only way back in if this device is lost or wiped. Nobody can recover them for you.",
+    "iWroteThemDown": "I have written these words down",
+    "alreadyHavePhrase": "I already have a recovery phrase"
   },
   "home": {
     "title": "Reports",
     "empty": "No reports yet. Anything you compose stays encrypted on this device until you submit it.",
     "newReport": "New report",
     "karma": "Karma",
-    "codename": "Codename"
+    "codename": "Codename",
+    "karmaUnknown": "unknown",
+    "networkUnprotected": "This device is connecting directly. Your IP is visible to every server the app contacts.",
+    "storageUnreadable": "This device's secure storage could not be read, so your identity cannot be loaded. On the web build this usually means the browser is blocking storage, for example private browsing or site data turned off."
   },
   "compose": {
     "title": "New report",
@@ -34,7 +42,7 @@
     "review": "Review & submit",
     "visibilityLabel": "Who can read this",
     "visibilityPublicHelp": "Anyone can read this report. Publish only what you are willing to have read by the public, including the people it names.",
-    "visibilityJournalistsHelp": "Only verified journalists and NGOs can read this. Choose this when the details are sensitive or could identify you.",
+    "visibilityJournalistsHelp": "This build has no real journalist keys. The names on the list are samples. A report marked journalists-only is sealed to placeholder keys that no newsroom holds, so nobody intended can read it.",
     "addDocument": "Add document",
     "addAudio": "Record audio",
     "stopRecording": "Stop recording",
@@ -52,7 +60,8 @@
     "gasNote": "Submission is free — gas is sponsored. You do not need any cryptocurrency.",
     "submit": "Submit anonymously",
     "submitting": "Anchoring on Linea…",
-    "sponsoredBy": "Gas for reports in this area is sponsored by %{name}."
+    "sponsoredBy": "Gas for reports in this area is sponsored by %{name}.",
+    "journalistsDemoWarning": "This report is marked journalists-only, but this build has no real journalist keys. Nobody at a newsroom can open it. Submit it only if you are testing the app."
   },
   "status": {
     "title": "Report status",
@@ -82,7 +91,9 @@
     "panicConfirmBody": "This cannot be undone. All drafts, evidence, and your identity will be destroyed.",
     "panicConfirmYes": "Erase",
     "panicConfirmNo": "Cancel",
-    "panicDone": "All local data erased."
+    "panicDone": "All local data erased.",
+    "otherTitle": "Other workspaces",
+    "otherExplainer": "These are not part of anonymous reporting. An organization account is named and must never live on a device you report from."
   },
   "moderation": {
     "title": "Review queue",
@@ -97,13 +108,15 @@
   "tips": {
     "title": "Tip channel",
     "intro": "Send an end-to-end encrypted message to a specific journalist or NGO. Unlike a report, a tip is never anchored on-chain — it is a private message, not a public record.",
-    "transportWarning": "v0 limitation: tips are sealed correctly but not yet delivered over an anonymising transport. Until Tor or a mixnet relay is wired in, network metadata could reveal that you contacted a recipient — even though the contents stay unreadable.",
+    "transportWarning": "A tip is sealed on this device and uploaded through the same transport as reports. On this build the upload stays on the device unless you configured a real content store. Start Tor on the Network screen before sending if the upload must not carry your IP.",
+    "demoKeysWarning": "The names on this list are samples. Their keys do not belong to any newsroom. A tip sealed to them cannot be opened by the organisation the name suggests.",
     "recipientLabel": "Recipient",
     "recipientKeyNote": "Tips are sealed to this recipient's public key on your device. Nobody else — including the servers in between — can read them.",
     "messageLabel": "Your message",
     "messagePlaceholder": "What do you want them to know? Leave out details that identify you unless you intend to be contacted.",
     "send": "Seal and send",
-    "sealedStored": "Tip sealed and stored. Only the recipient can decrypt it.",
+    "sealedStored": "Tip sealed and uploaded. Only the recipient's key can open it. The upload used the current transport.",
+    "sealedLocal": "Tip sealed and kept on this device. Nothing left the phone. Configure a content store to actually deliver it.",
     "sealedOnly": "Tip sealed, but storing it failed. Nothing readable was written anywhere.",
     "sentTitle": "Tips you have sent",
     "sentNote": "Only a short preview and a digest are kept on this device. Panic delete removes these too.",
@@ -281,7 +294,8 @@
     "feed": "Public feed",
     "loading": "Loading…",
     "error": "Something went wrong",
-    "save": "Save"
+    "save": "Save",
+    "retry": "Try again"
   },
   "jury": {
     "intro": "Reports are judged by a jury of equals voting in secret. Every juror counts exactly one — no weighting by reputation or anything else. Ballots are sealed until the panel is full, so nobody can see which way it is leaning while there is still time to join. Disagreeing costs a juror nothing.",
@@ -327,13 +341,16 @@
   },
   "queue": {
     "pending": "%{count} report(s) waiting to be sent",
-    "explainer": "These could not be anchored — usually no connection. They stay encrypted on this device and are retried when you open the app. Nothing is sent in the background.",
+    "explainer": "These could not be anchored, usually because there is no connection. They stay encrypted on this device and are retried when you open the app. Nothing is sent in the background.",
     "retryNow": "Try sending now",
     "queuedNotice": "Saved and queued. It will be retried next time you open the app, or tap Try sending now from the home screen."
   },
   "stealth": {
     "title": "Stealth",
     "intro": "These settings assume the person holding your phone is not you. They do not resist a forensic image taken before a wipe — they make a seized-and-unlocked phone survivable.",
+    "launcherLimit": "A disguise can change the lock screen, and on Android the home-screen name and icon. It cannot change the package name. Settings and a listing of installed apps still show Khabardar.",
+    "launcherUnchanged": "The lock-screen disguise is on. This build could not change the home-screen icon. On iOS that needs extra icon assets. On Android, rebuild the native project.",
+    "launcherResetFailed": "The disguise is off. This build could not change the home-screen icon back, so it may still show the old name and icon.",
     "lockTitle": "PIN lock",
     "lockExplainer": "Require a PIN when the app opens.",
     "setPin": "Set unlock PIN",
@@ -343,7 +360,7 @@
     "setDuress": "Set duress PIN",
     "duressSet": "Duress PIN is set.",
     "disguiseTitle": "Disguise",
-    "disguiseExplainer": "What the lock screen looks like. A recognisable anti-corruption app is itself evidence against its user.",
+    "disguiseExplainer": "What the lock screen looks like, and on Android the home-screen name and icon. A recognisable anti-corruption app is itself evidence against its user.",
     "disguiseNone": "None",
     "disguiseCalculator": "Calculator",
     "disguiseNotes": "Notes",
@@ -354,7 +371,8 @@
     "pinTooShort": "Use at least 6 digits.",
     "pinTooSimple": "That PIN is too easy to guess. Avoid repeated or sequential digits.",
     "pinDuressMatchesReal": "The duress PIN must be different from your unlock PIN.",
-    "saved": "Saved."
+    "saved": "Saved.",
+    "lockUnreadable": "The PIN could not be read, so the app cannot tell whether a lock is set. It has stayed locked rather than guess."
   },
   "net": {
     "title": "Network",
@@ -377,6 +395,13 @@
     "torPort": "Running. Local SOCKS port %{port}.",
     "torBootstrapping": "Connecting to the Tor network. This usually takes 10–60 seconds, and longer where Tor is blocked. Leave the app open.",
     "torUnsupported": "This build cannot run Tor. Expo Go and the web preview cannot load native code — you need a development build or a release binary. Until then this device connects directly.",
+    "bridgesTitle": "Bridges",
+    "bridgesExplainer": "If the public Tor network is blocked, paste vanilla bridge lines here (an address, a port, a fingerprint). Get them from bridges.torproject.org. This build cannot run obfs4, snowflake or meek — those need a pluggable-transport binary we do not ship yet. Vanilla bridges help when directory authorities are blocked. They do not hide that the traffic is Tor from a network that is looking for it.",
+    "bridgesPlaceholder": "192.0.2.55:443 FINGERPRINT",
+    "bridgesSave": "Save bridges",
+    "bridgesSaved": "Saved %{count} bridge(s). Start Tor to use them.",
+    "bridgesCleared": "No bridges saved. Tor will use the public network.",
+    "bridgesRestart": "Saved. Stop Tor and start it again for the new bridges to take effect.",
     "torState": {
       "stopped": "Off",
       "starting": "Connecting",
@@ -494,5 +519,8 @@
     },
     "followNothingYet": "You are not following anything yet. Follow an accused office, an area, or a category from any report — those carry no reporter identity. Following a person does.",
     "commentBadge": "%{count} comment(s)"
+  },
+  "error": {
+    "boundaryBody": "The app hit an unexpected error and stopped drawing this screen. Your saved reports are untouched."
   }
 }

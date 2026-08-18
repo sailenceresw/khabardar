@@ -41,7 +41,7 @@ internal object TorNative {
   external fun initLogging()
 
   /** @return the loopback SOCKS port, or -1 on failure. */
-  external fun nativeStart(cacheDir: String, stateDir: String): Int
+  external fun nativeStart(cacheDir: String, stateDir: String, bridges: String): Int
 
   external fun nativeStop()
 
