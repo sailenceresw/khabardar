@@ -24,6 +24,8 @@ export default function HomeScreen() {
   } = useApp();
 
   const [karma, setKarma] = React.useState<bigint | null>(null);
+  const [karmaChecking, setKarmaChecking] = React.useState(false);
+  const [karmaAsked, setKarmaAsked] = React.useState(false);
   const [net, setNet] = React.useState(() => probeAnonymity());
 
   useEffect(() => {
@@ -37,8 +39,15 @@ export default function HomeScreen() {
   // Deliberately not awaited by the render path: karma is a network read, and
   // a home screen that waits on the chain is a home screen that hangs when the
   // chain is unreachable. It fills in when it arrives, or stays unknown.
+  //
+  // Unprompted only behind a verified anonymising transport. Unlike the feed,
+  // this read is keyed to the reporter's own address, so on a direct connection
+  // it would hand the RPC provider an IP↔pseudonym link merely because someone
+  // opened the app. That is the linkage the whole relayer path exists to avoid,
+  // and it is not a thing to do on the user's behalf. Without Tor the read waits
+  // for the deliberate tap below.
   useEffect(() => {
-    if (!identity) return;
+    if (!identity || !net.verified) return;
     let active = true;
     readKarma(identity.address as `0x${string}`).then((k) => {
       if (active) setKarma(k);
@@ -46,7 +55,21 @@ export default function HomeScreen() {
     return () => {
       active = false;
     };
-  }, [identity]);
+  }, [identity, net.verified]);
+
+  // The same read, but asked for. `karmaAsked` stops a failed check from
+  // re-offering the tap forever, which would read as the number being one tap
+  // away when it is actually unreachable.
+  async function checkKarma() {
+    if (!identity || karmaChecking) return;
+    setKarmaChecking(true);
+    try {
+      setKarma(await readKarma(identity.address as `0x${string}`));
+    } finally {
+      setKarmaAsked(true);
+      setKarmaChecking(false);
+    }
+  }
 
   useFocusEffect(
     React.useCallback(() => {
@@ -102,9 +125,22 @@ export default function HomeScreen() {
       <Card>
         <Body dim>{t("home.codename")}</Body>
         <Title>{identity.codename}</Title>
-        <Body dim>
-          {t("home.karma")}: {karma === null ? t("home.karmaUnknown") : String(karma)}
-        </Body>
+        {karma === null && !karmaChecking && !karmaAsked && !net.verified ? (
+          <Pressable onPress={checkKarma} accessibilityRole="button">
+            <Body dim>
+              {t("home.karma")}: {t("home.karmaCheck")}
+            </Body>
+          </Pressable>
+        ) : (
+          <Body dim>
+            {t("home.karma")}:{" "}
+            {karma !== null
+              ? String(karma)
+              : karmaChecking
+                ? t("common.loading")
+                : t("home.karmaUnknown")}
+          </Body>
+        )}
         {!net.verified ? (
           <Pressable onPress={() => router.push("/network")}>
             <Body dim>{t("home.networkUnprotected")}</Body>

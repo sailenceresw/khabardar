@@ -21,6 +21,7 @@
     "karma": "Karma",
     "codename": "Codename",
     "karmaUnknown": "unknown",
+    "karmaCheck": "tap to check over this connection",
     "networkUnprotected": "This device is connecting directly. Your IP is visible to every server the app contacts.",
     "storageUnreadable": "This device's secure storage could not be read, so your identity cannot be loaded. On the web build this usually means the browser is blocking storage, for example private browsing or site data turned off."
   },
