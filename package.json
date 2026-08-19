@@ -13,7 +13,8 @@
     "contracts:deploy:sepolia": "npm run deploy:sepolia --workspace packages/contracts",
     "mobile:start": "npm run start --workspace apps/mobile",
     "mobile:web": "npm run web --workspace apps/mobile",
-    "mobile:typecheck": "npm run typecheck --workspace apps/mobile"
+    "mobile:typecheck": "npm run typecheck --workspace apps/mobile",
+    "check:i18n": "node scripts/check-i18n.mjs"
   },
   "engines": {
     "node": ">=20"
