@@ -64,6 +64,19 @@ drift apart. The build also fails up front, with the exact `rustup target add`
 command, if a target for an enabled ABI is missing — rather than dying with an
 opaque cargo error some minutes in.
 
+It also **deletes `jniLibs/` directories for ABIs outside the current set**.
+That is not tidiness. `abiFilters` decides what each module *compiles*; it does
+not stop a `.so` left over from an earlier full build being packaged into the
+APK, and `jniLibs/` is gitignored and never cleaned. Before this, a build passing
+`-PkhabardarAbis=x86_64` still shipped an arm64 Arti and an arm64 prover from
+whenever they were last built.
+
+**The deletion is not free to undo.** Cargo caches per-target artifacts, but the
+link and the cargo-ndk copy are not the expensive part — restoring `arm64-v8a`
+alongside `x86_64` after an x86_64-only build measured **1h 33m** on this laptop.
+So treat the flag as a commitment: worth it while you stay on one ABI, expensive
+the moment you switch back. If you need both, ask for both.
+
 **Never pass this for a release build.** A Play Store artifact needs every ABI;
 one built with this flag would silently exclude real devices.
 

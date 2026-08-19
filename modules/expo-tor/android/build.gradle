@@ -127,6 +127,33 @@ task buildRustCore(type: Exec) {
   commandLine(['cargo', 'ndk'] +
     enabledAbis.collectMany { ['-t', it] } +
     ['-o', "${projectDir}/src/main/jniLibs", 'build', '--release'])
+
+  /**
+   * Drop ABIs this build did not produce.
+   *
+   * `abiFilters` above governs what *this module compiles*, not what a stale
+   * directory contributes to the APK. jniLibs is gitignored and never cleaned,
+   * so a previous full build leaves .so files behind and the app module packages
+   * them regardless — an `-PkhabardarAbis=x86_64` build was still shipping an
+   * arm64 Arti. Without this, DEVELOPING.md's promise that the ABI list and
+   * abiFilters cannot drift apart is not one the build actually keeps.
+   *
+   * Only reached when cargo exists, because `onlyIf` skips the whole task
+   * otherwise — so the documented "opens in Android Studio without Rust" path
+   * still deletes nothing.
+   */
+  doLast {
+    def jniDir = file("${projectDir}/src/main/jniLibs")
+    if (!jniDir.exists()) return
+    jniDir.eachDir { d ->
+      if (!enabledAbis.contains(d.name)) {
+        // ASCII only: this is read on a Windows console, where an em dash
+        // arrives as a replacement character.
+        logger.lifecycle("expo-tor: dropping stale ${d.name} jniLibs - not in this build's ABI set")
+        d.deleteDir()
+      }
+    }
+  }
 }
 
 static def isWindows() {
