@@ -15,6 +15,8 @@
     "mobile:start": "npm run start --workspace apps/mobile",
     "mobile:web": "npm run web --workspace apps/mobile",
     "mobile:typecheck": "npm run typecheck --workspace apps/mobile",
+    "web:export": "npm run web:export --workspace apps/mobile",
+    "web:static": "npm run web:static --workspace apps/mobile",
     "tor:test": "npm run test:rust --workspace expo-tor",
     "tor:build:android": "npm run build:android --workspace expo-tor",
     "tor:build:ios": "npm run build:ios --workspace expo-tor",
