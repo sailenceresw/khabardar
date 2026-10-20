@@ -583,6 +583,15 @@ async function main() {
     obfs.errors.some((e: string) => e.includes("obfs4") && e.includes("do not ship")),
     "the refusal must name the transport and say why"
   );
+  const unknownPt = parseBridgePaste("dnstt 192.0.2.55:53 7DD62766BF2052432051D7B7E08A22F7E34A4543");
+  assert(
+    unknownPt.vanilla.length === 0 && unknownPt.errors.some((e: string) => e.includes("dnstt")),
+    "a transport not on the list must still be refused by name"
+  );
+  const junk = parseBridgePaste("hello world\n192.0.2.55:443 notafingerprint\n[2001:db8::1]:443");
+  assert(junk.vanilla.length === 0 && junk.errors.length === 3, "malformed lines must be refused");
+  const v6 = parseBridgePaste("[2001:db8::1]:443 7DD62766BF2052432051D7B7E08A22F7E34A4543");
+  assert(v6.errors.length === 0 && v6.vanilla.length === 1, "a bracketed IPv6 bridge must be accepted");
   console.log("16. bridge paste                : vanilla kept, obfs4 refused (OK)");
 
   // 17. A tip upload must isolate first, same as a report, and the mock

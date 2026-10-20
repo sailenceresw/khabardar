@@ -722,9 +722,10 @@ and links every restore of that backup to the same user.
   explicitly in `/network`, so an untouched install still connects directly. And while the
   transport is built and its SOCKS layer tested, no report has yet travelled over the live
   Tor network from a device — see the roadmap. Do not assume it works because it compiles.
-- **Tor cannot start where Tor is blocked.** No bridge or pluggable-transport support yet,
-  so in exactly the censored environments that need it most, bootstrap fails and the user
-  is left choosing between a direct connection and no app.
+- **Tor cannot start where Tor traffic is blocked.** Vanilla bridges get past a blocked
+  directory, but there is no pluggable-transport support yet. Against DPI that recognises
+  Tor itself, bootstrap fails and the user is left choosing between a direct connection
+  and no app.
 - A build without the native module — Expo Go, web preview — cannot run Tor at all. It
   says so, but the distinction between "cannot protect you" and "is not protecting you
   right now" is easy to miss.

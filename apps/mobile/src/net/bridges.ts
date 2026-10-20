@@ -30,6 +30,17 @@ const UNSUPPORTED_PTS = [
   "scramblesuit",
 ] as const;
 
+const FINGERPRINT = /^\$?[0-9a-f]{40}$/i;
+
+function isAddrPort(s: string): boolean {
+  const m = /^(?:\[([0-9a-f:.]+)\]|(\d{1,3}(?:\.\d{1,3}){3})):(\d{1,5})$/i.exec(s);
+  if (!m) return false;
+  const port = Number(m[3]);
+  if (port < 1 || port > 65535) return false;
+  if (m[2]) return m[2].split(".").every((o) => Number(o) <= 255);
+  return m[1].includes(":");
+}
+
 export interface BridgeParse {
   /** Lines that this build can hand to Arti. */
   vanilla: string[];
@@ -56,9 +67,19 @@ export function parseBridgePaste(raw: string): BridgeParse {
     }
 
     // A vanilla line is `addr:port fingerprint`. IPv6 comes in [brackets].
+    // Checking the shape here matters for the same reason as the PT list: a
+    // line Arti cannot parse fails late and looks like Tor is broken.
     const parts = line.split(/\s+/);
-    if (parts.length < 2) {
-      errors.push(`Line ${i + 1} is not a vanilla bridge. It needs an address:port and a fingerprint.`);
+    if (!isAddrPort(token)) {
+      errors.push(
+        /^[a-z][a-z0-9_-]*$/i.test(token)
+          ? `Line ${i + 1} uses ${token}. This build can only use vanilla bridges (IP, port, fingerprint). ${token} needs a pluggable-transport binary we do not ship yet.`
+          : `Line ${i + 1} is not a vanilla bridge. It needs an address:port and a fingerprint.`
+      );
+      return;
+    }
+    if (parts.length < 2 || !FINGERPRINT.test(parts[1])) {
+      errors.push(`Line ${i + 1} is missing the bridge fingerprint (40 hex characters after the address).`);
       return;
     }
     vanilla.push(line);
