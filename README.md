@@ -703,8 +703,8 @@ and links every restore of that backup to the same user.
   device cap is 64 MB until native AES lands, and that figure has not been timed on a
   phone. The web preview stays at 8 MB. Still missing: a video picker — video carries
   location and device metadata that, unlike a photo, is not stripped without a
-  re-encode — upload progress, and resumable uploads, so a large file over Tor that drops
-  halfway is re-sent from the start. The ranged file reads have only run headlessly.
+  re-encode — and upload progress in the UI. A dropped upload resumes from the last chunk
+  that landed. The ranged file reads have only run headlessly.
 - **C2PA provenance** — capture-time signatures for evidence authenticity. Not started;
   needs a signing cert chain, so it is real infrastructure rather than a code change.
 - **Billing backend and public API** — the client-side model is built (seats, roles, API

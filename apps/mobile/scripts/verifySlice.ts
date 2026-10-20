@@ -290,12 +290,60 @@ async function main() {
   const otherFile = stream.newStreamHeader(3 * 16, 16);
   assert(await fails(() => stream.openChunk(otherFile, evKey, 0, c[0])), "a chunk from another file must not authenticate");
 
+  // A connection that drops partway must resume, not restart: after one
+  // chunk lands and the second put fails, the retry sends only the rest.
+  const resumable = await storeEvidence(bytesSource(bigEv), "document");
+  const liveStore = getContentStore();
+  const realPut = liveStore.put.bind(liveStore);
+  let puts = 0;
+  liveStore.put = async (b: unknown) => {
+    if (++puts === 2) throw new Error("circuit dropped");
+    return realPut(b);
+  };
+  assert(await fails(() => uploadAllEvidence([resumable])), "the injected drop must surface");
+  puts = 0;
+  liveStore.put = async (b: unknown) => {
+    puts++;
+    return realPut(b);
+  };
+  const [resumed] = await uploadAllEvidence([resumable]);
+  liveStore.put = realPut;
+  assert(puts === 3, `a resumed upload must send 2 remaining chunks + manifest, sent ${puts}`);
+  const resumedParts: Uint8Array[] = [];
+  await readUploadedEvidence(resumed.cid, await evidenceKey(resumed), (p: Uint8Array) => void resumedParts.push(p));
+  assert(Buffer.concat(resumedParts).equals(Buffer.from(bigEv)), "a resumed upload must still round-trip");
+  await deleteEvidence(resumable);
+
+  // A legacy item whose upload fails after re-sealing must still be
+  // uploadable on retry from the *old* item — that is what a failed publish
+  // leaves saved on the report.
+  const legacyBytes = bigEv.subarray(0, 3000);
+  const legacyItem = {
+    id: "ev_legacy2",
+    kind: "photo",
+    encryptedUri: "khabardar.evidence.ev_legacy2",
+    sha256: await sha256Hex(legacyBytes),
+    sizeBytes: legacyBytes.length,
+    addedAt: 1,
+  };
+  await asyncStorageStub.setItem(legacyItem.encryptedUri, JSON.stringify(encrypt(legacyBytes, deviceKey)));
+  liveStore.put = async () => {
+    throw new Error("circuit dropped");
+  };
+  assert(await fails(() => uploadAllEvidence([legacyItem])), "the injected drop must surface");
+  liveStore.put = realPut;
+  const [legacyRetry] = await uploadAllEvidence([legacyItem]);
+  assert(!!legacyRetry.cid && legacyRetry.addedAt === 1, "a legacy retry must find the copy re-sealed last time");
+  await deleteEvidence(legacyItem);
+  assert(![...memStore.keys()].some((k) => k.includes("ev_legacy2")), "deleting a legacy item must take its re-sealed copy");
+
   await deleteEvidence(streamed);
   assert(
     ![...memStore.keys()].some((k) => k.includes(streamed.id)),
     "deleting a streamed item must remove its header and every chunk"
   );
   console.log("5c. streamed evidence           : 3 chunks round-trip; reorder/truncate/swap refused (OK)");
+  console.log("    dropped upload               : resumed, legacy retry survives (OK)");
 
   // 5d. A reader holding only what a Public report publishes — its CID and
   // keyring — must be able to open the evidence. Before per-item keys this

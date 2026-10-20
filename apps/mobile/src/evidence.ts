@@ -246,13 +246,16 @@ async function deletePlaintext(uri: string | null | undefined): Promise<void> {
  * to the app and swept by {@link deleteAllEvidence} — rather than a header
  * pointing at a half-written file.
  */
-export async function storeEvidence(source: ByteSource, kind: EvidenceItem["kind"]): Promise<EvidenceItem> {
+export async function storeEvidence(
+  source: ByteSource,
+  kind: EvidenceItem["kind"],
+  id = `ev_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+): Promise<EvidenceItem> {
   if (source.size > MAX_EVIDENCE_BYTES) throw new EvidenceTooLarge(source.size);
 
   const key = randomKey();
   const header = newStreamHeader(source.size);
   const hash = createSha256();
-  const id = `ev_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
 
   try {
     for (let i = 0; i < header.chunkCount; i++) {
@@ -342,6 +345,8 @@ interface EvidenceManifest extends StreamHeader {
 /** The on-device header: the stream header plus the item key, sealed under the device evidence key. */
 interface LocalStreamHeader extends StreamHeader {
   key: EncryptedBlob;
+  /** Chunks already in the content store, in order, so a retry can resume. */
+  uploaded?: { store: string; cids: string[] };
 }
 
 /**
@@ -388,17 +393,31 @@ function isStreamed(item: EvidenceItem): boolean {
  * this device has ever made. So they are re-sealed as a stream under their
  * own key first, and uploaded as that. A legacy CID, if any, is dropped: it
  * points at a blob no reader could ever decrypt.
+ *
+ * The re-sealed copy has a fixed id, because a failed publish saves the
+ * report with its *old* evidence items: the retry has to find the copy made
+ * last time, or the legacy blob — already gone — would be the only lead.
  */
 async function uploadLegacy(item: EvidenceItem): Promise<EvidenceItem> {
-  const blob = await loadEvidenceBlob(item);
-  if (!blob) throw new Error(`Evidence ${item.id} missing locally`);
-  const resealed = await storeEvidence(bytesSource(decrypt(blob, await getEvidenceKey())), item.kind);
-  if (resealed.sha256 !== item.sha256) {
-    await deleteEvidence(resealed);
-    throw new Error(`Evidence ${item.id} no longer matches its fingerprint`);
+  const resealedId = legacyResealId(item);
+  let resealed: EvidenceItem = { ...item, id: resealedId, encryptedUri: STREAM_PREFIX + resealedId, cid: undefined };
+  if (!(await loadStreamHeader(resealed))) {
+    const blob = await loadEvidenceBlob(item);
+    if (!blob) throw new Error(`Evidence ${item.id} missing locally`);
+    const fresh = await storeEvidence(bytesSource(decrypt(blob, await getEvidenceKey())), item.kind, resealedId);
+    if (fresh.sha256 !== item.sha256) {
+      await deleteEvidence(fresh);
+      throw new Error(`Evidence ${item.id} no longer matches its fingerprint`);
+    }
+    resealed = { ...fresh, addedAt: item.addedAt };
   }
+  // Safe now that the re-sealed copy is durable on its own.
   await AsyncStorage.removeItem(item.encryptedUri);
-  return uploadStreamed({ ...resealed, addedAt: item.addedAt });
+  return uploadStreamed(resealed);
+}
+
+function legacyResealId(item: EvidenceItem): string {
+  return `${item.id}_v2`;
 }
 
 async function uploadStreamed(item: EvidenceItem): Promise<EvidenceItem> {
@@ -406,9 +425,14 @@ async function uploadStreamed(item: EvidenceItem): Promise<EvidenceItem> {
   if (!header) throw new Error(`Evidence ${item.id} missing locally`);
   const key = await evidenceKey(item);
 
+  // Resume where a dropped upload stopped. Over Tor a large file can take long
+  // enough that restarting from chunk 0 on every retry means it never lands.
+  // Progress is keyed to the store it was made on: a CID from the mock store
+  // means nothing to an IPFS pinning service.
   const store = getContentStore();
-  const chunkCids: string[] = [];
-  for (let i = 0; i < header.chunkCount; i++) {
+  const chunkCids =
+    header.uploaded?.store === store.name ? header.uploaded.cids.slice(0, header.chunkCount) : [];
+  for (let i = chunkCids.length; i < header.chunkCount; i++) {
     const sealed = await chunks.read(item.id, i);
     if (!sealed) throw new Error(`Evidence ${item.id} chunk ${i} missing locally`);
     // The nonce is left out on purpose: a reader recomputes it from the
@@ -420,9 +444,13 @@ async function uploadStreamed(item: EvidenceItem): Promise<EvidenceItem> {
       keyring: NO_KEYRING,
     });
     chunkCids.push(put.cid);
+    await AsyncStorage.setItem(
+      item.encryptedUri,
+      JSON.stringify({ ...header, uploaded: { store: store.name, cids: chunkCids } } satisfies LocalStreamHeader)
+    );
   }
 
-  const { key: _sealedKey, ...streamHeader } = header;
+  const { key: _sealedKey, uploaded: _uploaded, ...streamHeader } = header;
   const manifest: EvidenceManifest = { ...streamHeader, chunks: chunkCids };
   const sealedManifest = encrypt(utf8ToBytes(JSON.stringify(manifest)), key);
   const put = await store.put({ v: 1, blob: sealedManifest, keyring: NO_KEYRING });
@@ -460,7 +488,14 @@ export async function uploadAllEvidence(items: EvidenceItem[]): Promise<Evidence
 }
 
 export async function deleteEvidence(item: EvidenceItem): Promise<void> {
-  if (isStreamed(item)) await chunks.remove(item.id);
+  if (!isStreamed(item)) {
+    // A legacy item may have a re-sealed copy from an upload attempt.
+    const resealedId = legacyResealId(item);
+    await chunks.remove(resealedId);
+    await AsyncStorage.removeItem(STREAM_PREFIX + resealedId);
+  } else {
+    await chunks.remove(item.id);
+  }
   await AsyncStorage.removeItem(item.encryptedUri);
 }
 
