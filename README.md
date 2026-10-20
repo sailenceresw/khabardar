@@ -693,8 +693,10 @@ and links every restore of that backup to the same user.
   gated on it, with `AllowlistPersonhoodGate` as a working non-anonymous implementation
   for closed pilots. Real RLN needs a zk verifier contract and a prover, neither of which
   is here. Per-epoch submission rate limiting (the non-zk half) *is* enforced on-chain.
-- **Forward secrecy for tips** — padding landed; a recipient key compromise still opens
-  every past tip. Needs a ratchet or per-tip recipient subkeys.
+- **Forward secrecy for tips** — padding landed, and key wraps no longer name their
+  recipient (they did, so the content store showed which newsroom every tip went to). A
+  recipient key compromise still opens every past tip. Needs signed, rotating recipient
+  prekeys whose private halves are deleted — which needs real recipients to run it.
 - **Evidence at scale** — attachments are now read, encrypted (chunked AES-GCM, STREAM
   nonces, a fresh key per item carried inside the report bundle) and written one 1 MiB
   chunk at a time, so memory no longer caps them. Speed does: the AES is pure JS, so the

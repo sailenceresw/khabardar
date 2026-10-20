@@ -123,7 +123,8 @@ export function sealTip(message: string, recipient: Recipient): SealedTip {
   // bucket the tip fell into and not how much was written.
   const ciphertext = gcm(key, nonce).encrypt(padToBucket(message));
 
-  const wrappedKey = wrapContentKey(key, recipient.id, recipient.pubKey);
+  // The wrap does not name the recipient; only this device's local record does.
+  const wrappedKey = wrapContentKey(key, recipient.pubKey);
   const ciphertextHex = bytesToHex(ciphertext);
 
   return {

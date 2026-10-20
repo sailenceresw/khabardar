@@ -696,6 +696,51 @@ async function main() {
   transportMod.setTransport(null);
   console.log("17. tip delivery                : isolated, marked local on mock store (OK)");
 
+  // 18. What sits in the content store must not say who a tip is for. The
+  // recipient finds it by trial decryption; nobody else learns the newsroom.
+  const { secp256k1 } = require("@noble/curves/secp256k1");
+  const { wrapContentKey, wrappedKeyring } = require("../src/content/contentKeys");
+  const tipBundle = await getContentStore().get(sentTip.cid);
+  const tipWire = JSON.stringify(tipBundle);
+  assert(
+    !tipWire.includes(tipRecipient.pubKey) && !tipWire.includes(tipRecipient.id) && !tipWire.includes(tipRecipient.name),
+    "a stored tip must not name or key-identify its recipient"
+  );
+  const privA = Buffer.from(secp256k1.utils.randomPrivateKey()).toString("hex");
+  const privB = Buffer.from(secp256k1.utils.randomPrivateKey()).toString("hex");
+  const pubOf = (p: string) => Buffer.from(secp256k1.getPublicKey(Buffer.from(p, "hex"), true)).toString("hex");
+  const ck = cryptoStub.getRandomBytes(32);
+  const ring = wrappedKeyring(ck, [
+    { id: "a", pubKey: pubOf(privA) },
+    { id: "b", pubKey: pubOf(privB) },
+  ]);
+  const openedA = resolveContentKey(ring, privA);
+  assert(!!openedA && Buffer.from(openedA).equals(Buffer.from(ck)), "recipient A must find its wrap by trial");
+  const outsider = Buffer.from(secp256k1.utils.randomPrivateKey()).toString("hex");
+  assert(resolveContentKey(ring, outsider) === null, "a non-recipient must open nothing");
+  // A wrap made for A must not open for B even if relabelled — the KDF binds both keys.
+  const forA = wrapContentKey(ck, pubOf(privA));
+  assert(resolveContentKey({ mode: "wrapped", recipients: [forA] }, privB) === null, "a wrap must open only for its key");
+
+  // Bundles from older builds (v1: named, unbound KDF) must still open.
+  const { hkdf } = require("@noble/hashes/hkdf");
+  const { sha256: sha256Fn } = require("@noble/hashes/sha256");
+  const { gcm: gcmFn } = require("@noble/ciphers/aes");
+  const eph = secp256k1.utils.randomPrivateKey();
+  const sharedV1 = secp256k1.getSharedSecret(eph, Buffer.from(pubOf(privA), "hex"), true);
+  const kV1 = hkdf(sha256Fn, sharedV1.slice(1), undefined, new TextEncoder().encode("khabardar/content-key-wrap/v1"), 32);
+  const nV1 = cryptoStub.getRandomBytes(12);
+  const v1Wrap = {
+    recipientId: "a",
+    recipientPubKey: pubOf(privA),
+    ephemeralPubKey: Buffer.from(secp256k1.getPublicKey(eph, true)).toString("hex"),
+    nonce: Buffer.from(nV1).toString("hex"),
+    ciphertext: Buffer.from(gcmFn(kV1, nV1).encrypt(ck)).toString("hex"),
+  };
+  const openedV1 = resolveContentKey({ mode: "wrapped", recipients: [v1Wrap] }, privA);
+  assert(!!openedV1 && Buffer.from(openedV1).equals(Buffer.from(ck)), "a v1 wrap must still open");
+  console.log("18. recipient anonymity         : wraps unnamed, trial-opened, v1 still readable (OK)");
+
   console.log("\n✅ ALL SLICE STEPS PASSED — compose → encrypt → hash → encode → sign → gasless submit\n");
 }
 
