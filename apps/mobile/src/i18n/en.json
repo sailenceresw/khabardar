@@ -50,7 +50,7 @@
     "recordingNote": "Recording. The file is encrypted on this device and the plaintext copy is deleted.",
     "documentMetadataWarning": "Documents are NOT re-encoded. Author names, revision history and tracked changes stay inside the file and can identify you. Consider photographing the page instead.",
     "audioWarning": "A voice is biometric and identifies the speaker; background sound can reveal where you are. Record only if you accept both.",
-    "evidenceTooLarge": "That file is too large. The current limit is 8 MB per attachment.",
+    "evidenceTooLarge": "That file is too large. The current limit is %{limit} per attachment.",
     "micDenied": "Microphone permission is required to record audio evidence."
   },
   "review": {

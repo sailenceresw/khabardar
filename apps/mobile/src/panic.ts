@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { destroyIdentity } from "./identity";
 import { deleteAllReports, destroyLocalKeys } from "./drafts";
 import { deleteAllEvidence } from "./evidence";
+import { clearMockContent } from "./content/mockContentStore";
 import { clearMirror } from "./feed/localChainMirror";
 import { clearModerationLog } from "./moderation";
 import { clearCases } from "./cases";
@@ -27,6 +28,9 @@ import { disconnectWallet } from "./wallet";
  */
 export async function panicDelete(): Promise<void> {
   await deleteAllEvidence();
+  // The mock content store keeps this device's published bundles as files,
+  // which the AsyncStorage sweep at the end cannot see.
+  await clearMockContent();
   await deleteAllReports();
   await deleteAllTips();
   await clearModerationLog();

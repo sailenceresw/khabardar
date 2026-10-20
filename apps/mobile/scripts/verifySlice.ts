@@ -211,9 +211,21 @@ async function main() {
 
   // 5b. Evidence upload — encrypted blobs go to the content layer and come
   // back with CIDs, so the bundle can point at them instead of assuming a
-  // centralized backend.
-  const store = getContentStore();
-  const evBlob = encrypt(fakeEncryptedEvidence, draftKey);
+  // centralized backend. This item is in the pre-chunking format (one blob
+  // under the device key), which must be re-sealed under its own key on the
+  // way out: the device key can never go into a bundle.
+  const { storeEvidence, bytesSource, readUploadedEvidence, deleteEvidence, evidenceKey } = require("../src/evidence");
+  const { getEvidenceKey } = require("../src/drafts");
+  const deviceKey = await getEvidenceKey();
+  const fails = async (f: () => unknown) => {
+    try {
+      await f();
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  const evBlob = encrypt(fakeEncryptedEvidence, deviceKey);
   await asyncStorageStub.setItem("khabardar.evidence.ev_test", JSON.stringify(evBlob));
 
   const uploaded = await uploadAllEvidence([
@@ -230,20 +242,93 @@ async function main() {
   assert(!!uploaded[0].cid, "uploaded evidence must carry a CID");
   assert(uploaded[0].sha256 === evSha, "upload must not alter the evidence hash");
 
-  // The CID must actually resolve, and to ciphertext.
-  const fetched = await store.get(uploaded[0].cid);
-  assert(!!fetched, "evidence CID must resolve in the content store");
+  assert(!memStore.has("khabardar.evidence.ev_test"), "the legacy blob must be gone once re-sealed");
+
+  // The CID must resolve, and to the original bytes — with the item key a
+  // bundle carries, and not with the device key, which never leaves.
+  const legacyParts: Uint8Array[] = [];
+  await readUploadedEvidence(uploaded[0].cid, await evidenceKey(uploaded[0]), (p: Uint8Array) => void legacyParts.push(p));
   assert(
-    fetched.blob.ciphertext === evBlob.ciphertext,
-    "content store must return the same ciphertext that was uploaded"
+    Buffer.concat(legacyParts).equals(Buffer.from(fakeEncryptedEvidence)),
+    "re-sealed legacy evidence must decrypt to the original bytes"
+  );
+  assert(
+    await fails(() => readUploadedEvidence(uploaded[0].cid, deviceKey, () => undefined)),
+    "the device key must not open uploaded evidence"
   );
   console.log("5b. evidence CID                 :", uploaded[0].cid);
-  console.log("    resolves to same ciphertext  : OK");
+  console.log("    legacy re-sealed, round-trips: OK");
 
   // Idempotence: re-uploading an item that already has a CID is a no-op.
   const again = await uploadAllEvidence(uploaded);
   assert(again[0].cid === uploaded[0].cid, "re-upload must not mint a new CID");
   console.log("    re-upload is idempotent      : OK");
+
+  // 5c. Streamed evidence — what every new attachment now uses. A file several
+  // chunks long must round-trip, hash the plaintext the same as a one-shot
+  // digest, and refuse to decrypt if the store reorders or drops chunks.
+  const stream = require("../src/evidenceStream");
+  const bigEv = new Uint8Array(nodeCrypto.randomBytes(2 * stream.STREAM_CHUNK_BYTES + 12345));
+  const streamed = await storeEvidence(bytesSource(bigEv), "document");
+  assert(streamed.sha256 === (await sha256Hex(bigEv)), "streamed hash must equal a one-shot sha256");
+  const [streamedUp] = await uploadAllEvidence([streamed]);
+  const evKey = await evidenceKey(streamed);
+  assert(Buffer.from(evKey).compare(Buffer.from(deviceKey)) !== 0, "each item must have its own key");
+  const parts: Uint8Array[] = [];
+  const hdr = await readUploadedEvidence(streamedUp.cid, evKey, (p: Uint8Array) => void parts.push(p));
+  assert(hdr.chunkCount === 3, "2 chunks + a tail must be three chunks");
+  assert(Buffer.concat(parts).equals(Buffer.from(bigEv)), "streamed evidence must decrypt to the original bytes");
+  for (const b of await Promise.all([...memStore.values()])) {
+    assert(!b.includes(Buffer.from(bigEv.subarray(0, 64)).toString("hex")), "no plaintext may reach storage");
+  }
+
+  const sh = stream.newStreamHeader(3 * 16, 16);
+  const c = [0, 1, 2].map((i) => stream.sealChunk(sh, evKey, i, bigEv.subarray(i * 16, i * 16 + 16)));
+  assert(await fails(() => stream.openChunk(sh, evKey, 0, c[1])), "a reordered chunk must not authenticate");
+  const truncated = { ...sh, chunkCount: 2, sizeBytes: 32 };
+  assert(await fails(() => stream.openChunk(truncated, evKey, 1, c[1])), "dropping the tail must be detected");
+  const otherFile = stream.newStreamHeader(3 * 16, 16);
+  assert(await fails(() => stream.openChunk(otherFile, evKey, 0, c[0])), "a chunk from another file must not authenticate");
+
+  await deleteEvidence(streamed);
+  assert(
+    ![...memStore.keys()].some((k) => k.includes(streamed.id)),
+    "deleting a streamed item must remove its header and every chunk"
+  );
+  console.log("5c. streamed evidence           : 3 chunks round-trip; reorder/truncate/swap refused (OK)");
+
+  // 5d. A reader holding only what a Public report publishes — its CID and
+  // keyring — must be able to open the evidence. Before per-item keys this
+  // failed: evidence was sealed under a key that never left the device.
+  const { publishReport } = require("../src/submitReport");
+  const { resolveContentKey } = require("../src/content/contentKeys");
+  await require("../src/identity").createIdentity();
+  const pubItem = await storeEvidence(bytesSource(bigEv.subarray(0, 5000)), "photo");
+  const published = await publishReport({
+    id: "rep_verify",
+    status: "draft",
+    category: 0,
+    visibility: 0,
+    body: "evidence must be readable by whoever can read the report",
+    coarseGeohash: "tsj9",
+    entityName: "",
+    evidence: [pubItem],
+    createdAt: Date.now(),
+  });
+  const storedReport = await getContentStore().get(published.cid);
+  const reportKey = resolveContentKey(storedReport.keyring);
+  const readerBundle = JSON.parse(bytesToUtf8(decrypt(storedReport.blob, reportKey)));
+  const ev0 = readerBundle.evidence[0];
+  assert(typeof ev0.key === "string" && ev0.key.length === 64, "the bundle must carry the item key");
+  const readerParts: Uint8Array[] = [];
+  await readUploadedEvidence(ev0.cid, Buffer.from(ev0.key, "hex"), (p: Uint8Array) => void readerParts.push(p));
+  assert(
+    Buffer.concat(readerParts).equals(Buffer.from(bigEv.subarray(0, 5000))),
+    "a reader must recover the evidence from the published report alone"
+  );
+  // publishReport mirrors its row into the local feed; later steps start from an empty one.
+  await require("../src/feed/localChainMirror").clearMirror();
+  console.log("5d. evidence via public report  : opened with the bundle's key only (OK)");
 
   const cid = "bafymockcontentidentifier0000000000000000000000000001";
 

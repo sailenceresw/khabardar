@@ -695,9 +695,14 @@ and links every restore of that backup to the same user.
   is here. Per-epoch submission rate limiting (the non-zk half) *is* enforced on-chain.
 - **Forward secrecy for tips** — padding landed; a recipient key compromise still opens
   every past tip. Needs a ratchet or per-tip recipient subkeys.
-- **Evidence at scale** — audio, documents and photos all encrypt and upload, but the
-  path is `AsyncStorage` + base64 and capped at 8 MB. Video needs `expo-file-system`
-  chunked reads with streaming AES-GCM.
+- **Evidence at scale** — attachments are now read, encrypted (chunked AES-GCM, STREAM
+  nonces, a fresh key per item carried inside the report bundle) and written one 1 MiB
+  chunk at a time, so memory no longer caps them. Speed does: the AES is pure JS, so the
+  device cap is 64 MB until native AES lands, and that figure has not been timed on a
+  phone. The web preview stays at 8 MB. Still missing: a video picker — video carries
+  location and device metadata that, unlike a photo, is not stripped without a
+  re-encode — upload progress, and resumable uploads, so a large file over Tor that drops
+  halfway is re-sent from the start. The ranged file reads have only run headlessly.
 - **C2PA provenance** — capture-time signatures for evidence authenticity. Not started;
   needs a signing cert chain, so it is real infrastructure rather than a code change.
 - **Billing backend and public API** — the client-side model is built (seats, roles, API

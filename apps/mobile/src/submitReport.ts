@@ -6,7 +6,8 @@ import { publicKeyring, wrappedKeyring } from "./content/contentKeys";
 import { DEMO_RECIPIENTS } from "./content/recipients";
 import type { StoredBundle } from "./content/types";
 import { entityTagFor } from "./entityTag";
-import { uploadAllEvidence } from "./evidence";
+import { bytesToHex } from "@noble/ciphers/utils";
+import { evidenceKey, uploadAllEvidence } from "./evidence";
 import { appendMirrorRow } from "./feed/localChainMirror";
 import { isolateNextRequests } from "./net/transport";
 import { getRelayer, type RelayResult } from "./relayer";
@@ -61,19 +62,24 @@ export async function publishReport(report: AnonymousReport): Promise<PublishRes
   // can point at them. Their bytes were already ciphertext before this call.
   const evidence = await uploadAllEvidence(report.evidence);
 
-  // 2. Canonical bundle. Evidence contributes its hash and pointer — never its bytes.
+  // 2. Canonical bundle. Evidence contributes its hash, pointer and key —
+  // never its bytes. The key rides inside the encrypted bundle, so evidence is
+  // exactly as readable as the report that carries it.
   const bundle: ReportBundle = {
     v: 1,
     body: report.body,
     category: report.category,
     coarseGeohash: report.coarseGeohash,
     createdAt: report.createdAt,
-    evidence: evidence.map((e) => ({
-      sha256: e.sha256,
-      kind: e.kind,
-      sizeBytes: e.sizeBytes,
-      cid: e.cid,
-    })),
+    evidence: await Promise.all(
+      evidence.map(async (e) => ({
+        sha256: e.sha256,
+        kind: e.kind,
+        sizeBytes: e.sizeBytes,
+        cid: e.cid,
+        key: bytesToHex(await evidenceKey(e)),
+      }))
+    ),
   };
 
   // 3. Fresh content key per report — compromise of one never exposes another.

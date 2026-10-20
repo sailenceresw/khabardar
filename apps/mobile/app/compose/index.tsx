@@ -13,6 +13,7 @@ import { useApp } from "../../src/state/AppContext";
 import {
   deleteEvidence,
   EvidenceTooLarge,
+  MAX_EVIDENCE_LABEL,
   pickAndSecureDocument,
   pickAndSecurePhoto,
   startAudioEvidence,
@@ -61,10 +62,18 @@ export default function ComposeScreen() {
       const item = await pick();
       if (item) setEvidence((prev) => [...prev, item]);
     } catch (e) {
-      notify(e instanceof EvidenceTooLarge ? t("compose.evidenceTooLarge") : t("common.error"));
+      notifyEvidenceError(e);
     } finally {
       setBusy(false);
     }
+  }
+
+  function notifyEvidenceError(e: unknown) {
+    notify(
+      e instanceof EvidenceTooLarge
+        ? t("compose.evidenceTooLarge", { limit: MAX_EVIDENCE_LABEL })
+        : t("common.error")
+    );
   }
 
   const addPhoto = () => addEvidence(pickAndSecurePhoto);
@@ -82,8 +91,8 @@ export default function ComposeScreen() {
       try {
         const item = await recording.stop();
         if (item) setEvidence((prev) => [...prev, item]);
-      } catch {
-        notify(t("common.error"));
+      } catch (e) {
+        notifyEvidenceError(e);
       } finally {
         setRecording(null);
         setBusy(false);
