@@ -17,6 +17,7 @@ import {
   newStreamHeader,
   openChunk,
   sealChunk,
+  STREAM_CHUNK_BYTES,
   type StreamHeader,
 } from "./evidenceStream";
 import { safeJsonParse } from "./safeJson";
@@ -459,27 +460,45 @@ async function uploadStreamed(item: EvidenceItem): Promise<EvidenceItem> {
 
 /**
  * Recipient side: fetch an uploaded streamed item and hand its plaintext to
- * `sink` one verified chunk at a time. Throws on any missing, reordered,
- * swapped or truncated chunk; a chunk is only passed on once it authenticates,
- * but a caller writing to disk must still discard the output if this throws.
+ * `sink` one chunk at a time.
+ *
+ * GCM alone does not make the result authentic. For a Public report the item
+ * key is public, so a gateway can seal substitute chunks — and a manifest —
+ * that authenticate perfectly. What ties evidence to the report is the
+ * `sha256` and `sizeBytes` in the bundle, which the on-chain hash covers; this
+ * checks both. Size is checked against the manifest before anything is
+ * fetched, so a forged one cannot make the reader download or allocate
+ * without bound. The hash can only be checked at the end: a caller writing
+ * `sink` output to disk must discard it if this throws.
  */
 export async function readUploadedEvidence(
-  cid: string,
+  entry: { cid: string; sha256: string; sizeBytes: number },
   key: Uint8Array,
   sink: (plain: Uint8Array, index: number) => Promise<void> | void
 ): Promise<StreamHeader> {
   const store = getContentStore();
-  const bundle = await store.get(cid);
+  const bundle = await store.get(entry.cid);
   if (!bundle) throw new Error("evidence manifest unavailable");
   const manifest = safeJsonParse<EvidenceManifest>(bytesToUtf8(decrypt(bundle.blob, key)));
-  if (!isStreamHeader(manifest) || !Array.isArray(manifest.chunks) || manifest.chunks.length !== manifest.chunkCount) {
+  if (
+    !isStreamHeader(manifest) ||
+    !Array.isArray(manifest.chunks) ||
+    manifest.chunks.length !== manifest.chunkCount ||
+    manifest.chunkBytes > STREAM_CHUNK_BYTES
+  ) {
     throw new Error("evidence manifest malformed");
   }
+  if (manifest.sizeBytes !== entry.sizeBytes) throw new Error("evidence size does not match the report");
+
+  const hash = createSha256();
   for (let i = 0; i < manifest.chunkCount; i++) {
     const chunk = await store.get(manifest.chunks[i]);
     if (!chunk) throw new Error(`evidence chunk ${i} unavailable`);
-    await sink(openChunk(manifest, key, i, hexToBytes(chunk.blob.ciphertext)), i);
+    const plain = openChunk(manifest, key, i, hexToBytes(chunk.blob.ciphertext));
+    hash.update(plain);
+    await sink(plain, i);
   }
+  if (hash.hex() !== entry.sha256.toLowerCase()) throw new Error("evidence does not match the report's fingerprint");
   return manifest;
 }
 

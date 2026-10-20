@@ -247,13 +247,13 @@ async function main() {
   // The CID must resolve, and to the original bytes — with the item key a
   // bundle carries, and not with the device key, which never leaves.
   const legacyParts: Uint8Array[] = [];
-  await readUploadedEvidence(uploaded[0].cid, await evidenceKey(uploaded[0]), (p: Uint8Array) => void legacyParts.push(p));
+  await readUploadedEvidence(uploaded[0], await evidenceKey(uploaded[0]), (p: Uint8Array) => void legacyParts.push(p));
   assert(
     Buffer.concat(legacyParts).equals(Buffer.from(fakeEncryptedEvidence)),
     "re-sealed legacy evidence must decrypt to the original bytes"
   );
   assert(
-    await fails(() => readUploadedEvidence(uploaded[0].cid, deviceKey, () => undefined)),
+    await fails(() => readUploadedEvidence(uploaded[0], deviceKey, () => undefined)),
     "the device key must not open uploaded evidence"
   );
   console.log("5b. evidence CID                 :", uploaded[0].cid);
@@ -275,7 +275,7 @@ async function main() {
   const evKey = await evidenceKey(streamed);
   assert(Buffer.from(evKey).compare(Buffer.from(deviceKey)) !== 0, "each item must have its own key");
   const parts: Uint8Array[] = [];
-  const hdr = await readUploadedEvidence(streamedUp.cid, evKey, (p: Uint8Array) => void parts.push(p));
+  const hdr = await readUploadedEvidence(streamedUp, evKey, (p: Uint8Array) => void parts.push(p));
   assert(hdr.chunkCount === 3, "2 chunks + a tail must be three chunks");
   assert(Buffer.concat(parts).equals(Buffer.from(bigEv)), "streamed evidence must decrypt to the original bytes");
   for (const b of await Promise.all([...memStore.values()])) {
@@ -310,7 +310,7 @@ async function main() {
   liveStore.put = realPut;
   assert(puts === 3, `a resumed upload must send 2 remaining chunks + manifest, sent ${puts}`);
   const resumedParts: Uint8Array[] = [];
-  await readUploadedEvidence(resumed.cid, await evidenceKey(resumed), (p: Uint8Array) => void resumedParts.push(p));
+  await readUploadedEvidence(resumed, await evidenceKey(resumed), (p: Uint8Array) => void resumedParts.push(p));
   assert(Buffer.concat(resumedParts).equals(Buffer.from(bigEv)), "a resumed upload must still round-trip");
   await deleteEvidence(resumable);
 
@@ -369,11 +369,33 @@ async function main() {
   const ev0 = readerBundle.evidence[0];
   assert(typeof ev0.key === "string" && ev0.key.length === 64, "the bundle must carry the item key");
   const readerParts: Uint8Array[] = [];
-  await readUploadedEvidence(ev0.cid, Buffer.from(ev0.key, "hex"), (p: Uint8Array) => void readerParts.push(p));
+  await readUploadedEvidence(ev0, Buffer.from(ev0.key, "hex"), (p: Uint8Array) => void readerParts.push(p));
   assert(
     Buffer.concat(readerParts).equals(Buffer.from(bigEv.subarray(0, 5000))),
     "a reader must recover the evidence from the published report alone"
   );
+  // The key above is public, so a hostile gateway can seal substitute
+  // evidence that GCM accepts. The bundle's fingerprint must catch it, and a
+  // forged size must be refused before anything is downloaded.
+  const forged = await storeEvidence(bytesSource(new Uint8Array(5000).fill(7)), "photo");
+  const [forgedUp] = await uploadAllEvidence([forged]);
+  const forgedKey = await evidenceKey(forged);
+  const forgedEntry = { ...ev0, cid: forgedUp.cid };
+  assert(
+    await fails(() => readUploadedEvidence(forgedEntry, forgedKey, () => undefined)),
+    "substitute evidence under a valid key must fail the report's fingerprint"
+  );
+  let fetchedChunks = 0;
+  assert(
+    await fails(() =>
+      readUploadedEvidence({ ...ev0, sizeBytes: ev0.sizeBytes + 1 }, Buffer.from(ev0.key, "hex"), () => {
+        fetchedChunks++;
+      })
+    ) && fetchedChunks === 0,
+    "a size mismatch must be refused before any chunk is fetched"
+  );
+  await deleteEvidence(forged);
+
   // publishReport mirrors its row into the local feed; later steps start from an empty one.
   await require("../src/feed/localChainMirror").clearMirror();
   console.log("5d. evidence via public report  : opened with the bundle's key only (OK)");
