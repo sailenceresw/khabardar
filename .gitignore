@@ -40,3 +40,17 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Native modules (expo-tor, expo-zkprove)
+# These paths are generated and currently hold ~14GB of Rust and Gradle output.
+# Note: no module source is tracked in this repo at present. modules/ contains
+# only build products, so neither module can be rebuilt from a fresh clone.
+.gradle/
+modules/*/rust/target/
+modules/*/android/src/main/jniLibs/
+
+# TypeScript incremental build state
+*.tsbuildinfo
+
+# Vercel
+.vercel/
