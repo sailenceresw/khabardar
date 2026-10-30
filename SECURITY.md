@@ -6,9 +6,12 @@ we will too.
 
 ## Do not use this for real reports yet
 
-**Khabardar is a v0 prototype. It has not been audited, and it does not yet have an
-anonymising network transport.** A targeted user could be deanonymized at the network
-layer regardless of how well the cryptography works.
+**Khabardar is a v0 prototype. It has not been audited, and its network transport does
+not protect you on its own.** There is now a transport layer that prefers onion
+endpoints, but requests still leave over plain `fetch`: anonymity depends entirely on
+Orbot routing the whole device, and the app cannot verify that it is. A targeted user
+could be deanonymized at the network layer regardless of how well the cryptography
+works.
 
 If you are in actual danger, use a tool that has been audited and deployed in the field,
 such as [SecureDrop](https://securedrop.org) or [GlobaLeaks](https://www.globaleaks.org),
@@ -60,8 +63,13 @@ Ranked by how much we care, which is not the same as how severe a scanner would 
 These are real weaknesses, and we already know. Reports are welcome if you can show a
 worse impact than we have described, but they are not news:
 
-- **No anonymising transport.** IP addresses reach the relayer, RPC, and content
-  gateway directly. Tracked in [#9](https://github.com/sailenceresw/khabardar/issues/9).
+- **The transport does not anonymise by itself.** The transport layer prefers onion
+  endpoints where they are configured, but it calls plain `fetch`, so without Orbot
+  active the IP address still reaches the relayer, RPC, and content gateway directly.
+  `isProtected()` reports what the caller asserted, not a verified circuit. The Pimlico
+  relayer bypasses the transport entirely and calls `fetch` on the bundler and paymaster
+  URLs, so sponsored submissions are not covered even when onion endpoints exist.
+  Tracked in [#9](https://github.com/sailenceresw/khabardar/issues/9).
 - **Corroboration and karma are not sybil-resistant.** Tracked in
   [#10](https://github.com/sailenceresw/khabardar/issues/10).
 - **Entity tags are reversible by dictionary attack.** The set of public offices is

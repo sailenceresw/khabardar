@@ -69,9 +69,10 @@ credentials**.
 | | |
 |---|---|
 | ✅ **Built and verified** | Anonymity core, chain layer (23 contract tests), content layer, public feed, moderation, tips, gasless abstraction, evidence upload path in compose, mobile UI design system + screen polish, i18n (EN + HI) |
-| 🟡 **Coded, unproven on live infra** | Pimlico SimpleAccount + UserOp receipt polling, IPFS pin implementation — need Sepolia deploy (#2), sponsorship policy (#5), live pin provider (#6) |
+| 🟡 **Coded, unproven on live infra** | Pimlico SimpleAccount + UserOp receipt polling, IPFS pin implementation. Needs Sepolia deploy (#2), sponsorship policy (#5), live pin provider (#6) |
+| 🟡 **Partial, do not rely on it** | Transport layer with onion-endpoint preference, used by the content store and exposed in Settings. Requests still go out over plain `fetch`, so protection depends entirely on Orbot routing the device, and the protected indicator is caller-asserted rather than probed. The Pimlico relayer does not route through it at all yet ([#9](https://github.com/sailenceresw/khabardar/issues/9)) |
 | 🔧 **Open polish** | Recovery/wallet design-system alignment ([#33](https://github.com/sailenceresw/khabardar/issues/33)), report status presentation ([#34](https://github.com/sailenceresw/khabardar/issues/34)) |
-| ❌ **Not started** | Anonymising transport, proof-of-personhood, C2PA provenance, stealth mode, billing backend, security audit |
+| ❌ **Not started** | Embedded Tor/SOCKS, proof-of-personhood, C2PA provenance, stealth mode, billing backend, security audit |
 
 Full honest breakdown in [BUSINESS.md](./BUSINESS.md). Open work is in
 [Issues](https://github.com/sailenceresw/khabardar/issues). The
