@@ -7,6 +7,7 @@ export { ClearnetTransport } from "./clearnet";
 export { TorTransport } from "./tor";
 
 let active: Transport | null = null;
+let explicitlyInitialised = false;
 
 /**
  * Initialise the transport layer.
@@ -21,6 +22,19 @@ export function initTransport(
     mode === "tor"
       ? new TorTransport(config, orbotActive)
       : new ClearnetTransport(config);
+  explicitlyInitialised = true;
+}
+
+/**
+ * True once initTransport has been called deliberately, by saved prefs or by a
+ * bootstrap. The lazy default inside getTransport does not count.
+ *
+ * Callers that initialise from environment defaults must check this first, so a
+ * lazily-constructed store can never overwrite the mode the user chose in
+ * Settings and silently downgrade them to clearnet.
+ */
+export function isTransportInitialised(): boolean {
+  return explicitlyInitialised;
 }
 
 /**

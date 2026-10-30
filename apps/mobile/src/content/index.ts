@@ -1,7 +1,7 @@
 import { IpfsContentStore } from "./ipfsContentStore";
 import { MockContentStore } from "./mockContentStore";
 import type { ContentStore } from "./types";
-import { configFromEnv, initTransport } from "../transport";
+import { configFromEnv, initTransport, isTransportInitialised } from "../transport";
 
 export type { ContentStore, PutResult, StoredBundle } from "./types";
 export { MockContentStore } from "./mockContentStore";
@@ -13,11 +13,14 @@ let instance: ContentStore | null = null;
  * Initialise the transport layer early so ContentStore and any other
  * network code see a consistent mode + endpoint resolution.
  *
- * Mode is controlled by EXPO_PUBLIC_TRANSPORT_MODE=tor|clearnet (default clearnet).
- * Orbot status is currently a simple env flag; later this can become a runtime
- * probe or Settings toggle.
+ * Mode is controlled by EXPO_PUBLIC_TRANSPORT_MODE=tor|clearnet (default clearnet),
+ * but only as a fallback: anything the user saved in Settings wins, because
+ * re-seeding from env here would silently downgrade them to clearnet on the
+ * first lazy getContentStore().
  */
 function ensureTransport() {
+  if (isTransportInitialised()) return;
+
   const mode =
     (process.env.EXPO_PUBLIC_TRANSPORT_MODE as "tor" | "clearnet") || "clearnet";
   const orbotActive =
