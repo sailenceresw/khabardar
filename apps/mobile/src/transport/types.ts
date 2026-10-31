@@ -11,11 +11,22 @@
 
 export type TransportMode = "clearnet" | "tor";
 
-export type TransportService = "ipfsApi" | "ipfsGateway";
+export type TransportService =
+  | "ipfsApi"
+  | "ipfsGateway"
+  | "bundler"
+  | "paymaster"
+  | "chainRpc";
 
 export interface TransportEndpoints {
   ipfsApi?: string;
   ipfsGateway?: string;
+  /** ERC-4337 bundler JSON-RPC */
+  bundler?: string;
+  /** Verifying paymaster JSON-RPC */
+  paymaster?: string;
+  /** Chain RPC used for reads and receipts */
+  chainRpc?: string;
 }
 
 export interface TransportConfig {

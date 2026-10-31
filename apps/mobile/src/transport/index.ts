@@ -72,10 +72,16 @@ export function configFromEnv(): TransportConfig {
     clearnet: {
       ipfsApi: process.env.EXPO_PUBLIC_IPFS_API_URL,
       ipfsGateway: process.env.EXPO_PUBLIC_IPFS_GATEWAY_URL,
+      bundler: process.env.EXPO_PUBLIC_PIMLICO_BUNDLER_URL,
+      paymaster: process.env.EXPO_PUBLIC_PIMLICO_PAYMASTER_URL,
+      chainRpc: process.env.EXPO_PUBLIC_CHAIN_RPC_URL,
     },
     onion: {
       ipfsApi: process.env.EXPO_PUBLIC_IPFS_API_ONION_URL,
       ipfsGateway: process.env.EXPO_PUBLIC_IPFS_GATEWAY_ONION_URL,
+      bundler: process.env.EXPO_PUBLIC_PIMLICO_BUNDLER_ONION_URL,
+      paymaster: process.env.EXPO_PUBLIC_PIMLICO_PAYMASTER_ONION_URL,
+      chainRpc: process.env.EXPO_PUBLIC_CHAIN_RPC_ONION_URL,
     },
   };
 }

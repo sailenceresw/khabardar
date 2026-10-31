@@ -3,6 +3,7 @@ import { lineaSepolia } from "viem/chains";
 import { ACTIVE_CHAIN, REPORT_REGISTRY_ABI } from "@khabardar/shared";
 import { applyQuery } from "./mockNetworkIndex";
 import type { ChainReportRow, FeedQuery, NetworkIndex } from "./types";
+import { getTransport } from "../transport";
 
 /**
  * Reads the feed straight from ReportSubmitted logs on Linea.
@@ -16,10 +17,31 @@ import type { ChainReportRow, FeedQuery, NetworkIndex } from "./types";
 export class ChainNetworkIndex implements NetworkIndex {
   readonly name = "chain";
 
-  private client = createPublicClient({
-    chain: lineaSepolia,
-    transport: http(ACTIVE_CHAIN.rpcUrl),
-  });
+  private cachedClient: ReturnType<typeof createPublicClient> | null = null;
+  private cachedRpcUrl: string | null = null;
+
+  /**
+   * Chain client for the endpoint the transport currently resolves, so reading
+   * the feed does not announce itself over clearnet while submissions do not.
+   *
+   * Rebuilt whenever that endpoint changes. A field initialiser would pin the
+   * URL at construction, and switching transport mode in Settings would then
+   * never reach the feed.
+   *
+   * viem drives its own fetch, so this selects the endpoint rather than
+   * routing the request through transportFetch. See #9.
+   */
+  private get client(): ReturnType<typeof createPublicClient> {
+    const url = getTransport().resolve("chainRpc") ?? ACTIVE_CHAIN.rpcUrl;
+    if (!this.cachedClient || this.cachedRpcUrl !== url) {
+      this.cachedClient = createPublicClient({
+        chain: lineaSepolia,
+        transport: http(url),
+      });
+      this.cachedRpcUrl = url;
+    }
+    return this.cachedClient;
+  }
 
   constructor(private readonly registryAddress: Address, private readonly fromBlock: bigint = 0n) {}
 

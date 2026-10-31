@@ -12,6 +12,16 @@ import { ACTIVE_CHAIN, ENTRYPOINT_V07, REPORT_REGISTRY_ABI } from "@khabardar/sh
 import { encodeSubmitReportCall } from "./encoding";
 import { savePendingOp, clearPendingOp } from "./pendingOps";
 import type { GaslessRelayer, RelayResult, SubmitReportParams } from "./types";
+import { getTransport, transportFetch } from "../transport";
+
+/** True for a .onion host, which is never ours and never gets the API key. */
+function isOnionUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname.endsWith(".onion");
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Canonical SimpleAccountFactory for EntryPoint v0.7 (eth-infinitism reference).
@@ -107,9 +117,21 @@ export class PimlicoRelayer implements GaslessRelayer {
 
   async submitReport(params: SubmitReportParams): Promise<RelayResult> {
     const owner = params.signer;
+
+    // Pin the endpoints for the whole submission. The active transport is
+    // global and mutable, so re-resolving per call would let a Settings
+    // change mid-flight point receipt polling at a bundler that never saw
+    // the op: the submission would be reported failed although it landed.
+    const bundlerEndpoint = this.endpoint("bundler", this.config.bundlerUrl);
+    const paymasterEndpoint = this.endpoint("paymaster", this.config.paymasterUrl);
+
+    // Chain reads prefer an onion RPC when one is configured. viem drives its
+    // own fetch internally, so this selects the endpoint but does not pass
+    // through transportFetch; under Orbot the packets are routed either way.
+    // Replacing viem's fetch is part of #9.
     const publicClient = createPublicClient({
       chain: lineaSepolia,
-      transport: http(ACTIVE_CHAIN.rpcUrl),
+      transport: http(getTransport().resolve("chainRpc") ?? ACTIVE_CHAIN.rpcUrl),
     });
 
     // -- 1. Counterfactual SimpleAccount (integration point 1 / #3) ---------
@@ -167,11 +189,11 @@ export class PimlicoRelayer implements GaslessRelayer {
       ? { sponsorshipPolicyId: params.sponsorPoolId }
       : undefined;
 
-    const sponsorship = await this.rpc(this.withKey(this.config.paymasterUrl), "pm_sponsorUserOperation", [
-      userOp,
-      ENTRYPOINT_V07,
-      ...(sponsorContext ? [sponsorContext] : []),
-    ]);
+    const sponsorship = await this.rpc(
+      paymasterEndpoint,
+      "pm_sponsorUserOperation",
+      [userOp, ENTRYPOINT_V07, ...(sponsorContext ? [sponsorContext] : [])]
+    );
 
     const sponsoredOp = {
       ...userOp,
@@ -202,10 +224,11 @@ export class PimlicoRelayer implements GaslessRelayer {
     // Prefer the hash returned by the paymaster; otherwise ask the bundler.
     let userOpHash = (sponsorship?.userOpHash as Hex | undefined) ?? null;
     if (!userOpHash) {
-      userOpHash = (await this.rpc(this.withKey(this.config.bundlerUrl), "eth_getUserOperationHash", [
-        sponsoredOp,
-        ENTRYPOINT_V07,
-      ])) as Hex;
+      userOpHash = (await this.rpc(
+        bundlerEndpoint,
+        "eth_getUserOperationHash",
+        [sponsoredOp, ENTRYPOINT_V07]
+      )) as Hex;
     }
 
     const signature = await owner.signMessage({ raw: userOpHash });
@@ -213,7 +236,7 @@ export class PimlicoRelayer implements GaslessRelayer {
 
     // -- 4. Submit to the bundler ------------------------------------------
     const submittedUserOpHash = (await this.rpc(
-      this.withKey(this.config.bundlerUrl),
+      bundlerEndpoint,
       "eth_sendUserOperation",
       [signedOp, ENTRYPOINT_V07]
     )) as Hex;
@@ -229,7 +252,7 @@ export class PimlicoRelayer implements GaslessRelayer {
     });
 
     // -- 5. Poll for receipt (integration point 2 / #4) ---------------------
-    const receipt = await this.waitForReceipt(submittedUserOpHash);
+    const receipt = await this.waitForReceipt(submittedUserOpHash, bundlerEndpoint);
 
     if (!receipt) {
       return {
@@ -338,14 +361,14 @@ export class PimlicoRelayer implements GaslessRelayer {
     }
   }
 
-  private async waitForReceipt(userOpHash: Hex): Promise<any | null> {
+  private async waitForReceipt(userOpHash: Hex, bundlerEndpoint: string): Promise<any | null> {
     const deadline = Date.now() + RECEIPT_TIMEOUT_MS;
     let delay = RECEIPT_POLL_MS;
 
     while (Date.now() < deadline) {
       try {
         const receipt = await this.rpc(
-          this.withKey(this.config.bundlerUrl),
+          bundlerEndpoint,
           "eth_getUserOperationReceipt",
           [userOpHash]
         );
@@ -413,8 +436,27 @@ export class PimlicoRelayer implements GaslessRelayer {
     return `${url}${sep}apikey=${this.config.apiKey}`;
   }
 
+  /**
+   * Endpoint for a relayer service, ready to call.
+   *
+   * Precedence is the transport's resolution first (onion when in tor mode,
+   * otherwise the clearnet endpoint it was configured with), and only the URL
+   * this relayer was constructed with when the transport knows nothing about
+   * the service. In practice both read the same env var, so the result is
+   * unchanged unless an onion endpoint is set.
+   *
+   * The API key is appended here rather than at the call sites, because it
+   * must never be attached to an onion endpoint: that is somebody else's
+   * self-hosted infrastructure (Arka and similar), the key is useless to it,
+   * and sending it would write a live Pimlico credential into their logs.
+   */
+  private endpoint(service: "bundler" | "paymaster", fallback: string): string {
+    const url = getTransport().resolve(service) ?? fallback;
+    return isOnionUrl(url) ? url : this.withKey(url);
+  }
+
   private async rpc(url: string, method: string, params: unknown[]): Promise<any> {
-    const res = await fetch(url, {
+    const res = await transportFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
