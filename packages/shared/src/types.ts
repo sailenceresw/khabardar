@@ -68,9 +68,13 @@ export type ReportStatus = "draft" | "submitting" | "anchored" | "failed";
 export interface EvidenceItem {
   id: string;
   kind: "photo" | "document" | "audio";
-  /** Local URI of the metadata-stripped, encrypted copy. Originals are never kept. */
+  /**
+   * Local handle of the metadata-stripped, encrypted copy (an AsyncStorage key:
+   * the stream header for chunked items, the whole blob for older ones).
+   * Originals are never kept.
+   */
   encryptedUri: string;
-  /** SHA-256 of the encrypted blob, hex-encoded. */
+  /** SHA-256 of the plaintext (post metadata-strip), hex-encoded. */
   sha256: string;
   sizeBytes: number;
   addedAt: number;
@@ -128,6 +132,13 @@ export interface ReportBundle {
     sizeBytes: number;
     /** Where the encrypted evidence blob can be fetched. */
     cid?: string;
+    /**
+     * This item's own AES-256 key, hex. It is safe here only because the
+     * bundle itself is encrypted: whoever can read the report can read its
+     * evidence, and no one else. Absent on bundles made before per-item keys,
+     * whose evidence no reader can decrypt.
+     */
+    key?: string;
   }>;
 }
 

@@ -6,8 +6,10 @@ import { publicKeyring, wrappedKeyring } from "./content/contentKeys";
 import { DEMO_RECIPIENTS } from "./content/recipients";
 import type { StoredBundle } from "./content/types";
 import { entityTagFor } from "./entityTag";
-import { uploadAllEvidence, type UploadProgress } from "./evidence";
+import { bytesToHex } from "@noble/ciphers/utils";
+import { evidenceKey, uploadAllEvidence, type UploadProgress } from "./evidence";
 import { appendMirrorRow } from "./feed/localChainMirror";
+import { isolateNextRequests } from "./net/transport";
 import { getRelayer, type RelayResult } from "./relayer";
 import { getActiveSigner } from "./signer";
 import { recordSponsoredSubmission, resolveSponsor } from "./sponsorPools";
@@ -58,25 +60,36 @@ export async function publishReport(
 ): Promise<PublishResult> {
   const signer = await getActiveSigner();
 
+  // 0. Fresh Tor circuits for this submission, before any byte leaves.
+  // Two reports that share a circuit share an exit relay and a timing pattern,
+  // which links them even though each is individually anonymous. No-op when Tor
+  // is off — the return value says which happened.
+  await isolateNextRequests();
+
   // 1. Push encrypted evidence blobs to the content layer first, so the bundle
   // can point at them. Their bytes were already ciphertext before this call.
   // Sequential + progress so large photos on bad connections stay visible to the user,
   // and so a single failure never silently drops evidence from the submitted report.
   const evidence = await uploadAllEvidence(report.evidence, options.onEvidenceProgress);
 
-  // 2. Canonical bundle. Evidence contributes its hash and pointer — never its bytes.
+  // 2. Canonical bundle. Evidence contributes its hash, pointer and key —
+  // never its bytes. The key rides inside the encrypted bundle, so evidence is
+  // exactly as readable as the report that carries it.
   const bundle: ReportBundle = {
     v: 1,
     body: report.body,
     category: report.category,
     coarseGeohash: report.coarseGeohash,
     createdAt: report.createdAt,
-    evidence: evidence.map((e) => ({
-      sha256: e.sha256,
-      kind: e.kind,
-      sizeBytes: e.sizeBytes,
-      cid: e.cid,
-    })),
+    evidence: await Promise.all(
+      evidence.map(async (e) => ({
+        sha256: e.sha256,
+        kind: e.kind,
+        sizeBytes: e.sizeBytes,
+        cid: e.cid,
+        key: bytesToHex(await evidenceKey(e)),
+      }))
+    ),
   };
 
   // 3. Fresh content key per report — compromise of one never exposes another.

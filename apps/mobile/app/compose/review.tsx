@@ -1,18 +1,17 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, View, StyleSheet } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { AnonymousReport } from "@khabardar/shared";
-import { REPORT_CATEGORY_KEYS, VISIBILITY_KEYS } from "@khabardar/shared";
+import { REPORT_CATEGORY_KEYS, VISIBILITY_KEYS, Visibility } from "@khabardar/shared";
 import { useApp } from "../../src/state/AppContext";
+import { journalistKeysArePlaceholders } from "../../src/content/recipients";
 import { loadReport } from "../../src/drafts";
 import { publishReport } from "../../src/submitReport";
+import { anchoredFrom, dequeue, enqueue } from "../../src/submissionQueue";
 import { Body, Button, Card, Caption, Notice, Screen, Title } from "../../src/ui";
-import { colors } from "../../src/theme";
+import { colors, spacing } from "../../src/theme";
 import { t } from "../../src/i18n";
-import {
-  applySavedTransportPrefs,
-  getAnonymityStatus,
-  type AnonymityStatus,
-} from "../../src/transport";
+import { probeAnonymity } from "../../src/net/transport";
 
 export default function ReviewScreen() {
   const router = useRouter();
@@ -23,14 +22,14 @@ export default function ReviewScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [queued, setQueued] = useState(false);
   const [sponsor, setSponsor] = useState<string | null>(null);
-  const [anonymity, setAnonymity] = useState<AnonymityStatus | null>(null);
+  const [anonymity, setAnonymity] = useState(() => probeAnonymity());
   /** User explicitly chose to submit without Tor after seeing the warning. */
   const [acceptedClearnet, setAcceptedClearnet] = useState(false);
 
   const refreshAnonymity = useCallback(async () => {
-    await applySavedTransportPrefs();
-    setAnonymity(getAnonymityStatus());
+    setAnonymity(probeAnonymity());
   }, []);
 
   useEffect(() => {
@@ -41,10 +40,19 @@ export default function ReviewScreen() {
     refreshAnonymity();
   }, [refreshAnonymity]);
 
-  if (!report) return <Screen scroll={false}><Body dim> </Body></Screen>;
+  if (!report) {
+    return (
+      <Screen scroll={false}>
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.accent} />
+          <Body dim>{t("common.loading")}</Body>
+        </View>
+      </Screen>
+    );
+  }
 
-  const isProtected = anonymity?.protected === true;
-  const needsTorAck = anonymity !== null && !isProtected && !acceptedClearnet;
+  const isProtected = anonymity.verified;
+  const needsTorAck = !isProtected && !acceptedClearnet;
 
   async function submit() {
     if (!report) return;
@@ -59,7 +67,7 @@ export default function ReviewScreen() {
     await upsertReport(submittingReport);
 
     try {
-      const { reportHash, cid, relay, sponsorName, evidence } = await publishReport(report, {
+      const published = await publishReport(report, {
         onEvidenceProgress: ({ current, total }) => {
           if (total <= 1) {
             setProgressLabel(t("review.uploadingEvidenceOne"));
@@ -69,26 +77,22 @@ export default function ReviewScreen() {
         },
       });
 
-      // Evidence finished — now the chain anchor step.
+      // Evidence finished, so the chain anchor step starts here.
       setProgressLabel(t("review.submitting"));
-      setSponsor(sponsorName);
+      setSponsor(published.sponsorName);
 
-      const anchored: AnonymousReport = {
-        ...report,
-        status: "anchored",
-        reportHash,
-        cid,
-        // Persist the evidence CIDs returned by the upload, otherwise the
-        // blobs are on the content layer but the device forgets where.
-        evidence,
-        txHash: relay.txHash,
-        onChainReportId: relay.onChainReportId,
-        anchoredAt: Date.now(),
-      };
-      await upsertReport(anchored);
+      // `anchoredFrom` is shared with the retry queue so a queued submission
+      // persists exactly what a first-try one does, evidence CIDs included.
+      await upsertReport(anchoredFrom(report, published));
+      await dequeue(report.id);
       router.replace(`/report/${report.id}`);
     } catch (e) {
+      // Queue it rather than losing it. Someone reporting from a district
+      // office with no signal should not have to remember to try again later
+      // from somewhere else, having already taken the risk of writing it down.
       await upsertReport({ ...report, status: "failed" });
+      await enqueue(report.id, e instanceof Error ? e.message : String(e));
+      setQueued(true);
       setError(e instanceof Error ? e.message : String(e));
       setSubmitting(false);
       setProgressLabel(null);
@@ -103,10 +107,9 @@ export default function ReviewScreen() {
       </Card>
 
       {/* Pre-submit Tor / network protection status */}
-      {anonymity ? (
-        isProtected ? (
-          <Notice tone="success">{t("review.torWarningProtected")}</Notice>
-        ) : (
+      {isProtected ? (
+        <Notice tone="success">{t("review.torWarningProtected")}</Notice>
+      ) : (
           <Card style={{ borderColor: colors.danger }}>
             <Title>{t("review.torWarningTitle")}</Title>
             <Body>{t("review.torWarningBody")}</Body>
@@ -124,8 +127,13 @@ export default function ReviewScreen() {
             ) : (
               <Caption>{t("review.torWarningContinueAnyway")}</Caption>
             )}
-          </Card>
-        )
+        </Card>
+      )}
+
+      {report.visibility === Visibility.JournalistsOnly && journalistKeysArePlaceholders() ? (
+        <Card style={{ borderColor: colors.danger }}>
+          <Body>{t("review.journalistsDemoWarning")}</Body>
+        </Card>
       ) : null}
 
       <Card>
@@ -155,6 +163,7 @@ export default function ReviewScreen() {
       {error ? (
         <Card style={{ borderColor: colors.danger }}>
           <Body>{error}</Body>
+          {queued ? <Body dim>{t("queue.queuedNotice")}</Body> : null}
         </Card>
       ) : null}
 
@@ -172,3 +181,7 @@ export default function ReviewScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm },
+});

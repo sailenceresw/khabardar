@@ -1,0 +1,163 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'maven-publish'
+
+group = 'expo.modules.tor'
+version = '0.1.0'
+
+def expoModulesCorePlugin = new File(
+  project(":expo-modules-core").projectDir.absolutePath,
+  "ExpoModulesCorePlugin.gradle"
+)
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useExpoPublishing()
+
+/**
+ * ABIs to build, overridable for local work.
+ *
+ * The default is every ABI Play Store devices actually ship, because a release
+ * must contain all of them. But each one is a separate full Arti build — tens
+ * of minutes — and someone iterating against an emulator needs exactly one.
+ * Pass `-PkhabardarAbis=x86_64` to build just that.
+ *
+ * Release builds must not set this. See DEVELOPING.md.
+ */
+def enabledAbis = ((project.findProperty('khabardarAbis') ?: 'arm64-v8a,armeabi-v7a,x86_64') as String)
+  .split(',').collect { it.trim() }.findAll { it }
+
+android {
+  namespace "expo.modules.tor"
+  defaultConfig {
+    minSdkVersion 24
+    compileSdkVersion 35
+    ndk {
+      abiFilters.addAll(enabledAbis)
+    }
+  }
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+  sourceSets {
+    main {
+      // Where cargo-ndk drops libkhabardar_tor.so per ABI.
+      jniLibs.srcDirs = ['src/main/jniLibs']
+    }
+  }
+}
+
+dependencies {
+  implementation "com.squareup.okhttp3:okhttp:4.12.0"
+}
+
+/**
+ * Cross-compile the Arti core for every enabled ABI.
+ *
+ * Requires the Android NDK and `cargo-ndk`:
+ *   cargo install cargo-ndk
+ *   rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+ *
+ * Skipped when the toolchain is absent so a checkout without Rust can still
+ * open in Android Studio — but the build then has no native library and
+ * `System.loadLibrary` fails at runtime, which is loud and correct. Silently
+ * shipping an app whose Tor cannot start would be far worse.
+ */
+def rustDir = file("${projectDir}/../rust")
+
+/**
+ * Fail early and legibly when a Rust target is missing.
+ *
+ * Without this, `cargo ndk` fails partway through the Gradle build with a raw
+ * toolchain error that says nothing about `rustup target add`. The ABI list
+ * here and the `abiFilters` above have to agree, and it is easy for a machine
+ * to have only some of them installed.
+ */
+def requiredRustTargets = [
+  'arm64-v8a'   : 'aarch64-linux-android',
+  'armeabi-v7a' : 'armv7-linux-androideabi',
+  'x86_64'      : 'x86_64-linux-android',
+]
+
+task checkRustTargets {
+  doLast {
+    // If rustup itself is absent there is no toolchain to check, and the
+    // `onlyIf` on the build task below already handles that case by skipping
+    // the native build with a warning. Failing here instead would break the
+    // documented "opens in Android Studio without Rust" path.
+    def installed
+    try {
+      installed = "rustup target list --installed".execute().text
+    } catch (IOException ignored) {
+      logger.warn("expo-tor: rustup not found — skipping Rust target check.")
+      return
+    }
+    // Only the ABIs actually being built need a toolchain.
+    def missing = requiredRustTargets
+      .findAll { abi, triple -> enabledAbis.contains(abi) && !installed.contains(triple) }
+    if (missing) {
+      throw new GradleException(
+        "expo-tor: no Rust target installed for ABI(s): " + missing.keySet().join(', ') +
+        ". These are listed in abiFilters, so the build would fail partway " +
+        "through with an opaque cargo error. Install them with: rustup target add " +
+        missing.values().join(' ')
+      )
+    }
+  }
+}
+
+task buildRustCore(type: Exec) {
+  dependsOn checkRustTargets
+  onlyIf {
+    def hasCargo = System.getenv("PATH")
+      ?.split(File.pathSeparator)
+      ?.any { new File(it, isWindows() ? "cargo.exe" : "cargo").exists() } ?: false
+    if (!hasCargo) {
+      logger.warn("expo-tor: cargo not found — skipping native Tor build. " +
+        "The app will fail to start Tor at runtime.")
+    }
+    hasCargo
+  }
+
+  workingDir rustDir
+  commandLine(['cargo', 'ndk'] +
+    enabledAbis.collectMany { ['-t', it] } +
+    ['-o', "${projectDir}/src/main/jniLibs", 'build', '--release'])
+
+  /**
+   * Drop ABIs this build did not produce.
+   *
+   * `abiFilters` above governs what *this module compiles*, not what a stale
+   * directory contributes to the APK. jniLibs is gitignored and never cleaned,
+   * so a previous full build leaves .so files behind and the app module packages
+   * them regardless — an `-PkhabardarAbis=x86_64` build was still shipping an
+   * arm64 Arti. Without this, DEVELOPING.md's promise that the ABI list and
+   * abiFilters cannot drift apart is not one the build actually keeps.
+   *
+   * Only reached when cargo exists, because `onlyIf` skips the whole task
+   * otherwise — so the documented "opens in Android Studio without Rust" path
+   * still deletes nothing.
+   */
+  doLast {
+    def jniDir = file("${projectDir}/src/main/jniLibs")
+    if (!jniDir.exists()) return
+    jniDir.eachDir { d ->
+      if (!enabledAbis.contains(d.name)) {
+        // ASCII only: this is read on a Windows console, where an em dash
+        // arrives as a replacement character.
+        logger.lifecycle("expo-tor: dropping stale ${d.name} jniLibs - not in this build's ABI set")
+        d.deleteDir()
+      }
+    }
+  }
+}
+
+static def isWindows() {
+  return System.getProperty('os.name').toLowerCase().contains('windows')
+}
+
+preBuild.dependsOn buildRustCore

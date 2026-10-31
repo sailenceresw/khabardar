@@ -1,48 +1,16 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Platform, View, StyleSheet, Switch } from "react-native";
+import React, { useState } from "react";
+import { Alert, Platform, View, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useApp } from "../src/state/AppContext";
 import { panicDelete } from "../src/panic";
 import { Body, Button, Card, Caption, Notice, Screen, SectionHeader, Title } from "../src/ui";
 import { colors, spacing } from "../src/theme";
 import { t } from "../src/i18n";
-import {
-  applySavedTransportPrefs,
-  getAnonymityStatus,
-  saveTransportPrefs,
-  type AnonymityStatus,
-  type TransportPrefs,
-} from "../src/transport";
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { locale, switchLocale, refreshIdentity, refreshReports } = useApp();
   const [wiping, setWiping] = useState(false);
-  const [prefs, setPrefs] = useState<TransportPrefs>({ mode: "clearnet", orbotActive: false });
-  const [status, setStatus] = useState<AnonymityStatus | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const refreshStatus = useCallback(async () => {
-    const loaded = await applySavedTransportPrefs();
-    setPrefs(loaded);
-    setStatus(getAnonymityStatus());
-  }, []);
-
-  useEffect(() => {
-    refreshStatus();
-  }, [refreshStatus]);
-
-  async function updatePrefs(next: TransportPrefs) {
-    setSaving(true);
-    try {
-      await saveTransportPrefs(next);
-      setPrefs(next);
-      setStatus(getAnonymityStatus());
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function doWipe() {
     setWiping(true);
     try {
@@ -69,8 +37,6 @@ export default function SettingsScreen() {
     ]);
   }
 
-  const torEnabled = prefs.mode === "tor";
-
   return (
     <Screen>
       <SectionHeader title={t("settings.language")} />
@@ -93,50 +59,6 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
-      <SectionHeader title={t("settings.transportTitle")} />
-      <Card>
-        <Body dim>{t("settings.transportExplainer")}</Body>
-
-        <View style={styles.switchRow}>
-          <View style={styles.flex}>
-            <Title>{t("settings.torMode")}</Title>
-            <Caption>{t("settings.torModeHint")}</Caption>
-          </View>
-          <Switch
-            value={torEnabled}
-            disabled={saving}
-            onValueChange={(v) =>
-              updatePrefs({ mode: v ? "tor" : "clearnet", orbotActive: prefs.orbotActive })
-            }
-            trackColor={{ false: colors.border, true: colors.accent }}
-          />
-        </View>
-
-        {torEnabled ? (
-          <View style={styles.switchRow}>
-            <View style={styles.flex}>
-              <Title>{t("settings.orbotActive")}</Title>
-              <Caption>{t("settings.orbotActiveHint")}</Caption>
-            </View>
-            <Switch
-              value={prefs.orbotActive}
-              disabled={saving}
-              onValueChange={(v) => updatePrefs({ mode: "tor", orbotActive: v })}
-              trackColor={{ false: colors.border, true: colors.accent }}
-            />
-          </View>
-        ) : null}
-
-        {status ? (
-          status.protected ? (
-            <Notice tone="success">{t("settings.transportProtected")}</Notice>
-          ) : (
-            <Notice tone="warn">{status.warning ?? t("settings.transportUnprotected")}</Notice>
-          )
-        ) : null}
-
-        <Caption>{t("settings.orbotInstallHint")}</Caption>
-      </Card>
 
       <SectionHeader title={t("recovery.title")} />
       <Card>
@@ -148,6 +70,51 @@ export default function SettingsScreen() {
       <Card>
         <Body dim>{t("wallet.defaultNote")}</Body>
         <Button label={t("wallet.open")} variant="secondary" onPress={() => router.push("/wallet")} />
+      </Card>
+
+      <Card>
+        <Body dim>{t("stealth.title")}</Body>
+        <Body dim>{t("stealth.intro")}</Body>
+        <Button
+          label={t("stealth.title")}
+          variant="secondary"
+          onPress={() => router.push("/stealth")}
+        />
+      </Card>
+
+      <Card>
+        <Body dim>{t("settings.otherTitle")}</Body>
+        <Body dim>{t("settings.otherExplainer")}</Body>
+        <Button
+          label={t("common.moderation")}
+          variant="secondary"
+          onPress={() => router.push("/moderation")}
+        />
+        <Button
+          label={t("org.open")}
+          variant="secondary"
+          onPress={() => router.push("/org")}
+        />
+        <Button
+          label={t("cases.title")}
+          variant="secondary"
+          onPress={() => router.push("/cases")}
+        />
+        <Button
+          label={t("analytics.title")}
+          variant="secondary"
+          onPress={() => router.push("/analytics")}
+        />
+      </Card>
+
+      <Card style={{ borderColor: colors.danger }}>
+        <Body dim>{t("net.title")}</Body>
+        <Body dim>{t("net.warning")}</Body>
+        <Button
+          label={t("net.egressTitle")}
+          variant="secondary"
+          onPress={() => router.push("/network")}
+        />
       </Card>
 
       <SectionHeader title={t("settings.dangerZone")} />

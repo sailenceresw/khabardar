@@ -5,7 +5,7 @@ import { ethers } from "hardhat";
 async function main() {
   const [deployer] = await ethers.getSigners();
   console.log("Deploying ReportRegistry");
-  console.log("  deployer / initial moderator:", deployer.address);
+  console.log("  deployer / initial admin + first juror:", deployer.address);
 
   const ReportRegistry = await ethers.getContractFactory("ReportRegistry");
   const registry = await ReportRegistry.deploy(deployer.address);
@@ -16,6 +16,15 @@ async function main() {
 
   console.log("  ReportRegistry deployed to:", address);
   console.log("  chainId:", network.chainId.toString());
+
+  // A one-juror jury is exactly the single-moderator centralization the jury
+  // replaces, so say so loudly rather than letting a deployment quietly ship
+  // with it. Deployments are cheap; a captured review process is not.
+  console.log("\n⚠️  This deployment has ONE juror (the deployer).");
+  console.log("    Seat at least three independent jurors before trusting any verdict:");
+  console.log(`      registry.setJuror(<address>, true)   // quorum weight is 3`);
+  console.log("    And point corroboration at a personhood gate before mainnet:");
+  console.log(`      registry.setPersonhoodGate(<gate>)   // unset == anyone can corroborate`);
 
   const outDir = path.resolve(__dirname, "../deployments");
   fs.mkdirSync(outDir, { recursive: true });

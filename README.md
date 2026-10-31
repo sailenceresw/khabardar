@@ -60,19 +60,20 @@ honest answer to "can I use my own wallet?" is "yes, and it will weaken you."</s
 
 Working end-to-end today: compose → encrypt → upload to the content layer → anchor hash
 + CID via a gasless transaction → read back in a public feed with an integrity check.
-Also wired: entity clustering, a moderation review queue, an encrypted tip channel,
-BIP-39 recovery, and an optional WalletConnect identity.
+Also wired: embedded Tor, a secret-ballot jury, zero-knowledge personhood, stealth mode,
+an offline submission queue, entity clustering, an encrypted tip channel, BIP-39
+recovery, and an optional WalletConnect identity.
 
 The relayer and content store default to local mocks, so **everything runs with no
 credentials**.
 
 | | |
 |---|---|
-| ✅ **Built and verified** | Anonymity core, chain layer (23 contract tests), content layer, public feed, moderation, tips, gasless abstraction, evidence upload path in compose, mobile UI design system + screen polish, i18n (EN + HI) |
-| 🟡 **Coded, unproven on live infra** | Pimlico SimpleAccount + UserOp receipt polling, IPFS pin implementation. Needs Sepolia deploy (#2), sponsorship policy (#5), live pin provider (#6) |
-| 🟡 **Partial, do not rely on it** | Transport layer with onion-endpoint preference, used by the content store and by the bundler, paymaster and chain-RPC calls, and exposed in Settings. Requests still go out over plain `fetch`, so protection depends entirely on Orbot routing the device, and the protected indicator is caller-asserted rather than probed ([#9](https://github.com/sailenceresw/khabardar/issues/9)) |
-| 🔧 **Open polish** | Recovery/wallet design-system alignment ([#33](https://github.com/sailenceresw/khabardar/issues/33)), report status presentation ([#34](https://github.com/sailenceresw/khabardar/issues/34)) |
-| ❌ **Not started** | Embedded Tor/SOCKS, proof-of-personhood, C2PA provenance, stealth mode, billing backend, security audit |
+| ✅ **Built and verified** | Anonymity core, chain layer (73 contract tests), content layer, public feed, secret-ballot jury, tips, gasless abstraction, evidence upload with progress, stealth mode, offline queue, mobile design system, i18n (EN + HI) |
+| ✅ **Embedded Tor** | Arti compiled in (`modules/expo-tor`), loopback SOCKS5, hostnames resolved at the exit so there is no local DNS leak, a fresh circuit per submission, and a fail-closed switch that refuses to send rather than leak |
+| 🟡 **Built, never run on real infrastructure** | Pimlico SimpleAccount + receipt polling, IPFS pinning, the indexer endpoint contract. Needs a Sepolia deploy (#2), a funded sponsorship policy (#5), a live pin provider (#6), and an indexer (#15) |
+| 🟡 **Built, not yet proven on a device** | On-device Groth16 proving (`modules/expo-zkprove`). The Android library builds and the core is verified against the reference implementation, but it has not run on real hardware |
+| ❌ **Not started** | C2PA provenance, billing and accreditation backend, independent security audit |
 
 Full honest breakdown in [BUSINESS.md](./BUSINESS.md). Open work is in
 [Issues](https://github.com/sailenceresw/khabardar/issues). The
@@ -181,8 +182,11 @@ payment step.
 | EXIF/GPS in evidence | Client-side re-encode before anything is stored (`src/evidence.ts`) |
 | Precise location in report | Geohash hard-capped at 4 chars ≈ city level (`src/geo.ts`) |
 | Device seizure | AES-256-GCM at rest + **panic delete** wipes drafts, evidence, keys, identity (`src/panic.ts`) |
+| Device inspected while unlocked | Stealth mode: PIN lock, a duress PIN that wipes and then opens as a first launch, calculator disguise, screenshot and app-switcher blocking (`src/stealth.ts`) |
 | Content on a public chain | Only fingerprints go on-chain, never content |
-| Network observation | **Not yet mitigated**. [#9](https://github.com/sailenceresw/khabardar/issues/9) is the biggest open gap |
+| Network observation | Embedded Tor via Arti, one circuit per submission, hostnames resolved at the exit. Fail-closed when unprotected (`src/net/`) |
+| Sybil corroboration | Semaphore personhood gate: prove group membership without revealing which member, with a nullifier blocking a second act |
+| A captured moderator | No moderator address exists. Equal-weight secret-ballot jury with commit, reveal and appeal |
 
 Three design decisions that are easy to get wrong, and why they went this way:
 
@@ -232,33 +236,44 @@ Tracked as [issues](https://github.com/sailenceresw/khabardar/issues), grouped b
 | [`v0.3-scale`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.3-scale) | Real indexer, karma-weighted jury, publicly auditable moderation log, large/audio/document evidence |
 | [`v1.0-launch`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av1.0-launch) | Demo data removed, external audit, org billing backend, C2PA provenance, more languages |
 
-**Recently closed (code complete, not always live-proven):**
+**Code complete, not always live-proven:**
 [#3](https://github.com/sailenceresw/khabardar/issues/3) SimpleAccount derivation,
 [#4](https://github.com/sailenceresw/khabardar/issues/4) UserOp receipt polling,
 [#7](https://github.com/sailenceresw/khabardar/issues/7) evidence upload in compose,
 [#8](https://github.com/sailenceresw/khabardar/issues/8) CI,
-[#31](https://github.com/sailenceresw/khabardar/issues/31) / [#32](https://github.com/sailenceresw/khabardar/issues/32) mobile UI polish.
+[#9](https://github.com/sailenceresw/khabardar/issues/9) embedded Tor,
+[#10](https://github.com/sailenceresw/khabardar/issues/10) personhood,
+[#11](https://github.com/sailenceresw/khabardar/issues/11) tip padding,
+[#14](https://github.com/sailenceresw/khabardar/issues/14) stealth mode,
+[#16](https://github.com/sailenceresw/khabardar/issues/16) jury,
+[#18](https://github.com/sailenceresw/khabardar/issues/18) evidence streaming,
+[#20](https://github.com/sailenceresw/khabardar/issues/20) offline queue.
 
 **The three that matter most**, because without them nothing else is safe to use:
 
-1. **[Anonymising transport](https://github.com/sailenceresw/khabardar/issues/9)** is
-   the largest remaining gap. Every other protection is downstream of this one.
-2. **[Proof-of-personhood](https://github.com/sailenceresw/khabardar/issues/10)**.
-   Corroboration and karma are only as sybil-resistant as the account set.
-3. **[Independent audit](https://github.com/sailenceresw/khabardar/issues/22)**. The
-   "do not use this yet" notice should only be removed by someone outside this project.
+1. **[Independent audit](https://github.com/sailenceresw/khabardar/issues/22)**. The
+   "do not use this yet" notice should only be removed by someone outside this project,
+   and the cryptography now carries far more weight than when it was last described.
+2. **Proof on real infrastructure.** The gasless path, the pin provider and the on-device
+   prover are all written and none has run outside a test harness. Untested code against
+   a real bundler should be assumed broken.
+3. **[Publicly auditable verdicts](https://github.com/sailenceresw/khabardar/issues/17)**.
+   The jury removed the single moderator, but its decision log is still device-local, so
+   the public is asked to trust tiers it cannot check.
 
 ## Known limitations
 
 Stated plainly, because a security tool that oversells itself is worse than one that
 does not exist:
 
-- **No anonymising transport.** Currently the weakest link in the entire design.
-- `MockRelayer` fabricates tx hashes and `MockContentStore` writes locally. Nothing is
-  on-chain or on IPFS until real providers are configured.
-- Corroboration is not sybil-resistant. Entity tags are reversible by dictionary attack.
-- A single moderator address is a centralization point, acceptable on testnet only.
-- The moderation decision log is device-local, so moderators are not yet auditable.
+- **Nothing here has run against live infrastructure.** `MockRelayer` fabricates tx
+  hashes and `MockContentStore` writes locally. The Pimlico path, the pin provider and
+  the indexer are written and unproven.
+- **Tor is only as good as the build.** Embedded Arti needs a native build: Expo Go and
+  the web preview cannot load it, and there the app is unprotected and says so.
+- On-device zero-knowledge proving has never run on real hardware.
+- Entity tags are reversible by dictionary attack, which is an accepted trade-off.
+- The jury's decision log is device-local, so verdicts are not yet publicly auditable.
 - The web build's SecureStore fallback is localStorage, which is **dev preview only**.
 - Demo recipient keys, sample feed rows, and demo sponsor pools ship in this build and
   must be removed before any real deployment.

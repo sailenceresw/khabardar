@@ -1,0 +1,6 @@
+target/
+# Proving artifacts are multi-megabyte downloads, not source.
+*.zkey
+*.wasm
+inputs.json
+reference.json
