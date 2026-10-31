@@ -17,6 +17,15 @@ import { Body, Button, Card, Screen, Title } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
+const PIN_ERROR_KEYS: Record<StealthPinRejected["code"], string> = {
+  "too-short": "stealth.pinTooShort",
+  "too-simple": "stealth.pinTooSimple",
+  "duress-matches-real": "stealth.pinDuressMatchesReal",
+  "duress-near-real": "stealth.pinDuressNearReal",
+  "real-pin-required": "stealth.pinRealRequired",
+  "real-pin-wrong": "stealth.pinRealWrong",
+};
+
 const DISGUISES: Array<{ mode: DisguiseMode; key: string }> = [
   { mode: DisguiseMode.None, key: "stealth.disguiseNone" },
   { mode: DisguiseMode.Calculator, key: "stealth.disguiseCalculator" },
@@ -43,13 +52,7 @@ export default function StealthScreen() {
     setNote(null);
     setError(
       e instanceof StealthPinRejected
-        ? t(
-            e.code === "too-short"
-              ? "stealth.pinTooShort"
-              : e.code === "too-simple"
-                ? "stealth.pinTooSimple"
-                : "stealth.pinDuressMatchesReal"
-          )
+        ? t(PIN_ERROR_KEYS[e.code])
         : t("common.error")
     );
   }
@@ -68,8 +71,11 @@ export default function StealthScreen() {
 
   async function saveDuress() {
     try {
-      await setDuressPin(duress);
+      // Changing the duress PIN now proves knowledge of the real one, which is
+      // also what lets the near-miss check run at all.
+      await setDuressPin(duress, pin);
       setDuress("");
+      setPin("");
       setError(null);
       setNote(t("stealth.saved"));
       await load();

@@ -60,7 +60,14 @@ export class ChainNetworkIndex implements NetworkIndex {
       });
 
       for (const log of [...logs].reverse()) {
-        rows.push(await this.hydrate(log));
+        // Filter before counting against the limit. Capping the raw scan first
+        // and filtering afterwards returns an empty feed whenever the newest
+        // `limit` reports happen not to match, even though matching reports
+        // exist further back.
+        const row = await this.hydrate(log);
+        if (applyQuery([row], query).length === 0) continue;
+
+        rows.push(row);
         if (rows.length >= limit) break;
       }
 
@@ -68,10 +75,7 @@ export class ChainNetworkIndex implements NetworkIndex {
       to = from - 1n;
     }
 
-    return applyQuery(
-      rows.sort((a, b) => b.timestamp - a.timestamp),
-      query
-    );
+    return rows.sort((a, b) => b.timestamp - a.timestamp);
   }
 
   private async hydrate(log: { args: unknown }): Promise<ChainReportRow> {

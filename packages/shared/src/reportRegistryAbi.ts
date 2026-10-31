@@ -366,10 +366,24 @@ export const REPORT_REGISTRY_ABI = [
 
 /** Mirrors ReportRegistry constants so the client can reason without a call. */
 
-/** Sealed ballots needed before the reveal phase opens. */
+/**
+ * Panel size a round is opened for.
+ *
+ * Not a trigger: reaching it does not close the commit phase. The contract
+ * keeps commits open for `COMMIT_WINDOW` for everyone, because closing on the
+ * first N arrivals is a seat race, and a coordinated group that wins it
+ * decides the report before anyone else can take a seat.
+ */
 export const JURY_QUORUM = 3;
 /** Panel size when a reporter appeals. */
 export const APPEAL_QUORUM = 5;
+/**
+ * Ballots a round needs to count as a jury at all.
+ *
+ * Mirrors `ReportRegistry.MIN_BALLOTS`. Below this the round is recorded as
+ * undecided rather than producing a verdict from two people.
+ */
+export const MIN_BALLOTS = 3;
 
 /**
  * Every juror counts exactly one.

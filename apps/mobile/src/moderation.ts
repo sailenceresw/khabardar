@@ -6,6 +6,7 @@ import {
   APPEAL_QUORUM,
   JURY_QUORUM,
   JuryPhase,
+  MIN_BALLOTS,
   VerificationTier,
 } from "@khabardar/shared";
 import { updateMirrorRow } from "./feed/localChainMirror";
@@ -54,7 +55,7 @@ const RECORD_KEY = "khabardar.jury.record.v2";
 const SALTS_KEY = "khabardar.jury.salts.v2";
 const JUROR_MODE_KEY = "khabardar.jury.isJuror.v1";
 
-export { JuryPhase, JURY_QUORUM, APPEAL_QUORUM };
+export { JuryPhase, JURY_QUORUM, APPEAL_QUORUM, MIN_BALLOTS };
 
 export interface Ballot {
   reportId: number;
@@ -98,7 +99,7 @@ export interface JurorRecord {
 export const SIMULATED_JURORS = [
   "0xA11CE00000000000000000000000000000000001",
   "0xB0B0000000000000000000000000000000000002",
-  "0xC4501E00000000000000000000000000000003",
+  "0xC4501E0000000000000000000000000000000003",
   "0xD00D000000000000000000000000000000000004",
   "0xE55E000000000000000000000000000000000005",
 ] as const;
@@ -333,8 +334,76 @@ export async function commitVote(input: {
 
   await writeBallots([ballot, ...(await readBallots())]);
 
-  if (existing.length + 1 >= round.quorum) round = { ...round, phase: JuryPhase.Revealing };
+  // Deliberately NOT `>= quorum`. Closing commits the moment the first quorum
+  // of jurors has committed is the seat race the contract was changed to
+  // remove: it lets a fast, coordinated group fill the panel and decide a
+  // report before anyone else can take a seat. The contract keeps commits open
+  // for a fixed window instead, for everyone. There are no timers here, so the
+  // mock advances only when every seated juror has committed, or when someone
+  // opens reveals explicitly, which is the same "anyone may advance" rule.
+  if (existing.length + 1 >= JURY_SEATS) round = { ...round, phase: JuryPhase.Revealing };
 
+  rounds[reportId] = round;
+  await writeRounds(rounds);
+  return round;
+}
+
+/**
+ * Seats on the mock panel: the simulated peers plus this device.
+ *
+ * Only used to decide when the commit phase can close on its own. The contract
+ * closes on a deadline, which a local mock has no way to wait for.
+ */
+const JURY_SEATS = SIMULATED_JURORS.length + 1;
+
+/**
+ * Move a round to revealing without waiting for every seat.
+ *
+ * Mirrors `ReportRegistry.openReveals`, which anyone may call once the commit
+ * window shuts: a phase only a juror can advance is a phase a juror can stall,
+ * and stalling a round forever buries a report without anyone voting against
+ * it. Too few ballots to be a jury is recorded as undecided, not as a verdict.
+ */
+export async function openReveals(reportId: number): Promise<JuryRound> {
+  const rounds = await readRounds();
+  const round = rounds[reportId];
+  if (!round || round.phase !== JuryPhase.Committing) {
+    throw new JuryActionRejected("not-committing");
+  }
+
+  const committed = (await readBallots()).filter(
+    (b) => b.reportId === reportId && b.round === round.index
+  );
+
+  const next: JuryRound =
+    committed.length < MIN_BALLOTS
+      ? { ...round, phase: JuryPhase.Undecided, decidedAt: Date.now() }
+      : { ...round, phase: JuryPhase.Revealing };
+
+  rounds[reportId] = next;
+  await writeRounds(rounds);
+  return next;
+}
+
+/**
+ * Tally a revealing round now, counting anyone who has not opened their ballot
+ * as having abandoned it.
+ *
+ * Without this a single juror who commits and never reveals freezes the report
+ * in Revealing permanently, which is the cheapest possible way to bury one.
+ * The contract closes on the reveal deadline for the same reason.
+ */
+export async function closeReveals(reportId: number): Promise<JuryRound> {
+  const rounds = await readRounds();
+  let round = rounds[reportId];
+  if (!round || round.phase !== JuryPhase.Revealing) {
+    throw new JuryActionRejected("not-revealing");
+  }
+
+  const inRound = (await readBallots()).filter(
+    (b) => b.reportId === reportId && b.round === round.index
+  );
+  round = await closeRound(reportId, round, inRound);
   rounds[reportId] = round;
   await writeRounds(rounds);
   return round;

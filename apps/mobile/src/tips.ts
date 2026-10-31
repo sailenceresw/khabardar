@@ -3,7 +3,7 @@ import { bytesToHex } from "@noble/ciphers/utils";
 import { gcm } from "@noble/ciphers/aes";
 import * as Crypto from "expo-crypto";
 import { keccak256, toBytes } from "viem";
-import { bytesToUtf8, randomKey, utf8ToBytes } from "./cryptoUtils";
+import { bytesToUtf8, randomKey, utf8ToBytes, randomBytes } from "./cryptoUtils";
 import { wrapContentKey, type WrappedKey } from "./content/contentKeys";
 import { DEMO_RECIPIENTS, type Recipient } from "./content/recipients";
 import { getContentStore } from "./content";
@@ -63,7 +63,7 @@ export function padToBucket(message: string): Uint8Array {
     TIP_LENGTH_BUCKETS[TIP_LENGTH_BUCKETS.length - 1];
 
   const padded = new Uint8Array(size);
-  padded.set(Crypto.getRandomBytes(size), 0);
+  padded.set(randomBytes(size), 0);
 
   const view = new DataView(padded.buffer, padded.byteOffset, padded.byteLength);
   view.setUint32(0, body.length, false);

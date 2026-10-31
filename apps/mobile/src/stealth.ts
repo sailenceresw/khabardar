@@ -160,19 +160,55 @@ export async function setUnlockPin(pin: string): Promise<void> {
  * entered by accident under stress, and the cost of that mistake is every
  * draft the user had.
  */
-export async function setDuressPin(pin: string): Promise<void> {
+export async function setDuressPin(pin: string, realPin: string): Promise<void> {
   requireUsablePin(pin);
 
   const real = await secureGet(REAL_PIN_KEY);
-  if (real && (await hashPin(pin)) === real) {
-    throw new StealthPinRejected("duress-matches-real");
+  // A duress PIN without a real one to contrast it against is meaningless: every
+  // unlock would wipe.
+  if (!real) throw new StealthPinRejected("real-pin-required");
+
+  // The real PIN is taken as an argument rather than read back, because the
+  // stored form is a 200k-round PBKDF2 hash. Checking a near miss needs the
+  // plaintext, and hashing every one-digit variant to avoid asking for it would
+  // cost millions of rounds on a phone.
+  if ((await hashPin(realPin)) !== real) {
+    throw new StealthPinRejected("real-pin-wrong");
   }
+  if (pin === realPin) throw new StealthPinRejected("duress-matches-real");
+  if (isNearMiss(pin, realPin)) throw new StealthPinRejected("duress-near-real");
+
   await secureSet(DURESS_PIN_KEY, await hashPin(pin));
   await saveStealthConfig({ duressConfigured: true });
 }
 
+/**
+ * Same length, differing in exactly one position.
+ *
+ * Such a duress PIN will eventually be entered by accident, in the dark, in a
+ * hurry, by someone frightened. The wipe it triggers is irreversible and takes
+ * every draft with it, so the near miss is refused at the point where refusing
+ * it costs nothing.
+ */
+function isNearMiss(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diffs = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i] && ++diffs > 1) return false;
+  }
+  return diffs === 1;
+}
+
 export class StealthPinRejected extends Error {
-  constructor(readonly code: "too-short" | "too-simple" | "duress-matches-real") {
+  constructor(
+    readonly code:
+      | "too-short"
+      | "too-simple"
+      | "duress-matches-real"
+      | "duress-near-real"
+      | "real-pin-required"
+      | "real-pin-wrong"
+  ) {
     super(code);
     this.name = "StealthPinRejected";
   }

@@ -102,9 +102,16 @@ export async function ensureArtifacts(options: EnsureOptions): Promise<CachedArt
       onProgress?.("wasm", n)
     ));
 
-  const zkeyPath = await download(zkeyUrl, zkeyName, store, fetcher, expected?.zkey, (n) =>
-    onProgress?.("zkey", n)
-  );
+  // Reuse a cached proving key even when the wasm had to be fetched. It is the
+  // multi-megabyte half of the pair, and re-downloading it on every wasm miss
+  // both wastes the user's data and re-creates the timing signal that caching
+  // exists to remove.
+  const zkeyPath =
+    cachedZkey && (await store.isUsable(cachedZkey))
+      ? cachedZkey
+      : await download(zkeyUrl, zkeyName, store, fetcher, expected?.zkey, (n) =>
+          onProgress?.("zkey", n)
+        );
 
   // A truncated proving key fails deep inside proving with an opaque error, so
   // it is rejected here where the cause is still obvious.

@@ -390,7 +390,10 @@
     "pinTooSimple": "That PIN is too easy to guess. Avoid repeated or sequential digits.",
     "pinDuressMatchesReal": "The duress PIN must be different from your unlock PIN.",
     "saved": "Saved.",
-    "lockUnreadable": "The PIN could not be read, so the app cannot tell whether a lock is set. It has stayed locked rather than guess."
+    "lockUnreadable": "The PIN could not be read, so the app cannot tell whether a lock is set. It has stayed locked rather than guess.",
+    "pinDuressNearReal": "That duress PIN differs from your real PIN by a single digit. Under stress you will eventually enter it by mistake, and the wipe cannot be undone. Choose one that is clearly different.",
+    "pinRealRequired": "Set your unlock PIN before setting a duress PIN.",
+    "pinRealWrong": "That is not your current unlock PIN."
   },
   "net": {
     "title": "Network",

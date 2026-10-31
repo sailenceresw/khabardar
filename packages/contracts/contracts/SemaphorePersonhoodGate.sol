@@ -26,14 +26,21 @@ import {IPersonhoodGate} from "./IPersonhoodGate.sol";
 /// same sybil resistance with nobody holding that list — the operator enrols
 /// identity *commitments*, which are hashes, and can never tell which one acted.
 ///
-/// ## Scopes, and why one report is one scope
+/// ## Scopes, and why one epoch is one scope
 ///
-/// `scope` is what the nullifier is bound to. Using the report id means a
-/// member can corroborate each report once and cannot be tracked across
-/// reports, because the nullifiers for two different reports share nothing.
-/// Using a per-epoch scope instead would give RLN-style rate limiting; the
-/// registry's per-epoch submission cap already covers that need, so the report
-/// is the right granularity here.
+/// `scope` is what the nullifier is bound to, so the choice of scope decides
+/// how often a member can prove. This gate verifies an *address* for a bounded
+/// window rather than authorising a single act, so the scope is an epoch of
+/// one {VERIFICATION_TTL}: a member proves once per window, and gets a fresh
+/// nullifier in the next one.
+///
+/// A fixed scope would give each member one nullifier for all time. They would
+/// prove once, the TTL would lapse, and they could never prove again, because
+/// their only nullifier is spent. That is a permanent lockout of a legitimate
+/// member, which is worse than anything the fixed scope buys.
+///
+/// Epochs remain unlinkable: nullifiers from the same member in two different
+/// epochs share nothing an observer can connect.
 ///
 /// ## What this does NOT provide
 ///
@@ -77,6 +84,32 @@ contract SemaphorePersonhoodGate is IPersonhoodGate {
     /// being a person eventually. Long enough that a reporter is not re-proving
     /// constantly, short enough that the window is not a standing asset.
     uint256 public constant VERIFICATION_TTL = 30 days;
+
+    /// @notice The scope a proof must be bound to, for a given epoch.
+    ///
+    /// Semaphore derives the nullifier from the member's secret and the scope,
+    /// so a scope that never changes gives each member exactly one nullifier
+    /// for all time. Spending it once and then letting {VERIFICATION_TTL}
+    /// lapse would lock a legitimate member out permanently, with no way back:
+    /// their only nullifier is already burnt. Binding the scope to an epoch of
+    /// one TTL gives them a fresh nullifier each window.
+    ///
+    /// Epochs stay unlinkable to each other. Two nullifiers from the same
+    /// member in different epochs share nothing an observer can connect, which
+    /// is the same property that makes per-report scopes safe.
+    function scopeForEpoch(uint256 epoch) public view returns (uint256) {
+        return uint256(keccak256(abi.encodePacked(address(this), epoch)));
+    }
+
+    /// @notice The epoch a timestamp falls in.
+    function epochAt(uint256 timestamp) public pure returns (uint256) {
+        return timestamp / VERIFICATION_TTL;
+    }
+
+    /// @notice The scope a proof generated now should use.
+    function currentScope() external view returns (uint256) {
+        return scopeForEpoch(epochAt(block.timestamp));
+    }
 
     event OperatorTransferred(address indexed previousOperator, address indexed newOperator);
     event MemberEnrolled(uint256 indexed identityCommitment);
@@ -133,7 +166,7 @@ contract SemaphorePersonhoodGate is IPersonhoodGate {
     /// to each other — which was already true of any on-chain activity, and is
     /// what a fresh ERC-4337 account per action is for.
     ///
-    /// @param proof A Semaphore proof whose `scope` is this contract's address
+    /// @param proof A Semaphore proof whose `scope` is {currentScope}
     /// and whose `message` is the redeeming address, so a proof cannot be
     /// lifted from the mempool and redeemed by someone else.
     function proveForScope(ISemaphore.SemaphoreProof calldata proof) external {
@@ -142,7 +175,15 @@ contract SemaphorePersonhoodGate is IPersonhoodGate {
         // Bind the proof to this gate and to the address redeeming it. Without
         // the message binding, an observer could copy a pending proof out of
         // the mempool and spend the nullifier as themselves.
-        if (proof.scope != uint256(uint160(address(this)))) revert ProofRejected();
+        // Current epoch, or the one just past. A proof generated seconds before
+        // a rollover would otherwise be rejected on arrival through no fault of
+        // the prover, and asking someone to regenerate a Groth16 proof on a
+        // phone because a clock ticked is not a reasonable failure mode.
+        uint256 epoch = epochAt(block.timestamp);
+        bool scopeOk =
+            proof.scope == scopeForEpoch(epoch) ||
+            (epoch > 0 && proof.scope == scopeForEpoch(epoch - 1));
+        if (!scopeOk) revert ProofRejected();
         if (proof.message != uint256(uint160(msg.sender))) revert ProofRejected();
 
         // Reverts on an invalid proof or a reused nullifier.

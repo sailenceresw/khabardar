@@ -47,8 +47,9 @@ describe("SemaphorePersonhoodGate", () => {
     identity: Identity,
     redeemer: string
   ) {
-    const gateAddress = await gate.getAddress();
-    const scope = BigInt(gateAddress);
+    // The scope rolls with the epoch, so it is read from the gate rather than
+    // derived from its address.
+    const scope: bigint = await gate.currentScope();
     const message = BigInt(redeemer);
 
     const proof = await generateProof(identity, group, message, scope);
@@ -178,6 +179,49 @@ describe("SemaphorePersonhoodGate", () => {
     await ethers.provider.send("evm_mine", []);
 
     expect(await gate.isPerson(alice.address)).to.equal(false);
+  });
+
+  it("lets the same member prove again once the TTL has lapsed", async function () {
+    this.timeout(PROVING_TIMEOUT);
+    const { gate, operator, alice } = await deployFixture();
+
+    const identity = new Identity();
+    await (await gate.connect(operator).enroll(identity.commitment)).wait();
+    const group = new Group([identity.commitment]);
+
+    await (await gate.connect(alice).proveForScope(await proveFor(gate, group, identity, alice.address))).wait();
+    expect(await gate.isPerson(alice.address)).to.equal(true);
+
+    // Past the TTL, into the next epoch.
+    const ttl = Number(await gate.VERIFICATION_TTL());
+    await ethers.provider.send("evm_increaseTime", [ttl + 1]);
+    await ethers.provider.send("evm_mine", []);
+    expect(await gate.isPerson(alice.address)).to.equal(false);
+
+    // A fixed scope would give this member a single nullifier for all time, so
+    // the proof below would revert with NullifierAlreadyUsed and a legitimate
+    // member would be locked out permanently. The epoch scope gives them a
+    // fresh one.
+    const second = await proveFor(gate, group, identity, alice.address);
+    await (await gate.connect(alice).proveForScope(second)).wait();
+    expect(await gate.isPerson(alice.address)).to.equal(true);
+  });
+
+  it("still refuses a second proof inside the same epoch", async function () {
+    this.timeout(PROVING_TIMEOUT);
+    const { gate, operator, alice } = await deployFixture();
+
+    const identity = new Identity();
+    await (await gate.connect(operator).enroll(identity.commitment)).wait();
+    const group = new Group([identity.commitment]);
+
+    const proof = await proveFor(gate, group, identity, alice.address);
+    await (await gate.connect(alice).proveForScope(proof)).wait();
+
+    await expect(gate.connect(alice).proveForScope(proof)).to.be.revertedWithCustomError(
+      gate,
+      "NullifierAlreadyUsed"
+    );
   });
 
   it("lets the operator expire an address early", async function () {

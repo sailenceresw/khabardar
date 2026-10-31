@@ -4,6 +4,7 @@ import { sha256 } from "@noble/hashes/sha256";
 import { gcm } from "@noble/ciphers/aes";
 import { bytesToHex, hexToBytes } from "@noble/ciphers/utils";
 import * as Crypto from "expo-crypto";
+import { randomBytes } from "../cryptoUtils";
 
 /**
  * How the content key for a published bundle is made available to readers.
@@ -120,7 +121,7 @@ export function wrappedKeyring(
 
 function shuffle<T>(items: T[]): T[] {
   const out = [...items];
-  const rand = Crypto.getRandomBytes(4 * out.length);
+  const rand = randomBytes(4 * out.length);
   const view = new DataView(rand.buffer, rand.byteOffset, rand.byteLength);
   for (let i = out.length - 1; i > 0; i--) {
     const j = view.getUint32(4 * i, false) % (i + 1);

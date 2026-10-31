@@ -14,6 +14,27 @@ export function randomKey(): Uint8Array {
   return Crypto.getRandomBytes(32);
 }
 
+/** expo-crypto refuses a single request larger than this. */
+const RANDOM_CHUNK = 1024;
+
+/**
+ * Cryptographically random bytes of any length.
+ *
+ * `Crypto.getRandomBytes` throws above 1024 bytes, which is smaller than
+ * several things this app generates: a padded tip runs to 128KB. Asking for
+ * more in one call fails at runtime rather than at compile time, so anything
+ * that is not a fixed small size should come through here.
+ */
+export function randomBytes(length: number): Uint8Array {
+  if (length <= RANDOM_CHUNK) return Crypto.getRandomBytes(length);
+
+  const out = new Uint8Array(length);
+  for (let offset = 0; offset < length; offset += RANDOM_CHUNK) {
+    out.set(Crypto.getRandomBytes(Math.min(RANDOM_CHUNK, length - offset)), offset);
+  }
+  return out;
+}
+
 export function encrypt(plaintext: Uint8Array, key: Uint8Array): EncryptedBlob {
   const nonce = Crypto.getRandomBytes(12);
   const ciphertext = gcm(key, nonce).encrypt(plaintext);

@@ -547,6 +547,13 @@ contract ReportRegistry {
 
         if (round.commits < MIN_BALLOTS) {
             // Too few jurors turned up to call this a jury.
+            //
+            // Deliberately no {_settleAbandoned} here, unlike {_closeRound}.
+            // This round dies in Committing, and {revealVote} only accepts a
+            // ballot in Revealing, so nobody was ever given the chance to
+            // open theirs. Marking them abandoned would penalise precisely
+            // the jurors who did turn up, and would make taking a seat on an
+            // unpopular report the risky choice.
             round.phase = RoundPhase.Undecided;
             emit VerdictUndecided(reportId, round.index, round.reveals);
             return;

@@ -50,17 +50,26 @@ export class IndexerNetworkIndex implements NetworkIndex {
   constructor(private readonly baseUrl: string) {}
 
   async list(query?: FeedQuery): Promise<ChainReportRow[]> {
-    const params = new URLSearchParams();
-    if (query?.category !== undefined) params.set("category", String(query.category));
-    if (query?.tier !== undefined) params.set("tier", String(query.tier));
-    if (query?.region) params.set("region", query.region);
-    if (query?.entityTag) params.set("entityTag", query.entityTag);
-    if (query?.since !== undefined) params.set("since", String(query.since));
-    if (query?.until !== undefined) params.set("until", String(query.until));
-    if (query?.limit !== undefined) params.set("limit", String(query.limit));
-    if (query?.cursor) params.set("cursor", query.cursor);
+    // Built by hand rather than with URLSearchParams: React Native's polyfill
+    // does not implement `set` or `size`, so the convenient version throws on
+    // any filtered query and drops the string entirely on an unfiltered one.
+    const pairs: Array<[string, string]> = [];
+    const add = (k: string, v: string | number | undefined) => {
+      if (v !== undefined && v !== "") pairs.push([k, String(v)]);
+    };
+    add("category", query?.category);
+    add("tier", query?.tier);
+    add("region", query?.region);
+    add("entityTag", query?.entityTag);
+    add("since", query?.since);
+    add("until", query?.until);
+    add("limit", query?.limit);
+    add("cursor", query?.cursor);
 
-    const url = `${this.base()}/reports${params.size ? `?${params}` : ""}`;
+    const qs = pairs
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join("&");
+    const url = `${this.base()}/reports${qs ? `?${qs}` : ""}`;
     const res = await netFetch(url, undefined, "feed:indexer-list");
     if (!res.ok) throw new Error(`Indexer list failed: ${res.status}`);
 

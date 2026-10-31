@@ -103,7 +103,13 @@ export async function computeAnalytics(reports: FeedReport[]): Promise<CorpusAna
 
   return {
     totalReports: corpus.length,
-    suppressedReports: catSup.reports + regionSup.reports + entitySup.reports,
+    // Buckets add up: they are distinct groups on three different breakdowns.
+    // Reports do not, so they are unioned.
+    suppressedReports: new Set([
+      ...catSup.reportIds,
+      ...regionSup.reportIds,
+      ...entitySup.reportIds,
+    ]).size,
     suppressedBuckets: catSup.buckets + regionSup.buckets + entitySup.buckets,
     byCategory,
     byTier,
@@ -131,20 +137,26 @@ function bucketize(
   reports: FeedReport[],
   keyOf: (r: FeedReport) => string,
   labelKeyOf?: (key: string) => string
-): { buckets: Bucket[]; suppressed: { buckets: number; reports: number } } {
+): { buckets: Bucket[]; suppressed: { buckets: number; reportIds: Set<number> } } {
   const all = countBy(reports, keyOf);
   const publishable = all.filter((b) => b.count >= MIN_BUCKET_SIZE);
-  const withheld = all.filter((b) => b.count < MIN_BUCKET_SIZE);
+  const withheldKeys = new Set(all.filter((b) => b.count < MIN_BUCKET_SIZE).map((b) => b.key));
+
+  // The ids, not a count. The same report falls into a withheld bucket on more
+  // than one dimension, so the caller has to union these rather than add them
+  // up: adding would count a report once per dimension and can report more
+  // reports withheld than exist.
+  const reportIds = new Set<number>();
+  for (const r of reports) {
+    if (withheldKeys.has(keyOf(r))) reportIds.add(r.onChainReportId);
+  }
 
   return {
     buckets: publishable.map((b) => ({
       ...b,
       ...(labelKeyOf ? { labelKey: labelKeyOf(b.key) } : {}),
     })),
-    suppressed: {
-      buckets: withheld.length,
-      reports: withheld.reduce((n, b) => n + b.count, 0),
-    },
+    suppressed: { buckets: withheldKeys.size, reportIds },
   };
 }
 

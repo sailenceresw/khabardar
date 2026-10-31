@@ -144,22 +144,30 @@ function PlainLock({
  */
 function CalculatorDisguise({ onSubmit }: { onSubmit: (pin: string) => Promise<boolean> }) {
   const [display, setDisplay] = useState("0");
+  // What was actually typed, leading zeros intact. A calculator shows "7" after
+  // 0-7, and collapsing the two would make a PIN beginning with 0 impossible to
+  // enter: the owner would be locked out of their own reports with no way to
+  // tell why, and a duress PIN starting with 0 would be unreachable.
+  const [entered, setEntered] = useState("");
   const [pending, setPending] = useState<{ left: number; op: string } | null>(null);
 
   function digit(d: string) {
+    setEntered((cur) => cur + d);
     setDisplay((cur) => (cur === "0" ? d : cur + d));
   }
 
   function operator(op: string) {
     setPending({ left: Number(display) || 0, op });
+    setEntered("");
     setDisplay("0");
   }
 
   async function equals() {
-    // The PIN check comes first, and only for a plain digit entry — otherwise
-    // an arithmetic result could coincidentally unlock the app.
-    if (!pending && /^\d+$/.test(display)) {
-      if (await onSubmit(display)) return;
+    // The PIN check comes first, and only for a plain digit entry: otherwise an
+    // arithmetic result could coincidentally unlock the app. It tests what was
+    // typed, not what is shown, so a leading zero survives.
+    if (!pending && entered.length > 0 && /^\d+$/.test(entered)) {
+      if (await onSubmit(entered)) return;
     }
 
     if (!pending) return;
@@ -173,6 +181,7 @@ function CalculatorDisguise({ onSubmit }: { onSubmit: (pin: string) => Promise<b
       : left / right;
 
     setDisplay(Number.isFinite(result) ? String(result) : "Error");
+    setEntered("");
     setPending(null);
   }
 
@@ -185,6 +194,7 @@ function CalculatorDisguise({ onSubmit }: { onSubmit: (pin: string) => Promise<b
         onDigit={digit}
         onClear={() => {
           setDisplay("0");
+          setEntered("");
           setPending(null);
         }}
         onEnter={equals}
