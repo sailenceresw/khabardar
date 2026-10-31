@@ -3,10 +3,11 @@ import { bytesToHex } from "@noble/ciphers/utils";
 import { gcm } from "@noble/ciphers/aes";
 import * as Crypto from "expo-crypto";
 import { keccak256, toBytes } from "viem";
-import { randomKey, utf8ToBytes } from "./cryptoUtils";
+import { bytesToUtf8, randomKey, utf8ToBytes } from "./cryptoUtils";
 import { wrapContentKey, type WrappedKey } from "./content/contentKeys";
 import { DEMO_RECIPIENTS, type Recipient } from "./content/recipients";
 import { getContentStore } from "./content";
+import { isolateNextRequests } from "./net/transport";
 import { safeJsonParse } from "./safeJson";
 
 /**
@@ -20,16 +21,63 @@ import { safeJsonParse } from "./safeJson";
  * (ephemeral ECDH -> HKDF -> AES-256-GCM), so only the named recipient's
  * private key can open it.
  *
- * What v0 does NOT yet do, and must before this is safe to rely on:
- *  - Transport. The sealed payload is stored locally; there is no delivery.
- *    Real delivery has to run over an anonymising transport (Tor, a mixnet, or
- *    at minimum a relay that never sees the sender IP), because the network
- *    metadata is what deanonymises people, not the ciphertext.
- *  - Padding. Message length currently leaks. Tips should be padded to fixed
- *    buckets so a 20-word tip is indistinguishable from a 2000-word one.
- *  - Forward secrecy. A recipient key compromise retroactively opens every
- *    past tip to them. A ratchet (or per-tip recipient subkeys) fixes this.
+ * Length is padded to fixed buckets before sealing — see {@link padToBucket}.
+ *
+ * Delivery goes through the same content-store + transport seam as reports.
+ * `isolateNextRequests()` runs first, so two tips do not share a circuit.
+ * On the default mock store the "upload" never leaves the device — the UI
+ * must say so. Forward secrecy is still missing: a recipient key compromise
+ * retroactively opens every past tip to them.
  */
+
+/**
+ * Ciphertext length buckets, in bytes of padded plaintext.
+ *
+ * AES-GCM is a stream cipher construction: ciphertext length equals plaintext
+ * length. Without padding, an observer who never breaks the encryption still
+ * learns roughly how much someone wrote — and "a 4KB tip to this newsroom on
+ * the morning the story broke" is a strong enough signal on its own. Bucketing
+ * collapses that into a handful of indistinguishable sizes.
+ *
+ * The buckets are coarse and few on purpose: more buckets mean finer leakage,
+ * and the cost of over-padding is bytes, which are cheap compared to the
+ * anonymity they buy.
+ */
+export const TIP_LENGTH_BUCKETS = [512, 2048, 8192, 32768, 131072] as const;
+
+/**
+ * Pad `message` up to the next bucket using a length-prefixed encoding.
+ *
+ * Layout: `[4-byte big-endian length][utf-8 message][random filler]`. Filler is
+ * random rather than zeroes so a compromised-but-not-broken ciphertext leaks
+ * nothing about where the real content stops.
+ */
+export function padToBucket(message: string): Uint8Array {
+  const body = utf8ToBytes(message);
+  const needed = body.length + 4;
+
+  const bucket = TIP_LENGTH_BUCKETS.find((b) => b >= needed);
+  // Beyond the largest bucket, round up to a whole multiple of it rather than
+  // sending an exact length — a long tip should not be self-identifying either.
+  const size = bucket ?? Math.ceil(needed / TIP_LENGTH_BUCKETS[TIP_LENGTH_BUCKETS.length - 1]) *
+    TIP_LENGTH_BUCKETS[TIP_LENGTH_BUCKETS.length - 1];
+
+  const padded = new Uint8Array(size);
+  padded.set(Crypto.getRandomBytes(size), 0);
+
+  const view = new DataView(padded.buffer, padded.byteOffset, padded.byteLength);
+  view.setUint32(0, body.length, false);
+  padded.set(body, 4);
+  return padded;
+}
+
+/** Inverse of {@link padToBucket}. Used by the recipient's tooling. */
+export function unpadFromBucket(padded: Uint8Array): string {
+  const view = new DataView(padded.buffer, padded.byteOffset, padded.byteLength);
+  const length = view.getUint32(0, false);
+  if (length > padded.byteLength - 4) throw new Error("Padded tip declares an impossible length");
+  return bytesToUtf8(padded.subarray(4, 4 + length));
+}
 
 const TIPS_INDEX = "khabardar.tips.index.v1";
 
@@ -52,6 +100,8 @@ export interface SealedTip {
 /** Metadata kept locally so the sender can see what they sent, minus content. */
 export interface TipRecord extends Omit<SealedTip, "ciphertext" | "wrappedKey" | "nonce"> {
   preview: string;
+  /** True when the "upload" was the local mock store and never left the device. */
+  simulated?: boolean;
 }
 
 export function listRecipients(): Recipient[] {
@@ -69,13 +119,18 @@ export function getRecipient(id: string): Recipient | undefined {
 export function sealTip(message: string, recipient: Recipient): SealedTip {
   const key = randomKey();
   const nonce = Crypto.getRandomBytes(12);
-  const ciphertext = gcm(key, nonce).encrypt(utf8ToBytes(message));
+  // Padded before encryption, so the ciphertext length reveals only which
+  // bucket the tip fell into and not how much was written.
+  const ciphertext = gcm(key, nonce).encrypt(padToBucket(message));
 
-  const wrappedKey = wrapContentKey(key, recipient.id, recipient.pubKey);
+  // The wrap does not name the recipient; only this device's local record does.
+  const wrappedKey = wrapContentKey(key, recipient.pubKey);
   const ciphertextHex = bytesToHex(ciphertext);
 
   return {
-    id: `tip_${Date.now()}`,
+    // Timestamp alone collides for two tips sealed in the same millisecond,
+    // which silently overwrites one in the local list.
+    id: `tip_${Date.now()}_${bytesToHex(Crypto.getRandomBytes(4))}`,
     recipientId: recipient.id,
     recipientName: recipient.name,
     wrappedKey,
@@ -88,27 +143,37 @@ export function sealTip(message: string, recipient: Recipient): SealedTip {
 }
 
 /**
- * Hand the sealed tip to the content layer. This is the closest v0 gets to
- * "sending" — see the transport caveat above; a real deployment replaces this
- * with an anonymising relay.
+ * Hand the sealed tip to the content layer, through the same transport
+ * seam as a report. Isolation runs first so two tips do not share a circuit.
+ *
+ * Errors propagate. Swallowing them as `status: "failed"` hid the reason
+ * — "Tor refused", "anonymity required", "pin failed" all looked the same.
  */
-export async function storeTip(tip: SealedTip): Promise<SealedTip> {
-  try {
-    const put = await getContentStore().put({
-      v: 1,
-      blob: { nonce: tip.nonce, ciphertext: tip.ciphertext },
-      keyring: { mode: "wrapped", recipients: [tip.wrappedKey] },
-    });
-    return { ...tip, cid: put.cid, status: "stored" };
-  } catch {
-    return { ...tip, status: "failed" };
-  }
+export async function storeTip(
+  tip: SealedTip
+): Promise<SealedTip & { simulated: boolean }> {
+  await isolateNextRequests();
+  const put = await getContentStore().put({
+    v: 1,
+    blob: { nonce: tip.nonce, ciphertext: tip.ciphertext },
+    keyring: { mode: "wrapped", recipients: [tip.wrappedKey] },
+  });
+  return { ...tip, cid: put.cid, status: "stored", simulated: put.simulated };
 }
 
-export async function sendTip(message: string, recipient: Recipient): Promise<SealedTip> {
-  const stored = await storeTip(sealTip(message, recipient));
-  await recordTip(stored, message);
-  return stored;
+export async function sendTip(
+  message: string,
+  recipient: Recipient
+): Promise<SealedTip & { simulated: boolean }> {
+  const sealed = sealTip(message, recipient);
+  try {
+    const stored = await storeTip(sealed);
+    await recordTip(stored, message, stored.simulated);
+    return stored;
+  } catch (e) {
+    await recordTip({ ...sealed, status: "failed" }, message, false);
+    throw e;
+  }
 }
 
 /**
@@ -116,7 +181,7 @@ export async function sendTip(message: string, recipient: Recipient): Promise<Se
  * kept short on purpose — a full local copy of every tip is exactly the kind of
  * evidence a device seizure would surface.
  */
-async function recordTip(tip: SealedTip, plaintext: string): Promise<void> {
+async function recordTip(tip: SealedTip, plaintext: string, simulated: boolean): Promise<void> {
   const record: TipRecord = {
     id: tip.id,
     recipientId: tip.recipientId,
@@ -126,6 +191,7 @@ async function recordTip(tip: SealedTip, plaintext: string): Promise<void> {
     cid: tip.cid,
     status: tip.status,
     preview: plaintext.slice(0, 40),
+    simulated,
   };
 
   const existing = await listTips();

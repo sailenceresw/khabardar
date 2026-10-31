@@ -1,9 +1,8 @@
 import { keccak256, toBytes } from "viem";
 import { ACTIVE_CHAIN } from "@khabardar/shared";
+import { nextMirrorReportId } from "../feed/localChainMirror";
 import { encodeSubmitReportCall } from "./encoding";
 import type { GaslessRelayer, RelayResult, SubmitReportParams } from "./types";
-
-let mockReportCounter = 0;
 
 /**
  * Simulates the full gasless path locally with no network access. It performs
@@ -32,7 +31,9 @@ export class MockRelayer implements GaslessRelayer {
     await new Promise((r) => setTimeout(r, 1200)); // simulate bundler latency
 
     const txHash = keccak256(toBytes(`${signature}:${Date.now()}`));
-    const onChainReportId = mockReportCounter++;
+    // Stands in for the contract's monotonic `reportCount`. Read from the
+    // persisted mirror so ids stay unique across app restarts.
+    const onChainReportId = await nextMirrorReportId();
 
     return {
       txHash,

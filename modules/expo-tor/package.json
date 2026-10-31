@@ -1,0 +1,17 @@
+{
+  "name": "expo-tor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Embedded Arti (Tor) client for Khabardar — runs Tor in-process and performs HTTP through a loopback SOCKS5 proxy",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build:android": "cd rust && cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o ../android/src/main/jniLibs build --release",
+    "build:ios": "bash scripts/build-ios.sh",
+    "test:rust": "cd rust && cargo test"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react-native": "*"
+  }
+}

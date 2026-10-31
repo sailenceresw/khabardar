@@ -1,0 +1,22 @@
+{
+  // Root project, so VS Code has something to resolve against everywhere.
+  //
+  // Without this, any TypeScript outside apps/mobile and packages/contracts —
+  // the shared package, both native modules — got no tsconfig at all. The
+  // editor fell back to bare defaults with no module resolution and no library
+  // types, and reported errors that `tsc` in CI never saw. Editor and CI
+  // disagreeing about whether the code compiles is worse than either being
+  // wrong on its own, because it teaches you to ignore the editor.
+  //
+  // References rather than one big program: each workspace keeps its own
+  // settings (the app needs JSX and bundler resolution, the contracts need
+  // CommonJS), and this only ties them together for the editor.
+  "files": [],
+  "references": [
+    { "path": "./apps/mobile" },
+    { "path": "./packages/contracts" },
+    { "path": "./packages/shared" },
+    { "path": "./modules/expo-tor" },
+    { "path": "./modules/expo-zkprove" }
+  ]
+}

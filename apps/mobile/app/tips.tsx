@@ -1,25 +1,14 @@
 import React, { useCallback, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { journalistKeysArePlaceholders } from "../src/content/recipients";
 import { listRecipients, listTips, sendTip, type TipRecord } from "../src/tips";
-import {
-  Body,
-  Button,
-  Card,
-  Caption,
-  Chip,
-  EmptyState,
-  Field,
-  Mono,
-  Notice,
-  Screen,
-  SectionHeader,
-  Title,
-} from "../src/ui";
-import { colors, spacing } from "../src/theme";
+import { Body, Button, Card, Mono, Screen, Title } from "../src/ui";
+import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
 export default function TipsScreen() {
+  const router = useRouter();
   const recipients = listRecipients();
 
   const [recipientId, setRecipientId] = useState(recipients[0]?.id ?? "");
@@ -46,60 +35,70 @@ export default function TipsScreen() {
     setResult(null);
     try {
       const tip = await sendTip(message.trim(), recipient);
-      setResult(tip.status === "stored" ? t("tips.sealedStored") : t("tips.sealedOnly"));
+      setResult(tip.simulated ? t("tips.sealedLocal") : t("tips.sealedStored"));
       setMessage("");
       await load();
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : t("tips.sealedOnly"));
     } finally {
       setBusy(false);
     }
   }
 
-  const msgLen = message.trim().length;
-  const valid = msgLen >= 10 && !!recipientId;
+  const valid = message.trim().length >= 10 && !!recipientId;
 
   return (
     <Screen>
       <Title>{t("tips.title")}</Title>
-      <Body dim>{t("tips.intro")}</Body>
-
-      <Notice tone="warn">{t("tips.transportWarning")}</Notice>
 
       <Card>
-        <Caption>{t("tips.recipientLabel")}</Caption>
+        <Body dim>{t("tips.intro")}</Body>
+      </Card>
+
+      <Card style={{ borderColor: colors.info }}>
+        <Body dim>{t("tips.transportWarning")}</Body>
+      </Card>
+
+      {journalistKeysArePlaceholders() ? (
+        <Card style={{ borderColor: colors.danger }}>
+          <Body>{t("tips.demoKeysWarning")}</Body>
+        </Card>
+      ) : null}
+
+      <Card>
+        <Body dim>{t("tips.recipientLabel")}</Body>
         <View style={styles.chips}>
           {recipients.map((r) => (
-            <Chip
-              key={r.id}
-              label={r.name}
-              active={recipientId === r.id}
-              onPress={() => setRecipientId(r.id)}
-            />
+            <Pressable key={r.id} onPress={() => setRecipientId(r.id)}>
+              <View style={[styles.chip, recipientId === r.id && styles.chipActive]}>
+                <Text style={[styles.chipText, recipientId === r.id && styles.chipTextActive]}>
+                  {r.name}
+                </Text>
+              </View>
+            </Pressable>
           ))}
         </View>
         <Body dim>{t("tips.recipientKeyNote")}</Body>
       </Card>
 
       <Card>
-        <Field
-          label={t("tips.messageLabel")}
-          placeholder={t("tips.messagePlaceholder")}
-          value={message}
-          onChangeText={setMessage}
+        <Body dim>{t("tips.messageLabel")}</Body>
+        <TextInput
+          style={styles.textArea}
           multiline
           numberOfLines={6}
+          placeholder={t("tips.messagePlaceholder")}
+          placeholderTextColor={colors.textDim}
+          value={message}
+          onChangeText={setMessage}
         />
-        <Caption>
-          {msgLen < 10 ? t("compose.bodyMin", { min: 10 }) : `${msgLen} chars`}
-        </Caption>
-        {result ? <Notice tone="success">{result}</Notice> : null}
+        {result ? <Body>{result}</Body> : null}
         <Button label={t("tips.send")} onPress={send} loading={busy} disabled={!valid} />
       </Card>
 
-      <SectionHeader title={t("tips.sentTitle")} />
-      {sent.length === 0 ? (
-        <EmptyState title={t("tips.sentTitle")} body={t("tips.sentNote")} />
-      ) : (
+      {sent.length > 0 ? (
         <Card>
+          <Body dim>{t("tips.sentTitle")}</Body>
           {sent.map((tip) => (
             <View key={tip.id} style={styles.tipRow}>
               <Body>
@@ -107,17 +106,41 @@ export default function TipsScreen() {
               </Body>
               <Body dim>{tip.preview}…</Body>
               <Mono>{tip.digest}</Mono>
-              <Caption>{t(`tips.status.${tip.status}`)}</Caption>
+              <Body dim>{t(`tips.status.${tip.status}`)}</Body>
             </View>
           ))}
           <Body dim>{t("tips.sentNote")}</Body>
         </Card>
-      )}
+      ) : null}
+
+      <Pressable onPress={() => router.push("/")}>
+        <Text style={styles.link}>{t("feed.backHome")}</Text>
+      </Pressable>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  tipRow: { gap: 4, marginBottom: spacing.md, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  chip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+  },
+  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  chipText: { color: colors.textDim, fontSize: 13 },
+  chipTextActive: { color: colors.accentText, fontWeight: "600" },
+  textArea: {
+    color: colors.text,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    minHeight: 120,
+    textAlignVertical: "top",
+    fontSize: 15,
+  },
+  tipRow: { gap: 2, marginBottom: spacing.sm },
+  link: { color: colors.info, fontSize: 15, fontWeight: "600", textAlign: "center" },
 });

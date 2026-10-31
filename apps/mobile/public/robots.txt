@@ -1,0 +1,13 @@
+# This is a demonstration build of an anonymous corruption-reporting app.
+#
+# It is deliberately excluded from search engines. Someone searching for a way
+# to report corruption safely must not land here: the web build keeps identity
+# and encryption keys in browser localStorage rather than secure hardware, has
+# no Tor, and has never been security audited. Finding it by accident and
+# trusting it is the exact failure this project exists to prevent.
+#
+# The X-Robots-Tag header in vercel.json is the enforcing mechanism; this file
+# is the polite request that well-behaved crawlers honour first.
+
+User-agent: *
+Disallow: /

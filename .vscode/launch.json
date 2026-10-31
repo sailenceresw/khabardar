@@ -1,0 +1,52 @@
+{
+  // Khabardar debug targets.
+  //
+  // Note the port: `npm run web:static` serves the exported build on 8085, not
+  // the 8080 in VS Code's default template. Chrome against 8080 attaches to
+  // nothing and reads as the app having failed to start.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Web: exported build (8085)",
+      "url": "http://localhost:8085",
+      "webRoot": "${workspaceFolder}/apps/mobile"
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Web: Metro dev server (8081)",
+      "url": "http://localhost:8081",
+      "webRoot": "${workspaceFolder}/apps/mobile"
+    },
+    {
+      // The fastest way to step through the crypto path — no simulator, no
+      // Metro, no watcher to hang on Windows.
+      "type": "node",
+      "request": "launch",
+      "name": "Verify slice (headless)",
+      "cwd": "${workspaceFolder}/apps/mobile",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "ts-node",
+        "--transpile-only",
+        "-P",
+        "scripts/tsconfig.json",
+        "scripts/verifySlice.ts"
+      ],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Contract tests",
+      "cwd": "${workspaceFolder}/packages/contracts",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["hardhat", "test"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}
