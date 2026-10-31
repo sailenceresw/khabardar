@@ -66,9 +66,10 @@ worse impact than we have described, but they are not news:
 - **The transport does not anonymise by itself.** The transport layer prefers onion
   endpoints where they are configured, but it calls plain `fetch`, so without Orbot
   active the IP address still reaches the relayer, RPC, and content gateway directly.
-  `isProtected()` reports what the caller asserted, not a verified circuit. The Pimlico
-  relayer bypasses the transport entirely and calls `fetch` on the bundler and paymaster
-  URLs, so sponsored submissions are not covered even when onion endpoints exist.
+  `isProtected()` reports what the caller asserted, not a verified circuit. The relayer
+  now sends its bundler and paymaster JSON-RPC through the same layer, but viem's chain
+  client still drives its own fetch, so onion selection applies to it while the request
+  itself does not pass through the wrapper.
   Tracked in [#9](https://github.com/sailenceresw/khabardar/issues/9).
 - **Corroboration and karma are not sybil-resistant.** Tracked in
   [#10](https://github.com/sailenceresw/khabardar/issues/10).
