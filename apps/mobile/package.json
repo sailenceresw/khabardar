@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "verify:slice": "ts-node --transpile-only -P scripts/tsconfig.json scripts/verifySlice.ts",
     "web:export": "expo export --platform web",
-    "web:static": "node scripts/serveDist.js"
+    "web:static": "node scripts/serveDist.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@khabardar/shared": "*",
@@ -51,6 +53,7 @@
     "@babel/core": "^7.25.0",
     "@types/react": "~18.3.12",
     "ts-node": "^10.9.2",
-    "typescript": "~5.3.3"
+    "typescript": "~5.3.3",
+    "vitest": "^5.0.5"
   }
 }
