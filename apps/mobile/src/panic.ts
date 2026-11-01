@@ -10,6 +10,7 @@ import { signOutOrg } from "./org";
 import { clearPersonhood } from "./personhood";
 import { clearSocial } from "./social";
 import { clearQueue } from "./submissionQueue";
+import { clearFollowUps } from "./followUps";
 import { clearStealth } from "./stealth";
 import { deleteAllTips } from "./tips";
 import { clearBridges } from "./net/bridges";
@@ -36,6 +37,9 @@ export async function panicDelete(): Promise<void> {
   await clearModerationLog();
   await clearMirror();
   await clearQueue();
+  // The snapshots name every report id this device was watching, which is a
+  // map of what its owner filed.
+  await clearFollowUps();
   // The egress log is a record of which hosts this device contacted and when —
   // useful to the user, and equally useful to whoever seizes the phone.
   await clearEgressLog();

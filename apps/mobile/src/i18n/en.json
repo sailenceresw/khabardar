@@ -552,5 +552,18 @@
   },
   "error": {
     "boundaryBody": "The app hit an unexpected error and stopped drawing this screen. Your saved reports are untouched."
+  },
+  "followUps": {
+    "title": "Your reports since you last looked",
+    "check": "Check for news",
+    "noChange": "Nothing has changed on %{checked} report(s) since your last check.",
+    "tierChanged": "Report #%{id} is now marked %{to}.",
+    "corroborated": "Report #%{id} has been corroborated by %{count} other people.",
+    "privacyNote": "Nothing is pushed to this device and nothing is registered anywhere. A notification would tie your reports to your phone. This asks the chain directly, over the anonymising transport, only when you tap.",
+    "unavailable": {
+      "no-registry": "No registry is configured on this build, so there is nothing to check against.",
+      "requires-anonymity": "Not checked. Asking about your own reports over a direct connection would link them to you. Turn on the anonymising transport in Network first.",
+      "unreachable": "Could not reach the chain. This is not the same as no news, so nothing has been recorded."
+    }
   }
 }
