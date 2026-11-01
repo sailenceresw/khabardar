@@ -22,6 +22,19 @@ apps/mobile/android/
 *.mobileprovision
 *.orig.*
 
+# Embedded Tor (modules/expo-tor)
+# Rust build artifacts, and the compiled Arti binaries. Not committed: they are
+# ~7.5 MB per ABI, they are reproducible from source with `npm run
+# tor:build:android` / `tor:build:ios`, and a binary blob in the tree of an
+# anonymity tool is exactly the thing nobody can audit.
+modules/expo-tor/rust/target/
+modules/expo-tor/android/src/main/jniLibs/
+# Gradle's per-project cache, created wherever a module is configured.
+.gradle/
+modules/expo-tor/android/build/
+modules/expo-tor/ios/lib/
+modules/expo-tor/ios/Pods/
+
 # Hardhat
 packages/contracts/cache/
 packages/contracts/artifacts/
@@ -35,22 +48,28 @@ build/
 # OS / editor
 .DS_Store
 Thumbs.db
-.vscode/
+.vscode/*
+# ...but share the debug targets. They encode project facts a newcomer would
+# otherwise have to discover, chiefly that the static build serves on 8085,
+# not the 8080 in VS Code's default template.
+!.vscode/launch.json
 .idea/
 
 # Logs
 *.log
 
-# Native modules (expo-tor, expo-zkprove)
-# These paths are generated and currently hold ~14GB of Rust and Gradle output.
-# Note: no module source is tracked in this repo at present. modules/ contains
-# only build products, so neither module can be rebuilt from a fresh clone.
-.gradle/
-modules/*/rust/target/
-modules/*/android/src/main/jniLibs/
-
-# TypeScript incremental build state
-*.tsbuildinfo
-
 # Vercel
 .vercel/
+
+# zk proving fixtures: multi-megabyte downloads, regenerate with the script
+packages/contracts/inputs.json
+packages/contracts/reference.json
+
+# zk prover native output, rebuilt with `npm run zk:build:android`
+modules/expo-zkprove/rust/target/
+modules/expo-zkprove/android/src/main/jniLibs/
+modules/expo-zkprove/android/build/
+modules/expo-zkprove/ios/lib/
+
+# TypeScript project-reference build state
+*.tsbuildinfo

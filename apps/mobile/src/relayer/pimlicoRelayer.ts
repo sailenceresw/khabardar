@@ -1,5 +1,4 @@
 import {
-  http,
   createPublicClient,
   encodeFunctionData,
   concat,
@@ -12,7 +11,7 @@ import { ACTIVE_CHAIN, ENTRYPOINT_V07, REPORT_REGISTRY_ABI } from "@khabardar/sh
 import { encodeSubmitReportCall } from "./encoding";
 import { savePendingOp, clearPendingOp } from "./pendingOps";
 import type { GaslessRelayer, RelayResult, SubmitReportParams } from "./types";
-import { getTransport, transportFetch } from "../transport";
+import { anonymisingRpcTransport, rpcCall } from "../net/transport";
 
 /** True for a .onion host, which is never ours and never gets the API key. */
 function isOnionUrl(url: string): boolean {
@@ -122,16 +121,13 @@ export class PimlicoRelayer implements GaslessRelayer {
     // global and mutable, so re-resolving per call would let a Settings
     // change mid-flight point receipt polling at a bundler that never saw
     // the op: the submission would be reported failed although it landed.
-    const bundlerEndpoint = this.endpoint("bundler", this.config.bundlerUrl);
-    const paymasterEndpoint = this.endpoint("paymaster", this.config.paymasterUrl);
+    const bundlerEndpoint = this.endpoint(this.config.bundlerUrl);
+    const paymasterEndpoint = this.endpoint(this.config.paymasterUrl);
 
-    // Chain reads prefer an onion RPC when one is configured. viem drives its
-    // own fetch internally, so this selects the endpoint but does not pass
-    // through transportFetch; under Orbot the packets are routed either way.
-    // Replacing viem's fetch is part of #9.
+    // Chain reads go through the anonymising transport, not viem's own fetch.
     const publicClient = createPublicClient({
       chain: lineaSepolia,
-      transport: http(getTransport().resolve("chainRpc") ?? ACTIVE_CHAIN.rpcUrl),
+      transport: anonymisingRpcTransport(ACTIVE_CHAIN.rpcUrl, "relayer:chain"),
     });
 
     // -- 1. Counterfactual SimpleAccount (integration point 1 / #3) ---------
@@ -437,34 +433,20 @@ export class PimlicoRelayer implements GaslessRelayer {
   }
 
   /**
-   * Endpoint for a relayer service, ready to call.
+   * A configured endpoint, ready to call.
    *
-   * Precedence is the transport's resolution first (onion when in tor mode,
-   * otherwise the clearnet endpoint it was configured with), and only the URL
-   * this relayer was constructed with when the transport knows nothing about
-   * the service. In practice both read the same env var, so the result is
-   * unchanged unless an onion endpoint is set.
-   *
-   * The API key is appended here rather than at the call sites, because it
-   * must never be attached to an onion endpoint: that is somebody else's
+   * Anonymising the request is the transport's job, not this method's: every
+   * call below goes out through `rpcCall`. What this decides is the API key,
+   * which is appended here rather than at the call sites because it must
+   * never be attached to an onion endpoint. That is somebody else's
    * self-hosted infrastructure (Arka and similar), the key is useless to it,
    * and sending it would write a live Pimlico credential into their logs.
    */
-  private endpoint(service: "bundler" | "paymaster", fallback: string): string {
-    const url = getTransport().resolve(service) ?? fallback;
+  private endpoint(url: string): string {
     return isOnionUrl(url) ? url : this.withKey(url);
   }
 
   private async rpc(url: string, method: string, params: unknown[]): Promise<any> {
-    const res = await transportFetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    });
-    const json = await res.json();
-    if (json.error) {
-      throw new Error(`${method} failed: ${json.error.message ?? JSON.stringify(json.error)}`);
-    }
-    return json.result;
+    return rpcCall<any>(url, method, params, "relayer:userop");
   }
 }

@@ -1,0 +1,170 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'maven-publish'
+
+group = 'expo.modules.zkprove'
+version = '0.1.0'
+
+def expoModulesCorePlugin = new File(
+  project(":expo-modules-core").projectDir.absolutePath,
+  "ExpoModulesCorePlugin.gradle"
+)
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useExpoPublishing()
+
+/**
+ * ABIs to build, overridable for local work.
+ *
+ * Each one is a separate full build of the prover and its wasm runtime, so the
+ * full set costs real CI minutes and real megabytes. Someone iterating against
+ * an emulator needs exactly one: `-PkhabardarAbis=x86_64`.
+ *
+ * Release builds must not set this. See DEVELOPING.md.
+ */
+def enabledAbis = ((project.findProperty('khabardarAbis') ?: 'arm64-v8a,armeabi-v7a,x86_64') as String)
+  .split(',').collect { it.trim() }.findAll { it }
+
+android {
+  namespace "expo.modules.zkprove"
+  defaultConfig {
+    minSdkVersion 24
+    compileSdkVersion 35
+    ndk {
+      abiFilters.addAll(enabledAbis)
+    }
+  }
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+  sourceSets {
+    main {
+      jniLibs.srcDirs = ['src/main/jniLibs']
+    }
+  }
+}
+
+/**
+ * Cross-compile the prover for every enabled ABI.
+ *
+ * Requires the Android NDK and `cargo-ndk`:
+ *   cargo install cargo-ndk
+ *   rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+ *
+ * Skipped when the toolchain is absent so a checkout without Rust still opens
+ * in Android Studio. The app then reports proving as unavailable rather than
+ * crashing — see ZkNative.available — which is loud in the right way.
+ */
+def rustDir = file("${projectDir}/../rust")
+
+/**
+ * Fail early and legibly when a Rust target is missing.
+ *
+ * Without this, `cargo ndk` fails partway through the Gradle build with a raw
+ * toolchain error that says nothing about `rustup target add`. The ABI list
+ * here and the `abiFilters` above have to agree, and it is easy for a machine
+ * to have only some of them installed.
+ */
+def requiredRustTargets = [
+  'arm64-v8a'   : 'aarch64-linux-android',
+  'armeabi-v7a' : 'armv7-linux-androideabi',
+  'x86_64'      : 'x86_64-linux-android',
+]
+
+task checkRustTargets {
+  doLast {
+    // If rustup itself is absent there is no toolchain to check, and the
+    // `onlyIf` on the build task below already handles that case by skipping
+    // the native build with a warning. Failing here instead would break the
+    // documented "opens in Android Studio without Rust" path.
+    def installed
+    try {
+      installed = "rustup target list --installed".execute().text
+    } catch (IOException ignored) {
+      logger.warn("expo-zkprove: rustup not found — skipping Rust target check.")
+      return
+    }
+    // Only the ABIs actually being built need a toolchain.
+    def missing = requiredRustTargets
+      .findAll { abi, triple -> enabledAbis.contains(abi) && !installed.contains(triple) }
+    if (missing) {
+      throw new GradleException(
+        "expo-zkprove: no Rust target installed for ABI(s): " + missing.keySet().join(', ') +
+        ". These are listed in abiFilters, so the build would fail partway " +
+        "through with an opaque cargo error. Install them with: rustup target add " +
+        missing.values().join(' ')
+      )
+    }
+  }
+}
+
+task buildZkProver(type: Exec) {
+  dependsOn checkRustTargets
+  onlyIf {
+    def hasCargo = System.getenv("PATH")
+      ?.split(File.pathSeparator)
+      ?.any { new File(it, isWindows() ? "cargo.exe" : "cargo").exists() } ?: false
+    if (!hasCargo) {
+      logger.warn("expo-zkprove: cargo not found — skipping the native prover build. " +
+        "Zero-knowledge proving will report as unavailable at runtime.")
+    }
+    hasCargo
+  }
+
+  workingDir rustDir
+  commandLine(['cargo', 'ndk'] +
+    enabledAbis.collectMany { ['-t', it] } +
+    ['-o', "${projectDir}/src/main/jniLibs", 'build', '--release'])
+
+  /**
+   * Drop shared objects cargo-ndk copied that we never load.
+   *
+   * cargo-ndk copies every .so in the target directory, including ones built for
+   * Rust's own dependency graph. `libark_circom-<hash>.so` is the usual offender:
+   * the prover links it statically, so it is never opened at runtime and only
+   * adds to the APK.
+   *
+   * This duplicates scripts/prune-jnilibs.sh on purpose, and the two must stay in
+   * step. The script covers `npm run zk:build:android`, which calls cargo ndk
+   * without Gradle. This covers `expo run:android`, which calls Gradle without
+   * npm — the path a developer actually uses, and the one that was shipping the
+   * dead library. Written in Groovy rather than shelling out because a build
+   * machine is not guaranteed to have bash.
+   */
+  doLast {
+    def jniDir = file("${projectDir}/src/main/jniLibs")
+    if (!jniDir.exists()) return
+
+    // Drop ABIs this build did not produce. `abiFilters` governs what this
+    // module compiles, not what a stale directory contributes to the APK, and
+    // jniLibs is gitignored and never cleaned — so an -PkhabardarAbis=x86_64
+    // build was still shipping an arm64 prover from whenever it was last built.
+    jniDir.eachDir { d ->
+      if (!enabledAbis.contains(d.name)) {
+        // ASCII only: this is read on a Windows console, where an em dash
+        // arrives as a replacement character.
+        logger.lifecycle("expo-zkprove: dropping stale ${d.name} jniLibs - not in this build's ABI set")
+        d.deleteDir()
+      }
+    }
+
+    def keep = 'libkhabardar_zkprove.so'
+    jniDir.eachFileRecurse { f ->
+      if (f.isFile() && f.name.endsWith('.so') && f.name != keep) {
+        logger.lifecycle("expo-zkprove: pruning ${f.name} (${(f.length() / 1024) as long} KiB)")
+        f.delete()
+      }
+    }
+  }
+}
+
+static def isWindows() {
+  return System.getProperty('os.name').toLowerCase().contains('windows')
+}
+
+preBuild.dependsOn buildZkProver

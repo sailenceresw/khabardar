@@ -1,0 +1,31 @@
+# Explicit upload allowlist-by-exclusion for the web deployment.
+#
+# The CLI honours .gitignore, but two directories here are large enough
+# (5.4 GB of Rust build artifacts, 874 MB of node_modules) that relying on
+# implicit behaviour is not worth it — a silent multi-gigabyte upload is a
+# slow, expensive, and confusing failure.
+
+node_modules
+**/node_modules
+
+# Rust/Arti build output. The web build cannot use the native Tor module at
+# all, so none of this is needed to produce the bundle.
+modules/expo-tor/rust/target
+modules/expo-tor/android/src/main/jniLibs
+modules/expo-tor/ios/lib
+
+# Native project output — web deploys never touch these.
+apps/mobile/android
+apps/mobile/ios
+apps/mobile/.expo
+
+# Rebuilt by the Vercel build command; uploading a stale copy risks shipping it.
+apps/mobile/dist
+
+# Solidity build output. Contracts are not part of the web bundle; the ABI the
+# app imports lives in packages/shared as hand-maintained TypeScript.
+packages/contracts/artifacts
+packages/contracts/cache
+packages/contracts/typechain-types
+
+.git

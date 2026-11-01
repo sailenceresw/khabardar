@@ -1,5 +1,5 @@
+import { netFetch } from "../net/transport";
 import { safeJsonParse } from "../safeJson";
-import { getTransport, transportFetch } from "../transport";
 import type { ContentStore, PutResult, StoredBundle } from "./types";
 
 /**
@@ -50,19 +50,19 @@ export class IpfsContentStore implements ContentStore {
 
   async put(bundle: StoredBundle): Promise<PutResult> {
     const body = JSON.stringify(bundle);
-    const transport = getTransport();
 
-    // Prefer onion endpoint when the active transport is tor and one is configured
-    const apiUrl = transport.resolve("ipfsApi") ?? this.config.apiUrl;
-
-    const res = await transportFetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.config.apiToken}`,
+    const res = await netFetch(
+      this.config.apiUrl,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.config.apiToken}`,
+        },
+        body,
       },
-      body,
-    });
+      "content-store:pin"
+    );
 
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
@@ -90,16 +90,16 @@ export class IpfsContentStore implements ContentStore {
     // well-formed JSON that is not a bundle) degrades to null so the feed can
     // show "unavailable" instead of crashing the reader. Integrity of a
     // well-formed bundle is checked separately against the on-chain hash in
-    // feed/resolve.ts — a swapped blob trips the fingerprint warning there.
+    // feed/resolve.ts: a swapped blob trips the fingerprint warning there.
     try {
-      const transport = getTransport();
-      const gatewayBase =
-        (transport.resolve("ipfsGateway") ?? this.config.gatewayUrl).replace(
-          /\/$/,
-          ""
-        );
+      const gatewayBase = this.config.gatewayUrl.replace(/\/$/, "");
+      const res = await netFetch(
+        `${gatewayBase}/${cid}`,
+        undefined,
+        "content-store:fetch"
+      );
+      if (res.status === 404) return null;
 
-      const res = await transportFetch(`${gatewayBase}/${cid}`);
       if (!res.ok) return null;
 
       const text = await res.text();

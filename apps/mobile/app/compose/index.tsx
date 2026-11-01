@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, Alert, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -10,7 +10,15 @@ import {
   type EvidenceItem,
 } from "@khabardar/shared";
 import { useApp } from "../../src/state/AppContext";
-import { pickAndSecurePhoto, deleteEvidence } from "../../src/evidence";
+import {
+  deleteEvidence,
+  EvidenceTooLarge,
+  MAX_EVIDENCE_LABEL,
+  pickAndSecureDocument,
+  pickAndSecurePhoto,
+  startAudioEvidence,
+  type AudioRecordingHandle,
+} from "../../src/evidence";
 import { isValidCoarseGeohash, truncateGeohash } from "../../src/geo";
 import { Body, Button, Card, Chip, Screen } from "../../src/ui";
 import { colors, radius, spacing } from "../../src/theme";
@@ -21,6 +29,12 @@ const CATEGORIES = Object.values(ReportCategory).filter(
 );
 
 const MIN_BODY = 20;
+
+const EVIDENCE_ICON: Record<EvidenceItem["kind"], string> = {
+  photo: "📷",
+  document: "📄",
+  audio: "🎙️",
+};
 
 export default function ComposeScreen() {
   const router = useRouter();
@@ -33,17 +47,65 @@ export default function ComposeScreen() {
   const [geohash, setGeohash] = useState("");
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [busy, setBusy] = useState(false);
+  const [recording, setRecording] = useState<AudioRecordingHandle | null>(null);
 
-  async function addPhoto() {
+  // One id for the whole compose session. Minting a fresh one per call left a
+  // stray duplicate draft behind every time the user saved and then reviewed,
+  // or backed out of review and returned.
+  const draftId = useRef(`rep_${Date.now()}`);
+
+  function notify(msg: string) {
+    Platform.OS === "web" ? window.alert(msg) : Alert.alert(msg);
+  }
+
+  async function addEvidence(pick: () => Promise<EvidenceItem | null>) {
     setBusy(true);
     try {
-      const item = await pickAndSecurePhoto();
+      const item = await pick();
       if (item) setEvidence((prev) => [...prev, item]);
-    } catch {
-      const msg = t("common.error");
-      Platform.OS === "web" ? window.alert(msg) : Alert.alert(msg);
+    } catch (e) {
+      notifyEvidenceError(e);
     } finally {
       setBusy(false);
+    }
+  }
+
+  function notifyEvidenceError(e: unknown) {
+    notify(
+      e instanceof EvidenceTooLarge
+        ? t("compose.evidenceTooLarge", { limit: MAX_EVIDENCE_LABEL })
+        : t("common.error")
+    );
+  }
+
+  const addPhoto = () => addEvidence(pickAndSecurePhoto);
+
+  async function addDocument() {
+    // Said before the picker opens, not after: by the time a document is
+    // attached the metadata decision has already been made.
+    notify(t("compose.documentMetadataWarning"));
+    await addEvidence(pickAndSecureDocument);
+  }
+
+  async function toggleRecording() {
+    if (recording) {
+      setBusy(true);
+      try {
+        const item = await recording.stop();
+        if (item) setEvidence((prev) => [...prev, item]);
+      } catch (e) {
+        notifyEvidenceError(e);
+      } finally {
+        setRecording(null);
+        setBusy(false);
+      }
+      return;
+    }
+
+    try {
+      setRecording(await startAudioEvidence());
+    } catch {
+      notify(t("compose.micDenied"));
     }
   }
 
@@ -54,7 +116,7 @@ export default function ComposeScreen() {
 
   function buildReport(): AnonymousReport {
     return {
-      id: `rep_${Date.now()}`,
+      id: draftId.current,
       status: "draft",
       category,
       body: body.trim(),
@@ -173,7 +235,8 @@ export default function ComposeScreen() {
         {evidence.map((item) => (
           <View key={item.id} style={styles.evidenceRow}>
             <Body>
-              📷 {(item.sizeBytes / 1024).toFixed(0)} KB — {item.sha256.slice(0, 12)}…
+              {EVIDENCE_ICON[item.kind]} {(item.sizeBytes / 1024).toFixed(0)} KB —{" "}
+              {item.sha256.slice(0, 12)}…
             </Body>
             <Pressable onPress={() => removePhoto(item)} hitSlop={8}>
               <Text style={{ color: colors.danger, fontWeight: "700" }}>✕</Text>
@@ -181,7 +244,20 @@ export default function ComposeScreen() {
           </View>
         ))}
         <Button label={t("compose.addPhoto")} onPress={addPhoto} variant="secondary" loading={busy} />
+        <Button
+          label={t("compose.addDocument")}
+          onPress={addDocument}
+          variant="secondary"
+          loading={busy}
+        />
+        <Button
+          label={recording ? t("compose.stopRecording") : t("compose.addAudio")}
+          onPress={toggleRecording}
+          variant={recording ? "danger" : "secondary"}
+        />
+        {recording ? <Body dim>{t("compose.recordingNote")}</Body> : null}
         <Body dim>{t("compose.evidenceNote")}</Body>
+        <Body dim>{t("compose.audioWarning")}</Body>
       </Card>
 
       <Button label={t("compose.saveDraft")} onPress={saveDraft} variant="secondary" disabled={!valid} />

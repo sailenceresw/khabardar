@@ -18,6 +18,8 @@ Deep detail on how Khabardar works. For the short version, see the
 - [Verification and moderation](#verification-and-moderation)
 - [Tip channel](#tip-channel)
 - [i18n](#i18n)
+- [Egress: one seam for everything](#egress-one-seam-for-everything)
+- [Personhood without identity](#personhood-without-identity)
 
 ## Anonymity model
 
@@ -45,7 +47,9 @@ Concrete guarantees in this scaffold:
 | Precise location in report | Geohash hard-capped at 4 chars ≈ city level (`src/geo.ts`) |
 | Device seizure | AES-256-GCM at rest + **panic delete** wipes drafts, evidence, keys, identity (`src/panic.ts`) |
 | Content on a public chain | Only `keccak256` fingerprints go on-chain, never content |
-| Network observation | **Not yet mitigated**. Tor/onion or mixnet transport is [#9](https://github.com/sailenceresw/khabardar/issues/9) |
+| Network observation | Embedded Tor (Arti) in `modules/expo-tor`, reached through the single egress seam in `src/net/` |
+| Device inspected while unlocked | Stealth mode: PIN, duress PIN, disguise, screenshot blocking (`src/stealth.ts`) |
+| Sybil corroboration | Semaphore personhood gate (`SemaphorePersonhoodGate.sol`, `src/personhood.ts`) |
 
 ## Why React Native (Expo) and not Flutter
 
@@ -77,8 +81,9 @@ Both are fine cross-platform frameworks; the deciding factor is the **blockchain
 **`ReportRegistry.sol`** stores per report: `reportHash` (fingerprint of the encrypted
 bundle), `cid` (pointer to that bundle in the content layer), category, visibility,
 verification tier, coarse geohash, blinded `entityTag`, timestamp, and the pseudonymous
-reporter address. A moderator role (v0: single address; later: karma-weighted jury)
-sets the tier, adjusting reporter karma.
+reporter address. Tiers are set by an equal-weight secret-ballot jury, not by any
+single address: jurors commit a hashed verdict, reveal it in a second round, and an
+abandoned ballot is the one thing a juror is penalised for.
 
 ## Content layer: how reports become readable
 
@@ -254,8 +259,9 @@ decision is logged with a reason.
 
 Two things about this are deliberately unfinished and should not be glossed over:
 
-- The in-app "moderator mode" toggle is a **local dev affordance**. The real gate is the
-  contract's `onlyModerator` check; the toggle grants nothing on-chain.
+- There is no moderator address left to capture, but the jury is only as independent as
+  its seats. Seat at least three unrelated jurors before trusting a verdict: quorum is
+  three, and a one-juror jury is exactly the centralization the design removes.
 - The decision log is **on-device only**. Production must publish decisions (or their
   hashes) so moderators are auditable by the same public being asked to trust them. A
   moderation system nobody can audit is just censorship with extra steps.
@@ -308,3 +314,47 @@ that speech recognition must run **on-device**, since a cloud speech API would r
 the reporter's voice and IP address together.
 
 <br clear="right">
+
+## Egress: one seam for everything
+
+Every outbound request in the app goes through `apps/mobile/src/net/transport.ts`.
+That is the point of the module: there is exactly one place where a packet can leave,
+so "is this protected?" has one answer rather than one per call site.
+
+Three transports, strongest first:
+
+1. **Embedded Tor.** Arti compiled into the app (`modules/expo-tor`, Rust with JNI and
+   Swift bindings), exposing a loopback SOCKS5 proxy. Hostnames are resolved by the
+   exit rather than locally, so there is no DNS leak, and each report submission gets a
+   fresh circuit so two submissions cannot be linked by a shared exit relay. Needs a
+   native build: Expo Go and the web preview cannot load it.
+2. **An HTTP proxy fronting Tor**, such as an Orbot port. Weaker, because the proxy
+   operator sees every destination, and the app labels it "claimed but not verified"
+   because it cannot confirm the proxy reaches Tor at all.
+3. **Direct.** The IP reaches the relayer, gateway and RPC. What you get with neither
+   of the above.
+
+`setRequireAnonymity(true)` makes the seam **fail closed**: an unprotected request
+raises `AnonymityRequiredError` instead of going out. A per-host egress log is shown to
+the user, because a privacy claim nobody can inspect is just a promise.
+
+viem does not get an exception. `anonymisingRpcTransport()` wraps chain reads so the
+relayer and the feed index go through `rpcCall` like everything else, rather than
+viem's own fetch.
+
+## Personhood without identity
+
+`SemaphorePersonhoodGate.sol` gates corroboration on Semaphore group membership. A
+member proves they belong without revealing which member they are, and a nullifier
+stops the same member acting twice on one report. The contract tests generate real
+Groth16 proofs and verify them on-chain, negative cases included.
+
+The deliberate constraint: the gate must never become an identity system. Anything
+requiring a phone number or a government ID would reintroduce exactly the
+deanonymization risk the product exists to remove, which is why group membership and a
+nullifier are the whole mechanism.
+
+`modules/expo-zkprove` is the on-device prover, so a phone can produce the proof
+itself rather than asking a server to do it, which would hand that server the link it
+is supposed to not have. It builds for Android and is verified against the reference
+implementation, and it has not yet run on real hardware.

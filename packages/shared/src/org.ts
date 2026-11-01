@@ -112,13 +112,122 @@ export interface Organization {
    */
   accredited: boolean;
   createdAt: number;
+  /** Members with access to this org's paid surfaces. */
+  seats?: OrgSeat[];
+  /** Issued API credentials. Only a prefix and a hash are ever stored. */
+  apiKeys?: ApiKeyRecord[];
+  /** Billing state. Local-only in v0; a real backend owns this. */
+  billing?: BillingState;
+}
+
+export enum SeatRole {
+  /** Can manage seats, keys, and the billing relationship. */
+  Admin = "admin",
+  /** Can use every entitled surface but not change the account. */
+  Member = "member",
+  /**
+   * Read-only, and deliberately excluded from corpus export.
+   * For interns, fellows, and short-term collaborators — the people most
+   * likely to be onboarded quickly and offboarded slowly.
+   */
+  Viewer = "viewer",
+}
+
+export interface OrgSeat {
+  id: string;
+  /** Work email. An org is a named entity; its members are too. */
+  email: string;
+  role: SeatRole;
+  addedAt: number;
+  /** Set when access was revoked; the row is kept so the audit trail survives. */
+  revokedAt?: number;
+}
+
+export function activeSeats(org: Organization | null): OrgSeat[] {
+  return (org?.seats ?? []).filter((s) => !s.revokedAt);
+}
+
+export function seatsRemaining(org: Organization | null): number {
+  return Math.max(0, entitlementsFor(org).seats - activeSeats(org).length);
+}
+
+/**
+ * A record of an issued API key — never the key itself.
+ *
+ * Only a display prefix and a hash are stored, so a stolen database yields no
+ * working credentials. The full key is shown once, at creation, and cannot be
+ * recovered afterwards. That is mildly annoying and entirely correct: an API
+ * key over a whistleblower corpus is a standing grant of read access, and a
+ * recoverable one is a permanent liability sitting in whatever holds it.
+ */
+export interface ApiKeyRecord {
+  id: string;
+  /** First few characters, for identifying the key in a list. */
+  prefix: string;
+  /** SHA-256 of the full key, hex. */
+  hash: string;
+  label: string;
+  createdAt: number;
+  lastUsedAt?: number;
+  revokedAt?: number;
+}
+
+export function activeApiKeys(org: Organization | null): ApiKeyRecord[] {
+  return (org?.apiKeys ?? []).filter((k) => !k.revokedAt);
+}
+
+export enum BillingStatus {
+  /** No paid relationship; Community entitlements. */
+  None = "none",
+  /** Invoice issued and unpaid. Access continues — see the grace note. */
+  Pending = "pending",
+  Active = "active",
+  /**
+   * Payment failed or lapsed. Entitlements drop to Community; the account and
+   * its data are NOT deleted.
+   */
+  Lapsed = "lapsed",
+}
+
+export interface BillingState {
+  status: BillingStatus;
+  /** Indicative monthly amount in USD for the current plan. */
+  amountUsdMonth: number;
+  periodStart?: number;
+  periodEnd?: number;
+  /**
+   * Days a lapsed account keeps working. Deliberately generous: a newsroom in
+   * the middle of an investigation should not lose its case notes because a
+   * card expired, and cutting access mid-story is a way to get someone hurt.
+   */
+  graceDays: number;
+}
+
+export const DEFAULT_GRACE_DAYS = 30;
+
+export function billingFor(plan: OrgPlan): BillingState {
+  return {
+    status: plan === OrgPlan.Community ? BillingStatus.None : BillingStatus.Pending,
+    amountUsdMonth: PLAN_PRICE_USD_MONTH[plan],
+    graceDays: DEFAULT_GRACE_DAYS,
+  };
 }
 
 export function entitlementsFor(org: Organization | null): OrgEntitlements {
   if (!org) return PLAN_ENTITLEMENTS[OrgPlan.Community];
   // An unaccredited org never gets more than Community, whatever it has paid.
   if (!org.accredited) return PLAN_ENTITLEMENTS[OrgPlan.Community];
+  // A lapsed account past its grace period also falls back to Community.
+  // Note what this does NOT do: it does not delete anything. Non-payment
+  // removes capability, never data.
+  if (org.billing && isPastGrace(org.billing)) return PLAN_ENTITLEMENTS[OrgPlan.Community];
   return PLAN_ENTITLEMENTS[org.plan];
+}
+
+export function isPastGrace(billing: BillingState, now = Date.now()): boolean {
+  if (billing.status !== BillingStatus.Lapsed) return false;
+  const graceEnds = (billing.periodEnd ?? now) + billing.graceDays * 24 * 60 * 60 * 1000;
+  return now > graceEnds;
 }
 
 export const ORG_KIND_KEYS: Record<OrgKind, string> = {

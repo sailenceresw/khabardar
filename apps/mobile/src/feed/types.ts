@@ -31,6 +31,10 @@ export interface FeedQuery {
   until?: number;
   /** Cluster of reports naming the same accused entity. */
   entityTag?: string;
+  /** Maximum rows to return. Indexes scan newest-first, so a low limit is cheap. */
+  limit?: number;
+  /** Opaque pagination cursor; only the indexer-backed source uses it. */
+  cursor?: string;
 }
 
 /**

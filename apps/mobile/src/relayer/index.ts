@@ -1,7 +1,6 @@
 import { MockRelayer } from "./mockRelayer";
 import { PimlicoRelayer } from "./pimlicoRelayer";
 import type { GaslessRelayer } from "./types";
-import { configFromEnv, initTransport, isTransportInitialised } from "../transport";
 
 export type { GaslessRelayer, RelayResult, RelayStatus, SubmitReportParams } from "./types";
 export { savePendingOp, loadPendingOp, clearPendingOp, listPendingOps } from "./pendingOps";
@@ -9,24 +8,8 @@ export type { PendingUserOp } from "./pendingOps";
 
 let instance: GaslessRelayer | null = null;
 
-function ensureTransport() {
-  // Only seed from env when nothing has configured the transport yet. Saved
-  // Settings prefs are applied at app start, and re-initialising from env here
-  // would throw away the user's Tor choice on the first lazy getRelayer().
-  if (isTransportInitialised()) return;
-
-  const mode =
-    (process.env.EXPO_PUBLIC_TRANSPORT_MODE as "tor" | "clearnet") || "clearnet";
-  const orbotActive =
-    process.env.EXPO_PUBLIC_ORBOT_ACTIVE === "1" ||
-    process.env.EXPO_PUBLIC_ORBOT_ACTIVE === "true";
-  initTransport(mode, configFromEnv(), orbotActive);
-}
-
 export function getRelayer(): GaslessRelayer {
   if (instance) return instance;
-
-  ensureTransport();
 
   const provider = process.env.EXPO_PUBLIC_GASLESS_PROVIDER ?? "mock";
   const apiKey = process.env.EXPO_PUBLIC_PIMLICO_API_KEY;
