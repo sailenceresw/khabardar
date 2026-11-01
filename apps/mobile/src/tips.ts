@@ -5,7 +5,7 @@ import * as Crypto from "expo-crypto";
 import { keccak256, toBytes } from "viem";
 import { bytesToUtf8, randomKey, utf8ToBytes, randomBytes } from "./cryptoUtils";
 import { wrapContentKey, type WrappedKey } from "./content/contentKeys";
-import { DEMO_RECIPIENTS, type Recipient } from "./content/recipients";
+import { availableRecipients, type Recipient } from "./content/recipients";
 import { getContentStore } from "./content";
 import { isolateNextRequests } from "./net/transport";
 import { safeJsonParse } from "./safeJson";
@@ -105,11 +105,11 @@ export interface TipRecord extends Omit<SealedTip, "ciphertext" | "wrappedKey" |
 }
 
 export function listRecipients(): Recipient[] {
-  return DEMO_RECIPIENTS;
+  return availableRecipients();
 }
 
 export function getRecipient(id: string): Recipient | undefined {
-  return DEMO_RECIPIENTS.find((r) => r.id === id);
+  return availableRecipients().find((r) => r.id === id);
 }
 
 /**

@@ -143,7 +143,16 @@
       "stored": "Sealed and stored",
       "failed": "Failed to store"
     },
-    "stub": "End-to-end encrypted tip channel to journalists and NGOs."
+    "stub": "End-to-end encrypted tip channel to journalists and NGOs.",
+    "keyFingerprintLabel": "Recipient key fingerprint",
+    "keyFingerprintHint": "Check this against the newsroom's own published fingerprint, over a channel this app does not control: a phone call, their site, an article footer. A fingerprint nobody compares protects nobody.",
+    "keyVerified": "This key matches the one published at %{domain}. Two independent sources agree.",
+    "keyUnverified": "Could not reach the published copy (%{reason}). The key shipped with the app is still the one being used.",
+    "keyNoDomain": "This recipient publishes no key anywhere, so nothing corroborates the key shipped with the app.",
+    "keyMismatchTitle": "This key does not match",
+    "keyMismatchBody": "The key published by the organisation differs from the one in this app. Either they rotated it without an app release, or someone is trying to read messages meant for them. Do not send this tip. Contact them another way first.",
+    "keyMismatchPublished": "Published fingerprint:",
+    "verifyKey": "Check against their domain"
   },
   "feed": {
     "title": "Public feed",

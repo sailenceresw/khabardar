@@ -3,7 +3,7 @@ import { VerificationTier, Visibility } from "@khabardar/shared";
 import { computeReportHash, encrypt, randomKey, utf8ToBytes } from "./cryptoUtils";
 import { getContentStore } from "./content";
 import { publicKeyring, wrappedKeyring } from "./content/contentKeys";
-import { DEMO_RECIPIENTS } from "./content/recipients";
+import { availableRecipients } from "./content/recipients";
 import type { StoredBundle } from "./content/types";
 import { entityTagFor } from "./entityTag";
 import { bytesToHex } from "@noble/ciphers/utils";
@@ -101,7 +101,7 @@ export async function publishReport(
     report.visibility === Visibility.JournalistsOnly
       ? wrappedKeyring(
           contentKey,
-          DEMO_RECIPIENTS.map((r) => ({ id: r.id, pubKey: r.pubKey }))
+          availableRecipients().map((r) => ({ id: r.id, pubKey: r.pubKey }))
         )
       : publicKeyring(contentKey);
 

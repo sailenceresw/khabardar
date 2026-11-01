@@ -755,6 +755,12 @@ async function main() {
   torStub.state = "running";
   torStub.socksPort = 9150;
   torStub.circuitRotations = 0;
+  // A release build offers no recipients at all, because no newsroom runs
+  // this yet and a name attached to a key nobody holds invites someone to
+  // seal a real report to it. This harness opts in explicitly so the sealing
+  // path stays exercised, which is the only reason the flag exists.
+  process.env.EXPO_PUBLIC_DEMO_RECIPIENTS = "1";
+
   const { sendTip, getRecipient } = require("../src/tips");
   const tipRecipient = getRecipient("demo-newsroom");
   assert(!!tipRecipient, "demo recipient must exist for the tip path");
