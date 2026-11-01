@@ -1,7 +1,13 @@
 import React, { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { journalistKeysArePlaceholders } from "../src/content/recipients";
+import {
+  checkPublishedKey,
+  fingerprintOf,
+  journalistKeysArePlaceholders,
+  wellKnownUrl,
+  type KeyCheck,
+} from "../src/content/recipients";
 import { listRecipients, listTips, sendTip, type TipRecord } from "../src/tips";
 import { Body, Button, Card, Mono, Screen, Title } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
@@ -16,6 +22,21 @@ export default function TipsScreen() {
   const [sent, setSent] = useState<TipRecord[]>([]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [keyChecks, setKeyChecks] = useState<Record<string, KeyCheck>>({});
+
+  const recipient = recipients.find((r) => r.id === recipientId);
+  const check = recipient ? keyChecks[recipient.id] : undefined;
+
+  // Corroborate the pinned key against the organisation's own domain. The
+  // result never changes which key is used, only what the reporter is told
+  // about it, so a slow or failed lookup degrades to "unverified" rather than
+  // blocking the tip or silently trusting whatever came back.
+  async function verifyKey() {
+    if (!recipient) return;
+    setKeyChecks((prev) => ({ ...prev, [recipient.id]: undefined as never }));
+    const outcome = await checkPublishedKey(recipient);
+    setKeyChecks((prev) => ({ ...prev, [recipient.id]: outcome }));
+  }
 
   const load = useCallback(async () => {
     setSent(await listTips());
@@ -28,8 +49,10 @@ export default function TipsScreen() {
   );
 
   async function send() {
-    const recipient = recipients.find((r) => r.id === recipientId);
     if (!recipient || message.trim().length < 10) return;
+    // A key that does not match what the organisation publishes is the one
+    // case where sending is refused outright. Everything else is a warning.
+    if (check?.state === "mismatch") return;
 
     setBusy(true);
     setResult(null);
@@ -80,6 +103,54 @@ export default function TipsScreen() {
         </View>
         <Body dim>{t("tips.recipientKeyNote")}</Body>
       </Card>
+
+      {/* The fingerprint is shown whether or not it has been checked, because
+          its real use is out of band: reading it back to the journalist over a
+          channel this app does not control. The verification below only says
+          whether the organisation's own domain agrees with it. */}
+      {recipient ? (
+        <Card
+          style={
+            check?.state === "mismatch" ? { borderColor: colors.danger } : undefined
+          }
+        >
+          <Body dim>{t("tips.keyFingerprintLabel")}</Body>
+          <Mono>{fingerprintOf(recipient.pubKey)}</Mono>
+          <Body dim>{t("tips.keyFingerprintHint")}</Body>
+
+          {check?.state === "match" ? (
+            <Body>{t("tips.keyVerified", { domain: recipient.domain ?? "" })}</Body>
+          ) : null}
+
+          {check?.state === "mismatch" ? (
+            <>
+              <Title>{t("tips.keyMismatchTitle")}</Title>
+              <Body>{t("tips.keyMismatchBody")}</Body>
+              <Body dim>{t("tips.keyMismatchPublished")}</Body>
+              <Mono>{check.publishedFingerprint}</Mono>
+            </>
+          ) : null}
+
+          {check?.state === "unverified" ? (
+            <Body dim>
+              {recipient.domain
+                ? t("tips.keyUnverified", { reason: check.reason })
+                : t("tips.keyNoDomain")}
+            </Body>
+          ) : null}
+
+          {recipient.domain ? (
+            <>
+              <Button
+                label={t("tips.verifyKey")}
+                variant="secondary"
+                onPress={verifyKey}
+              />
+              <Body dim>{wellKnownUrl(recipient.domain)}</Body>
+            </>
+          ) : null}
+        </Card>
+      ) : null}
 
       <Card>
         <Body dim>{t("tips.messageLabel")}</Body>
