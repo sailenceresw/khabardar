@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect } from "react";
 import { ActivityIndicator, Pressable, Text, View, StyleSheet } from "react-native";
-import { useRouter, useFocusEffect, useNavigation } from "expo-router";
+import { Redirect, useRouter, useFocusEffect, useNavigation } from "expo-router";
 import { REPORT_CATEGORY_KEYS } from "@khabardar/shared";
 import { useApp } from "../src/state/AppContext";
 import { readKarma } from "../src/karma";
@@ -28,14 +28,6 @@ export default function HomeScreen() {
   const [karmaChecking, setKarmaChecking] = React.useState(false);
   const [karmaAsked, setKarmaAsked] = React.useState(false);
   const [net, setNet] = React.useState(() => probeAnonymity());
-
-  useEffect(() => {
-    // A storage failure means onboarding cannot write an identity either —
-    // stay here and say so instead of bouncing into a flow that will fail.
-    if (identityLoaded && !identity && !storageError) {
-      router.replace("/onboarding");
-    }
-  }, [identityLoaded, identity, storageError, router]);
 
   // Deliberately not awaited by the render path: karma is a network read, and
   // a home screen that waits on the chain is a home screen that hangs when the
@@ -118,16 +110,15 @@ export default function HomeScreen() {
     );
   }
 
-  if (!identity) {
-    return (
-      <Screen scroll={false}>
-        <View style={styles.centered}>
-          <ActivityIndicator color={colors.accent} />
-          <Body dim>{t("common.loading")}</Body>
-        </View>
-      </Screen>
-    );
-  }
+  // Declarative, not a router.replace() in an effect.
+  //
+  // The gates above this screen render in place of the navigator until they
+  // clear, so on the first frame after they do there is no mounted navigator
+  // to receive an imperative call. expo-router throws "Attempted to navigate
+  // before mounting the Root Layout component", the ErrorBoundary catches it,
+  // and every route in the app renders the error card instead. <Redirect>
+  // waits for the navigator rather than assuming it.
+  if (!identity) return <Redirect href="/onboarding" />;
 
   const statusTone = { draft: "dim", submitting: "info", anchored: "success", failed: "danger" } as const;
 
