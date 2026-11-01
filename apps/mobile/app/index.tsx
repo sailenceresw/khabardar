@@ -1,9 +1,10 @@
 import React, { useEffect, useLayoutEffect } from "react";
 import { ActivityIndicator, Pressable, Text, View, StyleSheet } from "react-native";
 import { Redirect, useRouter, useFocusEffect, useNavigation } from "expo-router";
-import { REPORT_CATEGORY_KEYS } from "@khabardar/shared";
+import { REPORT_CATEGORY_KEYS, TIER_KEYS } from "@khabardar/shared";
 import { useApp } from "../src/state/AppContext";
 import { readKarma } from "../src/karma";
+import { checkFollowUps, type FollowUpResult } from "../src/followUps";
 import { probeAnonymity } from "../src/net/transport";
 import { Badge, Body, Button, Card, EmptyState, Screen, SectionHeader, Title } from "../src/ui";
 import { colors, spacing, radius } from "../src/theme";
@@ -28,6 +29,8 @@ export default function HomeScreen() {
   const [karmaChecking, setKarmaChecking] = React.useState(false);
   const [karmaAsked, setKarmaAsked] = React.useState(false);
   const [net, setNet] = React.useState(() => probeAnonymity());
+  const [followUps, setFollowUps] = React.useState<FollowUpResult | null>(null);
+  const [followUpsChecking, setFollowUpsChecking] = React.useState(false);
 
   // Deliberately not awaited by the render path: karma is a network read, and
   // a home screen that waits on the chain is a home screen that hangs when the
@@ -61,6 +64,20 @@ export default function HomeScreen() {
     } finally {
       setKarmaAsked(true);
       setKarmaChecking(false);
+    }
+  }
+
+  // Asked for, never automatic. Reading the chain for this device's own report
+  // ids is the one query that links a set of reports to a single client, so it
+  // happens when the reporter decides to look rather than whenever the home
+  // screen mounts. checkFollowUps refuses outright on a direct connection.
+  async function lookForNews() {
+    if (followUpsChecking) return;
+    setFollowUpsChecking(true);
+    try {
+      setFollowUps(await checkFollowUps());
+    } finally {
+      setFollowUpsChecking(false);
     }
   }
 
@@ -171,6 +188,47 @@ export default function HomeScreen() {
             loading={flushing}
             variant="secondary"
           />
+        </Card>
+      ) : null}
+
+      {/* What became of the reports already filed. Nothing here is pushed:
+          a push token would tie a report to a device and undo the rest of the
+          app. The reporter asks, and only over a protected connection. */}
+      {reports.some((r) => r.status === "anchored") ? (
+        <Card>
+          <Body dim>{t("followUps.title")}</Body>
+
+          {followUps?.changes.length ? (
+            followUps.changes.map((c, i) => (
+              <Body key={`${c.localId}-${c.kind}-${i}`}>
+                {c.kind === "tier"
+                  ? t("followUps.tierChanged", {
+                      id: c.reportId,
+                      to: t(TIER_KEYS[c.to]),
+                    })
+                  : t("followUps.corroborated", {
+                      id: c.reportId,
+                      count: c.to,
+                    })}
+              </Body>
+            ))
+          ) : null}
+
+          {followUps && followUps.changes.length === 0 && !followUps.unavailable ? (
+            <Body dim>{t("followUps.noChange", { checked: followUps.checked })}</Body>
+          ) : null}
+
+          {followUps?.unavailable ? (
+            <Body dim>{t(`followUps.unavailable.${followUps.unavailable}`)}</Body>
+          ) : null}
+
+          <Button
+            label={followUpsChecking ? t("common.loading") : t("followUps.check")}
+            variant="secondary"
+            onPress={lookForNews}
+            loading={followUpsChecking}
+          />
+          <Body dim>{t("followUps.privacyNote")}</Body>
         </Card>
       ) : null}
 
