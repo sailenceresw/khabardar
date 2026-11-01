@@ -36,6 +36,23 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run mobile:typecheck
 
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # Logic tests on Node, with the native modules aliased to stubs. Covers
+      # the edges where a bug harms a user: PIN handling, tip padding, the
+      # random-bytes ceiling, recipient key pinning, k-anonymity suppression,
+      # feed filtering. Every defect found in review lived in code like this.
+      - run: npm test --workspace apps/mobile
+      - run: npm run check:i18n
+
   slice:
     name: End-to-end slice
     runs-on: ubuntu-latest

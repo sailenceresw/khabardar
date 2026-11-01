@@ -54,6 +54,6 @@
     "@types/react": "~18.3.12",
     "ts-node": "^10.9.2",
     "typescript": "~5.3.3",
-    "vitest": "^5.0.5"
+    "vitest": "^3.2.7"
   }
 }
