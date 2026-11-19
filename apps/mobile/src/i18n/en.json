@@ -523,7 +523,23 @@
     "signInTitle": "Organisation sign-in needed",
     "signInBody": "This view is for registered organisations. Reporters never need an account.",
     "openOrg": "Open organisation settings",
-    "backToOrg": "Back to organisation"
+    "backToOrg": "Back to organisation",
+    "keyActive": "Restricted reports sealed to %{name} open on this device.",
+    "keyNone": "No recipient key on this device, so restricted reports stay locked.",
+    "decryptedHere": "Decrypted on this device. The key and the text never left it."
+  },
+  "orgKey": {
+    "title": "Recipient key",
+    "explainer": "Restricted reports are sealed to recipient keys built into the app. If your organisation holds one of those keys, add it here to read the reports sealed to you. It stays on this device and is removed when you sign out or use panic delete.",
+    "active": "Key for %{name} is on this device.",
+    "fingerprint": "Fingerprint, to compare with your published key",
+    "demoWarning": "This is a demo key. Its private half is public, so anyone can read reports sealed to it. Never use it for a real report.",
+    "inputLabel": "Recipient private key",
+    "inputPlaceholder": "64 hex characters",
+    "save": "Add key",
+    "useDemo": "Use the demo newsroom key",
+    "remove": "Remove key from this device",
+    "notRecognised": "This key does not match any recipient built into this version of the app."
   },
   "cases": {
     "title": "Cases",

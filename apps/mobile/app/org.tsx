@@ -30,6 +30,7 @@ import {
   signOutOrg,
 } from "../src/org";
 import { listPools } from "../src/sponsorPools";
+import { RecipientKeyCard } from "../src/RecipientKeyCard";
 import { getNetworkIndex, resolveFeedReports } from "../src/feed";
 import { exportCsv, ExportNotEntitledError } from "../src/export";
 import {
@@ -272,6 +273,8 @@ export default function OrgScreen() {
             />
             <Body dim>{t("org.seatRevokeNote")}</Body>
           </Card>
+
+          <RecipientKeyCard />
 
           {entitlements.api ? (
             <Card>
