@@ -57,6 +57,7 @@
     "documentMetadataWarning": "Documents are NOT re-encoded. Author names, revision history and tracked changes stay inside the file and can identify you. Consider photographing the page instead.",
     "audioWarning": "A voice is biometric and identifies the speaker; background sound can reveal where you are. Record only if you accept both.",
     "evidenceTooLarge": "That file is too large. The current limit is %{limit} per attachment.",
+    "photoMetadataNotRemoved": "This photo was not attached because the app could not confirm its location and camera details were removed. You can describe what it shows in the report instead.",
     "micDenied": "Microphone permission is required to record audio evidence.",
     "bodyMin": "Add at least %{min} characters so the report is useful.",
     "locationInvalid": "Use up to 4 geohash characters (letters and digits)."

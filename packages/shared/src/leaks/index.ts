@@ -11,3 +11,5 @@ export {
   resolveOverlaps,
 } from "./detectors";
 export { detectQuasiIdentifiers } from "./quasi";
+export { findImageMetadata } from "./imageMetadata";
+export type { ImageMetadataKind, ImageMetadataReport } from "./imageMetadata";
