@@ -210,6 +210,7 @@ export default function OrgScreen() {
 
           <Card>
             <Body dim>{t("org.surfacesTitle")}</Body>
+            <Button label={t("orgFeed.title")} onPress={() => router.push("/org-feed")} />
             <Button
               label={t("analytics.title")}
               variant="secondary"

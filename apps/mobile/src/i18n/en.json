@@ -509,6 +509,22 @@
     "weekly": "Reports per week",
     "noData": "Not enough data to show anything safely."
   },
+  "orgFeed": {
+    "title": "Reports",
+    "intro": "Every report this device can see, filtered the way an investigation needs. Open one to read it in full.",
+    "sourceLive": "Reading live from Linea Sepolia (%{source}).",
+    "sourceMock": "Mock mode: sample and local reports only. Nothing is read from the chain.",
+    "filterCorroborations": "Corroborated by",
+    "atLeast": { "one": "1 or more", "other": "%{count} or more" },
+    "filterDistrict": "District (coarse area code)",
+    "integrityOk": "Content matches its on-chain fingerprint",
+    "integrityUnchecked": "Content not checked against its fingerprint",
+    "loadFailed": "Reports could not be loaded. Check the connection and try again.",
+    "signInTitle": "Organisation sign-in needed",
+    "signInBody": "This view is for registered organisations. Reporters never need an account.",
+    "openOrg": "Open organisation settings",
+    "backToOrg": "Back to organisation"
+  },
   "cases": {
     "title": "Cases",
     "notEntitled": "Case management requires an accredited Pro or Institutional plan.",
