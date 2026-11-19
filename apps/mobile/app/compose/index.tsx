@@ -144,7 +144,8 @@ export default function ComposeScreen() {
   async function goReview() {
     const report = buildReport();
     await upsertReport(report);
-    router.push({ pathname: "/compose/review", params: { id: report.id } });
+    // The privacy check runs first and hands over to review when the reporter continues.
+    router.push({ pathname: "/compose/privacy", params: { id: report.id } });
   }
 
   return (

@@ -26,6 +26,7 @@ function RootStack() {
       <Stack.Screen name="index" options={{ title: t("appName") }} />
       <Stack.Screen name="onboarding" options={{ title: t("onboarding.title"), headerBackVisible: false }} />
       <Stack.Screen name="compose/index" options={{ title: t("compose.title") }} />
+      <Stack.Screen name="compose/privacy" options={{ title: t("privacy.title") }} />
       <Stack.Screen name="compose/review" options={{ title: t("review.title") }} />
       <Stack.Screen name="report/[id]" options={{ title: t("status.title") }} />
       <Stack.Screen name="settings" options={{ title: t("settings.title") }} />
