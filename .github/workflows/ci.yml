@@ -53,6 +53,35 @@ jobs:
       - run: npm test --workspace apps/mobile
       - run: npm run check:i18n
 
+  typecheck:
+    name: Typecheck (all workspaces)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # tsc -b across every workspace, after a contract compile so the
+      # generated TypeChain types exist. "Mobile typecheck" above covers only
+      # the app, which is how a repo-wide type error once reached master.
+      - run: npm run typecheck
+
+  leak-eval:
+    name: Leak checker eval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # Prints precision and recall per detector into the job log. The unit
+      # tests separately fail if docs/LEAK_CHECKER.md no longer matches.
+      - run: npm run eval:leaks
+
   slice:
     name: End-to-end slice
     runs-on: ubuntu-latest
