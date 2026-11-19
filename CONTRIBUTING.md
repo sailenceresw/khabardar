@@ -43,12 +43,15 @@ instead. See the troubleshooting note in the README.
 ## Before you open a PR
 
 ```bash
-npm run mobile:typecheck
+npm run typecheck                              # every workspace, after a contract compile
 npm run contracts:test
+npm test
+npm run check:i18n
 npm run verify:slice --workspace apps/mobile
+npm run eval:leaks                             # leak checker precision and recall
 ```
 
-These are the same three things CI runs. `verify:slice` is the fastest way to know you
+CI runs all of these on every pull request. `verify:slice` is the fastest way to know you
 have not broken the chain-facing path. It exercises the real crypto, encoding,
 evidence, content-store, and relayer modules under Node.
 
