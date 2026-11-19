@@ -32,6 +32,7 @@ export function applyQuery(rows: ChainReportRow[], query?: FeedQuery): ChainRepo
     if (query.since !== undefined && r.timestamp < query.since) return false;
     if (query.until !== undefined && r.timestamp > query.until) return false;
     if (query.entityTag && r.entityTag !== query.entityTag) return false;
+    if (query.minCorroborations !== undefined && r.corroborations < query.minCorroborations) return false;
     return true;
   });
 }

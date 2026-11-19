@@ -35,7 +35,7 @@ import type { ChainReportRow, FeedQuery, NetworkIndex } from "./types";
  *
  * ## The endpoint contract
  *
- * `GET {baseUrl}/reports?category=&tier=&region=&entityTag=&since=&until=&limit=&cursor=`
+ * `GET {baseUrl}/reports?category=&tier=&region=&entityTag=&since=&until=&minCorroborations=&limit=&cursor=`
  * → `{ rows: ChainReportRow[], nextCursor?: string }`
  *
  * `GET {baseUrl}/reports/{id}` → `ChainReportRow` or 404.
@@ -63,6 +63,7 @@ export class IndexerNetworkIndex implements NetworkIndex {
     add("entityTag", query?.entityTag);
     add("since", query?.since);
     add("until", query?.until);
+    add("minCorroborations", query?.minCorroborations);
     add("limit", query?.limit);
     add("cursor", query?.cursor);
 
@@ -76,7 +77,12 @@ export class IndexerNetworkIndex implements NetworkIndex {
     const body = safeJsonParse<{ rows?: ChainReportRow[] }>(await res.text());
     // A malformed response degrades to an empty feed rather than throwing: a
     // broken indexer must not be able to crash every reader's app.
-    return Array.isArray(body?.rows) ? body!.rows.filter(isPlausibleRow) : [];
+    // The corroboration floor is re-checked here: an indexer that ignores an
+    // unfamiliar parameter must not widen what an organisation asked to see.
+    const min = query?.minCorroborations;
+    return Array.isArray(body?.rows)
+      ? body!.rows.filter(isPlausibleRow).filter((r) => min === undefined || r.corroborations >= min)
+      : [];
   }
 
   async get(onChainReportId: number): Promise<ChainReportRow | null> {

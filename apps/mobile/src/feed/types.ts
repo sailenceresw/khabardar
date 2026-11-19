@@ -31,6 +31,8 @@ export interface FeedQuery {
   until?: number;
   /** Cluster of reports naming the same accused entity. */
   entityTag?: string;
+  /** Only reports with at least this many corroborations. */
+  minCorroborations?: number;
   /** Maximum rows to return. Indexes scan newest-first, so a low limit is cheap. */
   limit?: number;
   /** Opaque pagination cursor; only the indexer-backed source uses it. */
