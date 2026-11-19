@@ -17,6 +17,7 @@
     "eval:leaks": "ts-node --transpile-only -P scripts/tsconfig.json scripts/evalLeaks.ts"
   },
   "dependencies": {
+    "@expo/vector-icons": "^14.0.4",
     "@khabardar/shared": "*",
     "@noble/ciphers": "^1.0.0",
     "@noble/curves": "^1.6.0",

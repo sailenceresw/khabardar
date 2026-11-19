@@ -1,5 +1,12 @@
 {
   "appName": "Khabardar",
+  "tabs": {
+    "home": "Home",
+    "feed": "Feed",
+    "report": "Report",
+    "org": "Organisation",
+    "settings": "Settings"
+  },
   "tagline": "Report corruption. Stay anonymous.",
   "onboarding": {
     "title": "You are anonymous here",

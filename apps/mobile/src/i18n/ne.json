@@ -1,4 +1,11 @@
 {
+  "tabs": {
+    "home": "गृहपृष्ठ",
+    "feed": "फिड",
+    "report": "रिपोर्ट",
+    "org": "संस्था",
+    "settings": "सेटिङ"
+  },
   "settings": {
     "language": "भाषा",
     "english": "English",
