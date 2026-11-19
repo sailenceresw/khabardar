@@ -111,7 +111,10 @@ gateway that swaps or edits a bundle is detected rather than believed. Malformed
 responses degrade to "unavailable" instead of throwing, so a bad gateway cannot crash
 the reader either.
 
-`EXPO_PUBLIC_CONTENT_STORE` selects `mock` (default, local, no credentials) or `ipfs`.
+`EXPO_PUBLIC_KHABARDAR_MODE` selects `mock` (default, local, no credentials) or `live`.
+In live mode the IPFS store is used once its three `EXPO_PUBLIC_IPFS_*` variables are
+set; until then the app stays on the mock store and says why. The switch lives in
+`apps/mobile/src/runtimeConfig.ts`.
 
 <img src="./media/feed.png" width="300" align="right" alt="Public feed with category, verification, time, and area filters">
 
@@ -197,7 +200,7 @@ The relayer is an interface (`src/relayer/`) with two implementations:
 3. Deploy the contract: `npm run contracts:deploy:sepolia` (needs
    `DEPLOYER_PRIVATE_KEY` + Sepolia ETH from the
    [Linea faucet](https://docs.linea.build/get-started/how-to/get-testnet-eth)).
-4. Set in `.env`: `EXPO_PUBLIC_GASLESS_PROVIDER=pimlico`,
+4. Set in `.env`: `EXPO_PUBLIC_KHABARDAR_MODE=live`,
    `EXPO_PUBLIC_PIMLICO_API_KEY`, `EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS`.
 5. Finish the two marked TODOs in `pimlicoRelayer.ts`: counterfactual account
    derivation ([#3](https://github.com/sailenceresw/khabardar/issues/3)) and receipt

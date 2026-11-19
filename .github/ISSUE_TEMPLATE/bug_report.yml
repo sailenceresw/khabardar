@@ -64,9 +64,9 @@ body:
     attributes:
       label: Relevant config
       description: >
-        Node version, and any non-default env such as EXPO_PUBLIC_CONTENT_STORE,
-        EXPO_PUBLIC_GASLESS_PROVIDER. Never paste an API key or a recovery phrase.
-      placeholder: "Node 20.11, EXPO_PUBLIC_CONTENT_STORE=mock"
+        Node version, and any non-default env such as EXPO_PUBLIC_KHABARDAR_MODE.
+        Never paste an API key or a recovery phrase.
+      placeholder: "Node 20.11, EXPO_PUBLIC_KHABARDAR_MODE=mock"
 
   - type: textarea
     id: logs
