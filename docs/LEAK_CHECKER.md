@@ -68,6 +68,35 @@ So the checker makes no network requests. It is plain TypeScript and a few bundl
 
 ## How well it works
 
-Each detector will be measured against a labelled set of synthetic reports written for the purpose, with no real people in them. `npm run eval:leaks` will run the set and print precision and recall per detector, and the results will be copied here unchanged.
+The detectors are scored against `packages/shared/eval/leaks.dataset.json`: short synthetic reports with every person, number, plate, address and account invented. The set has clean reports with nothing to flag, reports with one or several identifying details, hard cases the rules are expected to miss (numbers written in words, Devanagari names and plates, names outside the lists, paraphrased roles), and traps for false alarms (businesses named after people, reference numbers shaped like ID numbers).
 
-No measurements exist yet.
+A label marks what a careful reviewer would want the reporter to look at, whether or not a detector catches it. The guideline for each type is in the dataset file. Names are labelled whoever they belong to, including the people being reported on, because the checker cannot tell the difference and asks the reporter instead. A finding counts as correct when it overlaps a label of the same type (or the same rule, for quasi-identifiers); exact boundaries are not scored.
+
+`npm run eval:leaks` prints the table below together with every miss and every false alarm. `npm run eval:leaks -- --write` regenerates this section, so these numbers are always the script's output.
+
+<!-- eval:start -->
+Measured on 77 synthetic texts with 64 labelled details (`npm run eval:leaks`).
+
+| Detector | True positives | False positives | Missed | Precision | Recall |
+|---|---|---|---|---|---|
+| email | 2 | 0 | 1 | 100% | 67% |
+| phone | 4 | 0 | 3 | 100% | 57% |
+| national-id | 3 | 1 | 1 | 75% | 75% |
+| vehicle-plate | 2 | 0 | 1 | 100% | 67% |
+| personal-url | 3 | 0 | 0 | 100% | 100% |
+| street-address | 6 | 0 | 0 | 100% | 100% |
+| personal-name | 7 | 2 | 4 | 78% | 64% |
+| quasi:unique-role | 3 | 0 | 2 | 100% | 60% |
+| quasi:only-i | 1 | 0 | 1 | 100% | 50% |
+| quasi:first-person-role | 2 | 0 | 1 | 100% | 67% |
+| quasi:personal-workspace | 2 | 1 | 0 | 67% | 100% |
+| quasi:personal-access | 3 | 0 | 1 | 100% | 75% |
+| quasi:small-group | 4 | 0 | 0 | 100% | 100% |
+| quasi:exact-time | 3 | 0 | 0 | 100% | 100% |
+| quasi:exact-date | 4 | 0 | 0 | 100% | 100% |
+| direct identifiers | 27 | 3 | 10 | 90% | 73% |
+| quasi-identifiers | 22 | 1 | 5 | 96% | 81% |
+| all detectors | 49 | 4 | 15 | 92% | 77% |
+<!-- eval:end -->
+
+Read these numbers with their limits in mind. The same person wrote the rules and the test set, so the set reflects the phrasings that person thought of, and the numbers are likely better than real reports would give. The set is small, so one case moves a detector's score by ten points or more. The detectors were not tuned against this set after it was written. A held-out set written by someone else, ideally from real anonymised reports, would give a fairer measure.
