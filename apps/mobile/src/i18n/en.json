@@ -27,7 +27,7 @@
   },
   "home": {
     "title": "Reports",
-    "empty": "No reports yet. Anything you compose stays encrypted on this device until you submit it.",
+    "empty": "Anything you write stays encrypted on this device until you submit it.",
     "newReport": "New report",
     "karma": "Karma",
     "codename": "Codename",
@@ -36,7 +36,11 @@
     "networkUnprotected": "This device is connecting directly. Your IP is visible to every server the app contacts.",
     "storageUnreadable": "This device's secure storage could not be read, so your identity cannot be loaded. On the web build this usually means the browser is blocking storage, for example private browsing or site data turned off.",
     "emptyTitle": "No reports yet",
-    "myReports": "My reports"
+    "myReports": "My reports",
+    "newReportHint": "Encrypted on this device. Only a fingerprint goes on the chain.",
+    "protected": "Protected by Tor",
+    "direct": "Direct connection",
+    "more": "More"
   },
   "compose": {
     "title": "New report",
