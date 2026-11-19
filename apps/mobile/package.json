@@ -13,7 +13,8 @@
     "web:export": "expo export --platform web",
     "web:static": "node scripts/serveDist.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "eval:leaks": "ts-node --transpile-only -P scripts/tsconfig.json scripts/evalLeaks.ts"
   },
   "dependencies": {
     "@khabardar/shared": "*",
