@@ -43,6 +43,7 @@ function RootStack() {
       <Stack.Screen name="network" options={{ title: t("net.title") }} />
       <Stack.Screen name="analytics" options={{ title: t("analytics.title") }} />
       <Stack.Screen name="cases" options={{ title: t("cases.title") }} />
+      <Stack.Screen name="org-feed" options={{ title: t("orgFeed.title") }} />
     </Stack>
   );
 }
