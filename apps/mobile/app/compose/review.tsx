@@ -8,7 +8,7 @@ import { journalistKeysArePlaceholders } from "../../src/content/recipients";
 import { loadReport } from "../../src/drafts";
 import { publishReport } from "../../src/submitReport";
 import { anchoredFrom, dequeue, enqueue } from "../../src/submissionQueue";
-import { Body, Button, Card, Caption, Notice, Screen, Title } from "../../src/ui";
+import { Body, Button, Card, Caption, Notice, Screen, StepIndicator, Title } from "../../src/ui";
 import { colors, spacing } from "../../src/theme";
 import { t } from "../../src/i18n";
 import { probeAnonymity } from "../../src/net/transport";
@@ -102,7 +102,23 @@ export default function ReviewScreen() {
   }
 
   return (
-    <Screen>
+    <Screen
+      footer={
+        <>
+          {/* The button shows a spinner while busy, so the progress is spelled out above it. */}
+          {submitting ? <Caption>{progressLabel ?? t("review.submitting")}</Caption> : null}
+          <Button
+            label={t("review.submit")}
+            onPress={submit}
+            loading={submitting}
+            // Disable primary submit until protected or user explicitly continues
+            disabled={needsTorAck || submitting}
+          />
+        </>
+      }
+    >
+      <StepIndicator current={2} />
+
       <Card style={{ borderColor: colors.accent }}>
         <Title>{t("review.warningTitle")}</Title>
         <Body>{t("review.warning")}</Body>
@@ -170,18 +186,6 @@ export default function ReviewScreen() {
           <Caption>{t("submitError.detail", { detail: error.detail })}</Caption>
         </Card>
       ) : null}
-
-      <Button
-        label={
-          submitting
-            ? progressLabel ?? t("review.submitting")
-            : t("review.submit")
-        }
-        onPress={submit}
-        loading={submitting}
-        // Disable primary submit until protected or user explicitly continues
-        disabled={needsTorAck || submitting}
-      />
     </Screen>
   );
 }

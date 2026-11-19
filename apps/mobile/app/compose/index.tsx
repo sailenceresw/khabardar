@@ -21,7 +21,7 @@ import {
   type AudioRecordingHandle,
 } from "../../src/evidence";
 import { isValidCoarseGeohash, truncateGeohash } from "../../src/geo";
-import { Body, Button, Card, Chip, Screen } from "../../src/ui";
+import { Body, Button, Card, Chip, Screen, StepIndicator } from "../../src/ui";
 import { colors, radius, spacing } from "../../src/theme";
 import { t } from "../../src/i18n";
 
@@ -149,7 +149,44 @@ export default function ComposeScreen() {
   }
 
   return (
-    <Screen>
+    <Screen
+      footer={
+        <View style={styles.footerRow}>
+          <View style={styles.footerSecondary}>
+            <Button label={t("compose.saveDraft")} onPress={saveDraft} variant="secondary" disabled={!valid} />
+          </View>
+          <View style={styles.footerPrimary}>
+            <Button label={t("compose.review")} onPress={goReview} disabled={!valid} />
+          </View>
+        </View>
+      }
+    >
+      <StepIndicator current={0} />
+
+      <Card>
+        <View style={styles.labelRow}>
+          <Body dim>{t("compose.bodyLabel")}</Body>
+          {/* Only useful while the text is still under the minimum; "104/20" afterwards just confuses. */}
+          {!bodyOk ? (
+            <Text style={[styles.counter, styles.counterWarn]}>
+              {bodyLen}/{MIN_BODY}
+            </Text>
+          ) : null}
+        </View>
+        <TextInput
+          style={styles.textArea}
+          multiline
+          numberOfLines={6}
+          placeholder={t("compose.bodyPlaceholder")}
+          placeholderTextColor={colors.textMuted}
+          value={body}
+          onChangeText={setBody}
+        />
+        {!bodyOk && bodyLen > 0 ? (
+          <Text style={styles.hint}>{t("compose.bodyMin", { min: MIN_BODY })}</Text>
+        ) : null}
+      </Card>
+
       <Card>
         <Body dim>{t("compose.categoryLabel")}</Body>
         <View style={styles.chips}>
@@ -181,27 +218,6 @@ export default function ComposeScreen() {
             ? t("compose.visibilityPublicHelp")
             : t("compose.visibilityJournalistsHelp")}
         </Body>
-      </Card>
-
-      <Card>
-        <View style={styles.labelRow}>
-          <Body dim>{t("compose.bodyLabel")}</Body>
-          <Text style={[styles.counter, bodyOk ? styles.counterOk : styles.counterWarn]}>
-            {bodyLen}/{MIN_BODY}
-          </Text>
-        </View>
-        <TextInput
-          style={styles.textArea}
-          multiline
-          numberOfLines={6}
-          placeholder={t("compose.bodyPlaceholder")}
-          placeholderTextColor={colors.textMuted}
-          value={body}
-          onChangeText={setBody}
-        />
-        {!bodyOk && bodyLen > 0 ? (
-          <Text style={styles.hint}>{t("compose.bodyMin", { min: MIN_BODY })}</Text>
-        ) : null}
       </Card>
 
       <Card>
@@ -264,17 +280,17 @@ export default function ComposeScreen() {
         <Body dim>{t("compose.audioWarning")}</Body>
       </Card>
 
-      <Button label={t("compose.saveDraft")} onPress={saveDraft} variant="secondary" disabled={!valid} />
-      <Button label={t("compose.review")} onPress={goReview} disabled={!valid} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  footerRow: { flexDirection: "row", gap: spacing.sm },
+  footerSecondary: { flex: 1 },
+  footerPrimary: { flex: 2 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   labelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   counter: { fontSize: 12, fontWeight: "600" },
-  counterOk: { color: colors.success },
   counterWarn: { color: colors.textDim },
   hint: { color: colors.danger, fontSize: 12 },
   textArea: {
