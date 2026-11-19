@@ -14,6 +14,10 @@ export interface ChainReportRow {
   timestamp: number;
   reporter: string;
   corroborations: number;
+  /** Hash of the transaction that anchored the report, when the source knows it. */
+  txHash?: string;
+  /** True when `txHash` came from the mock relayer and exists on no chain. */
+  txSimulated?: boolean;
   /** Set only on clearly-labelled sample rows. */
   demo?: boolean;
   /** Sample rows carry their text inline instead of via the content layer. */

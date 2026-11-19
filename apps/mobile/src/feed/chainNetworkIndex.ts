@@ -78,7 +78,7 @@ export class ChainNetworkIndex implements NetworkIndex {
     return rows.sort((a, b) => b.timestamp - a.timestamp);
   }
 
-  private async hydrate(log: { args: unknown }): Promise<ChainReportRow> {
+  private async hydrate(log: { args: unknown; transactionHash?: `0x${string}` | null }): Promise<ChainReportRow> {
     const args = log.args as {
       reportId?: bigint;
       reporter?: Address;
@@ -126,6 +126,8 @@ export class ChainNetworkIndex implements NetworkIndex {
       timestamp: Number(args.timestamp ?? 0n) * 1000,
       reporter: args.reporter ?? "0x",
       corroborations: Number(corroborations as bigint),
+      // The submitting transaction, so a case file can link to it on the explorer.
+      txHash: log.transactionHash ?? undefined,
     } as ChainReportRow;
   }
 
