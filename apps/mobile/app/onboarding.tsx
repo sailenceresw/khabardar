@@ -1,14 +1,17 @@
 import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "../src/state/AppContext";
 import { createIdentity, getRecoveryPhrase } from "../src/identity";
-import { Body, Button, Card, Screen, Title } from "../src/ui";
+import { Body, Button, Card, Caption, Notice, Screen, Title } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { identity, refreshIdentity } = useApp();
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,81 +55,97 @@ export default function OnboardingScreen() {
     }
   }
 
+  const goHome = () => router.replace("/");
+
+  // The main action for whichever stage the user is at, pinned to the bottom
+  // so it is always under the thumb and never scrolls away.
+  const footer = !identity ? (
+    <>
+      <Button
+        label={creating ? t("onboarding.creating") : t("onboarding.createIdentity")}
+        onPress={handleCreate}
+        loading={creating}
+      />
+      <Button
+        label={t("onboarding.alreadyHavePhrase")}
+        onPress={() => router.push("/recovery")}
+        variant="ghost"
+      />
+    </>
+  ) : phrase && !wroteDown ? (
+    <Button label={t("onboarding.iWroteThemDown")} onPress={() => setWroteDown(true)} />
+  ) : (
+    <Button label={t("onboarding.continue")} onPress={goHome} />
+  );
+
   return (
-    <Screen>
-      <View style={styles.hero}>
-        <Text style={styles.brand}>{t("appName")}</Text>
-        <Title>{t("onboarding.title")}</Title>
-        <Body dim>{t("tagline")}</Body>
-      </View>
-
-      <Card>
-        <Body>{t("onboarding.explainer")}</Body>
-      </Card>
-
-      <Card>
-        <Step n={1} text={t("onboarding.step1")} />
-        <Step n={2} text={t("onboarding.step2")} />
-        <Step n={3} text={t("onboarding.step3")} />
-      </Card>
+    <Screen footer={footer}>
+      {identity ? (
+        <View style={[styles.readyHead, { paddingTop: insets.top + spacing.md }]}>
+          <View style={[styles.heroIcon, styles.heroIconReady]}>
+            <Ionicons name="finger-print" size={36} color={colors.success} />
+          </View>
+          <Caption>{t("onboarding.yourCodename")}</Caption>
+          <Title>{identity.codename}</Title>
+        </View>
+      ) : (
+        <View style={[styles.hero, { paddingTop: insets.top + spacing.xl }]}>
+          <View style={styles.heroIcon}>
+            <Ionicons name="shield-checkmark" size={40} color={colors.accent} />
+          </View>
+          <Text style={styles.brand}>{t("appName")}</Text>
+          <Text style={styles.heroTitle} accessibilityRole="header">
+            {t("onboarding.title")}
+          </Text>
+          <Body dim>{t("tagline")}</Body>
+        </View>
+      )}
 
       {identity ? (
-        <Card style={styles.readyCard}>
-          <Body dim>{t("onboarding.yourCodename")}</Body>
-          <Title>{identity.codename}</Title>
-          <Body dim>{t("onboarding.readyHint")}</Body>
-          {phrase ? (
-            <>
-              <Body>{t("onboarding.writeTheseDown")}</Body>
-              <View style={styles.phraseBox}>
-                {phrase.split(" ").map((word, i) => (
-                  <Body key={`${word}-${i}`}>
-                    {i + 1}. {word}
-                  </Body>
-                ))}
-              </View>
-              <Body>{t("recovery.warning")}</Body>
-              {wroteDown ? (
-                <Button label={t("onboarding.continue")} onPress={() => router.replace("/")} />
-              ) : (
-                <Button
-                  label={t("onboarding.iWroteThemDown")}
-                  onPress={() => setWroteDown(true)}
-                  variant="secondary"
-                />
-              )}
-            </>
-          ) : (
-            <>
-              {/* The identity exists either way, so this is not a failure the
-                  user can retry here. It is one they have to be told about,
-                  and pointed at the other place the words can be read. */}
-              {phraseError ? (
-                <>
-                  <Body>{t("onboarding.phraseUnavailable")}</Body>
-                  <Body dim>{phraseError}</Body>
-                </>
-              ) : null}
-              <Button label={t("onboarding.continue")} onPress={() => router.replace("/")} />
-            </>
-          )}
-        </Card>
+        phrase ? (
+          <Card style={styles.readyCard}>
+            <Body>{t("onboarding.writeTheseDown")}</Body>
+            <View style={styles.phraseGrid}>
+              {phrase.split(" ").map((word, i) => (
+                <View key={`${word}-${i}`} style={styles.word}>
+                  <Text style={styles.wordNum}>{i + 1}</Text>
+                  <Text style={styles.wordText} selectable>
+                    {word}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <Notice tone="warn">{t("recovery.warning")}</Notice>
+          </Card>
+        ) : (
+          <Card style={styles.readyCard}>
+            {/* The identity exists either way, so this is not a failure the
+                user can retry here. It is one they have to be told about,
+                and pointed at the other place the words can be read. */}
+            {phraseError ? (
+              <>
+                <Body>{t("onboarding.phraseUnavailable")}</Body>
+                <Caption>{phraseError}</Caption>
+              </>
+            ) : (
+              <Body dim>{t("onboarding.readyHint")}</Body>
+            )}
+          </Card>
+        )
       ) : (
         <>
-          <Button
-            label={creating ? t("onboarding.creating") : t("onboarding.createIdentity")}
-            onPress={handleCreate}
-            loading={creating}
-          />
-          <Button
-            label={t("onboarding.alreadyHavePhrase")}
-            onPress={() => router.push("/recovery")}
-            variant="secondary"
-          />
+          <Card>
+            <Step icon="key-outline" text={t("onboarding.step1")} />
+            <Step icon="lock-closed-outline" text={t("onboarding.step2")} />
+            <Step icon="eye-off-outline" text={t("onboarding.step3")} />
+          </Card>
+
+          <Caption>{t("onboarding.explainer")}</Caption>
+
           {error ? (
             <Card style={{ borderColor: colors.danger }}>
               <Body>{t("onboarding.createFailed")}</Body>
-              <Body dim>{error}</Body>
+              <Caption>{error}</Caption>
             </Card>
           ) : null}
         </>
@@ -135,45 +154,65 @@ export default function OnboardingScreen() {
   );
 }
 
-function Step({ n, text }: { n: number; text: string }) {
+function Step({ icon, text }: { icon: React.ComponentProps<typeof Ionicons>["name"]; text: string }) {
   return (
     <View style={styles.step}>
       <View style={styles.stepBadge}>
-        <Text style={styles.stepNum}>{n}</Text>
+        <Ionicons name={icon} size={18} color={colors.accent} />
       </View>
-      <Body dim>{text}</Body>
+      <View style={styles.stepText}>
+        <Body>{text}</Body>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  phraseBox: {
+  hero: { alignItems: "center", gap: spacing.sm, paddingBottom: spacing.md },
+  heroIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.accentMuted,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.sm,
+  },
+  heroIconReady: { backgroundColor: colors.successMuted, width: 72, height: 72, borderRadius: 36 },
+  heroTitle: { color: colors.text, fontSize: 26, fontWeight: "800", textAlign: "center", lineHeight: 32 },
+  brand: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+  },
+  readyHead: { alignItems: "center", gap: spacing.xs, paddingBottom: spacing.sm },
+  readyCard: { borderColor: colors.success },
+  phraseGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  word: {
+    width: "47%",
+    flexGrow: 1,
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     gap: spacing.sm,
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.sm,
-    padding: spacing.md,
-  },
-  hero: { gap: spacing.sm, marginBottom: spacing.xs },
-  brand: {
-    color: colors.accent,
-    fontSize: 14,
-    fontWeight: "700",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  readyCard: { borderColor: colors.success },
-  step: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start" },
-  stepBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceAlt,
     borderWidth: 1,
     borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+  },
+  wordNum: { color: colors.textMuted, fontSize: 12, fontWeight: "700", width: 18, textAlign: "right" },
+  wordText: { color: colors.text, fontSize: 16, fontWeight: "600" },
+  step: { flexDirection: "row", gap: spacing.md, alignItems: "center", paddingVertical: spacing.xs },
+  stepText: { flex: 1 },
+  stepBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    backgroundColor: colors.accentMuted,
     alignItems: "center",
     justifyContent: "center",
   },
-  stepNum: { color: colors.accent, fontWeight: "700", fontSize: 13 },
 });

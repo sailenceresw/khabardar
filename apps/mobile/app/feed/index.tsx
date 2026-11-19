@@ -167,7 +167,7 @@ export default function FeedScreen() {
             onPress={() => setTab(key)}
             style={styles.tabFlex}
             accessibilityRole="tab"
-            accessibilityState={{ selected: tab === key }}
+            aria-selected={tab === key}
           >
             <View style={[styles.tab, tab === key && styles.tabActive]}>
               <Text style={[styles.tabText, tab === key && styles.tabTextActive]}>
@@ -198,7 +198,7 @@ export default function FeedScreen() {
           onPress={() => setFiltersOpen((open) => !open)}
           style={[styles.filterButton, (filtersOpen || activeFilters > 0) && styles.filterButtonActive]}
           accessibilityRole="button"
-          accessibilityState={{ expanded: filtersOpen }}
+          aria-expanded={filtersOpen}
           accessibilityLabel={t("feed.filtersA11y", { count: activeFilters })}
         >
           <Ionicons name="options-outline" size={20} color={activeFilters > 0 ? colors.accent : colors.text} />

@@ -46,6 +46,7 @@ import {
   Notice,
   Screen,
   TierBadge,
+  toggleState,
   Title,
 } from "../../src/ui";
 import { colors, radius, spacing } from "../../src/theme";
@@ -249,7 +250,7 @@ export default function FeedReportScreen() {
             <Pressable
               key={kind}
               accessibilityRole="button"
-              accessibilityState={{ selected: mine === kind }}
+              {...toggleState(mine === kind)}
               onPress={async () => {
                 if (!identity) return;
                 await react(Number(id), identity.address, mine === kind ? null : kind);
