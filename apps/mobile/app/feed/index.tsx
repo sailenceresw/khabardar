@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import {
   REPORT_CATEGORY_KEYS,
   ReportCategory,
@@ -66,6 +67,7 @@ export default function FeedScreen() {
   const [search, setSearch] = useState("");
   const [since, setSince] = useState<number | undefined>();
   const [loadError, setLoadError] = useState<SubmitErrorKind | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -176,72 +178,94 @@ export default function FeedScreen() {
         </Card>
       ) : null}
 
-      <Card>
-        <Field
-          placeholder={t("feed.searchPlaceholder")}
-          value={search}
-          onChangeText={setSearch}
-          autoCapitalize="none"
-        />
-
-        <Body dim>{t("feed.filterCategory")}</Body>
-        <View style={styles.chips}>
-          <Chip label={t("feed.all")} active={category === undefined} onPress={() => setCategory(undefined)} />
-          {CATEGORIES.map((c) => (
-            <Chip
-              key={c}
-              label={t(REPORT_CATEGORY_KEYS[c])}
-              active={category === c}
-              onPress={() => setCategory(category === c ? undefined : c)}
-            />
-          ))}
+      {/* Search stays in reach; the filters fold away so the reports come first. */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchField}>
+          <Field
+            placeholder={t("feed.searchPlaceholder")}
+            value={search}
+            onChangeText={setSearch}
+            autoCapitalize="none"
+          />
         </View>
+        <Pressable
+          onPress={() => setFiltersOpen((open) => !open)}
+          style={[styles.filterButton, (filtersOpen || activeFilters > 0) && styles.filterButtonActive]}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: filtersOpen }}
+          accessibilityLabel={t("feed.filtersA11y", { count: activeFilters })}
+        >
+          <Ionicons name="options-outline" size={20} color={activeFilters > 0 ? colors.accent : colors.text} />
+          <Text style={styles.filterButtonText}>{t("feed.filters")}</Text>
+          {activeFilters > 0 ? (
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>{activeFilters}</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      </View>
 
-        <Body dim>{t("feed.filterTier")}</Body>
-        <View style={styles.chips}>
-          <Chip label={t("feed.all")} active={tier === undefined} onPress={() => setTier(undefined)} />
-          {TIER_FILTERS.map((tr) => (
-            <Chip
-              key={tr}
-              label={t(`tier.${TIER_SLUGS[tr]}`)}
-              active={tier === tr}
-              onPress={() => setTier(tier === tr ? undefined : tr)}
-            />
-          ))}
-        </View>
+      {activeFilters > 0 || search ? (
+        <Pressable onPress={clearFilters} accessibilityRole="button">
+          <Text style={styles.link}>{t("feed.clearFilters")}</Text>
+        </Pressable>
+      ) : null}
 
-        <Body dim>{t("feed.filterDate")}</Body>
-        <View style={styles.chips}>
-          <Chip label={t("feed.anyTime")} active={since === undefined} onPress={() => setSince(undefined)} />
-          {DATE_RANGES.map((d) => {
-            const value = Date.now() - d.ms;
-            const active = since !== undefined && Math.abs(since - value) < 60_000;
-            return (
+      {filtersOpen ? (
+        <Card>
+          <Body dim>{t("feed.filterCategory")}</Body>
+          <View style={styles.chips}>
+            <Chip label={t("feed.all")} active={category === undefined} onPress={() => setCategory(undefined)} />
+            {CATEGORIES.map((c) => (
               <Chip
-                key={d.key}
-                label={t(`feed.range.${d.key}`)}
-                active={active}
-                onPress={() => setSince(active ? undefined : value)}
+                key={c}
+                label={t(REPORT_CATEGORY_KEYS[c])}
+                active={category === c}
+                onPress={() => setCategory(category === c ? undefined : c)}
               />
-            );
-          })}
-        </View>
+            ))}
+          </View>
 
-        <Field
-          label={t("feed.filterRegion")}
-          placeholder={t("feed.regionPlaceholder")}
-          value={region}
-          onChangeText={setRegion}
-          autoCapitalize="none"
-          maxLength={4}
-        />
+          <Body dim>{t("feed.filterTier")}</Body>
+          <View style={styles.chips}>
+            <Chip label={t("feed.all")} active={tier === undefined} onPress={() => setTier(undefined)} />
+            {TIER_FILTERS.map((tr) => (
+              <Chip
+                key={tr}
+                label={t(`tier.${TIER_SLUGS[tr]}`)}
+                active={tier === tr}
+                onPress={() => setTier(tier === tr ? undefined : tr)}
+              />
+            ))}
+          </View>
 
-        {activeFilters > 0 || search ? (
-          <Pressable onPress={clearFilters}>
-            <Text style={styles.link}>{t("feed.clearFilters")}</Text>
-          </Pressable>
-        ) : null}
-      </Card>
+          <Body dim>{t("feed.filterDate")}</Body>
+          <View style={styles.chips}>
+            <Chip label={t("feed.anyTime")} active={since === undefined} onPress={() => setSince(undefined)} />
+            {DATE_RANGES.map((d) => {
+              const value = Date.now() - d.ms;
+              const active = since !== undefined && Math.abs(since - value) < 60_000;
+              return (
+                <Chip
+                  key={d.key}
+                  label={t(`feed.range.${d.key}`)}
+                  active={active}
+                  onPress={() => setSince(active ? undefined : value)}
+                />
+              );
+            })}
+          </View>
+
+          <Field
+            label={t("feed.filterRegion")}
+            placeholder={t("feed.regionPlaceholder")}
+            value={region}
+            onChangeText={setRegion}
+            autoCapitalize="none"
+            maxLength={4}
+          />
+        </Card>
+      ) : null}
 
       {loading ? (
         <LoadingBlock label={t("common.loading")} />
@@ -304,6 +328,31 @@ function truncate(s: string, n: number): string {
 const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.sm },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.sm },
+  searchRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  searchField: { flex: 1 },
+  filterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  filterButtonActive: { borderColor: colors.accent },
+  filterButtonText: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  filterBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterBadgeText: { color: colors.accentText, fontSize: 12, fontWeight: "800" },
   meta: { color: colors.textMuted, fontSize: 12, flex: 1 },
   demoTag: { color: colors.textDim, fontSize: 11, fontStyle: "italic" },
   tabs: { flexDirection: "row", gap: spacing.sm },
