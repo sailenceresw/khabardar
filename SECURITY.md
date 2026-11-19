@@ -21,6 +21,14 @@ We will remove this notice when the items tagged
 [`blocker:mainnet`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Ablocker%3Amainnet)
 are closed and an external audit has been published.
 
+## Live mode
+
+The app runs on mocks by default and touches no network. `EXPO_PUBLIC_KHABARDAR_MODE=live` turns on real services one at a time as their settings are filled in (see `apps/mobile/src/runtimeConfig.ts` and `docs/ARCHITECTURE.md`).
+
+- Live mode is for Linea Sepolia, the testnet. The config refuses Linea mainnet.
+- Keys and tokens belong in a local `.env`, which is gitignored. Never commit one, and never paste one into an issue.
+- In live mode the relayer, the IPFS pinning service and the RPC endpoint each see the connecting IP address. The pinning service only ever receives encrypted bundles. Without Tor running, each of them can link a submission to an IP.
+
 ## Reporting a vulnerability
 
 **Do not open a public issue for a security bug.**
@@ -49,6 +57,8 @@ Ranked by how much we care, which is not the same as how severe a scanner would 
 1. **Anything that deanonymizes a reporter.** Metadata surviving the strip pipeline, a
    network request escaping the transport, identity material leaking into logs, a
    correlation channel between a report and a device. This is the whole product.
+   It includes the leak checker or the privacy check sending any part of a draft off
+   the device, and a photo being stored after its metadata check should have refused it.
 2. **Cryptographic flaws.** AES-GCM nonce reuse, the ECIES construction, HKDF usage,
    BIP-39 derivation, key storage in SecureStore/Keychain/Keystore.
 3. **Integrity failures.** Anything that lets a hostile gateway or indexer serve altered
@@ -57,6 +67,10 @@ Ranked by how much we care, which is not the same as how severe a scanner would 
    manipulation, moderation authority.
 5. **Panic delete gaps.** Anything that survives a wipe: temp files, caches, OS-level
    copies, notification history.
+6. **Organisation tooling.** A recipient key accepted without matching a pinned
+   recipient, or surviving sign-out; a restricted report opening for a key it was not
+   sealed to; a case file that carries a reporter address or report text that runs as
+   markup or a spreadsheet formula.
 
 ## Known and already documented
 
@@ -85,6 +99,18 @@ worse impact than we have described, but they are not news:
 - **Tip length leaks; tips lack forward secrecy.** Tracked in
   [#11](https://github.com/sailenceresw/khabardar/issues/11) and
   [#12](https://github.com/sailenceresw/khabardar/issues/12).
+- **The leak checker matches patterns and misses things.** Paraphrased roles, names
+  outside its lists, Devanagari script and numbers written as words all get through.
+  Its measured precision and recall come from a small synthetic set written by the same
+  person who wrote the rules, so real reports will likely score lower. Details and the
+  current numbers are in [docs/LEAK_CHECKER.md](docs/LEAK_CHECKER.md).
+- **Photos are not checked for faces or visible text yet.** Both need native modules
+  that are not in any build; the privacy check says so rather than implying a photo
+  was looked at.
+- **The photo metadata check has only been tested against hand-built files,** not
+  against the real output of the platform image encoders.
+- **An organisation's recipient key is kept in localStorage in the web preview,** like
+  every other key there. Native builds use the platform's secure storage.
 
 ## Out of scope
 
