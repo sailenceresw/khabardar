@@ -15,6 +15,7 @@ import {
   EvidenceTooLarge,
   MAX_EVIDENCE_LABEL,
   pickAndSecureDocument,
+  PhotoMetadataNotRemoved,
   pickAndSecurePhoto,
   startAudioEvidence,
   type AudioRecordingHandle,
@@ -74,7 +75,9 @@ export default function ComposeScreen() {
     notify(
       e instanceof EvidenceTooLarge
         ? t("compose.evidenceTooLarge", { limit: MAX_EVIDENCE_LABEL })
-        : t("common.error")
+        : e instanceof PhotoMetadataNotRemoved
+          ? t("compose.photoMetadataNotRemoved")
+          : t("common.error")
     );
   }
 

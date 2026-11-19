@@ -7,6 +7,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { bytesToHex, hexToBytes } from "@noble/ciphers/utils";
 import type { EvidenceItem } from "@khabardar/shared";
+import { assertPhotoMetadataRemoved } from "./photoMetadata";
+
+export { PhotoMetadataNotRemoved } from "./photoMetadata";
 import { bytesToUtf8, decrypt, encrypt, randomKey, utf8ToBytes, type EncryptedBlob } from "./cryptoUtils";
 import { getContentStore } from "./content";
 import type { ContentKeyring } from "./content/contentKeys";
@@ -62,7 +65,9 @@ const NO_KEYRING: ContentKeyring = { mode: "wrapped", recipients: [] };
  * Metadata stripping: the image is re-encoded through expo-image-manipulator,
  * which decodes pixels and writes a fresh JPEG — EXIF (GPS, device model,
  * timestamps), IPTC and XMP from the original are not carried over. `exif:
- * false` in the picker additionally avoids handing EXIF to JS at all.
+ * false` in the picker additionally avoids handing EXIF to JS at all. The
+ * result is then parsed and refused if any metadata block survived (see
+ * {@link assertPhotoMetadataRemoved}).
  */
 export async function pickAndSecurePhoto(): Promise<EvidenceItem | null> {
   const result = await ImagePicker.launchImageLibraryAsync({
@@ -82,7 +87,9 @@ export async function pickAndSecurePhoto(): Promise<EvidenceItem | null> {
   );
   try {
     if (!reencoded.base64) throw new Error("re-encode failed");
-    return await storeEvidence(bytesSource(base64ToBytes(reencoded.base64)), "photo");
+    const bytes = base64ToBytes(reencoded.base64);
+    assertPhotoMetadataRemoved(bytes);
+    return await storeEvidence(bytesSource(bytes), "photo");
   } finally {
     // The manipulator also writes its JPEG to the cache. It is metadata-free
     // but still plaintext, and would outlive the encrypted copy.
