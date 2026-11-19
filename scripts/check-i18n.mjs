@@ -61,3 +61,25 @@ if (missing.length || extra.length) {
 }
 
 console.log(`i18n parity OK: ${enKeys.length} keys in both locales.`);
+
+/*
+ * Nepali is partial: screens it does not cover fall back to English. What it
+ * does cover must be complete, so a reporter reading in Nepali never sees a
+ * privacy warning that is half one language and half another. Every Nepali
+ * key must also exist in English, which catches typos that would otherwise
+ * be silently unused.
+ */
+const NE_REQUIRED_PREFIXES = ["privacy.", "settings.nepali"];
+const neKeys = flatten(load("ne"));
+const neStray = neKeys.filter((key) => !enKeys.includes(key));
+const neMissing = enKeys.filter(
+  (key) => NE_REQUIRED_PREFIXES.some((p) => key === p || key.startsWith(p)) && !neKeys.includes(key)
+);
+
+if (neStray.length || neMissing.length) {
+  report("In ne.json but not en.json", neStray);
+  report(`Missing from ne.json in a required section (${NE_REQUIRED_PREFIXES.join(", ")})`, neMissing);
+  process.exit(1);
+}
+
+console.log(`Nepali OK: ${neKeys.length} keys, required sections complete, the rest falls back to English.`);

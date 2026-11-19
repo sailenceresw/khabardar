@@ -4,7 +4,7 @@ import type { AnonymousReport, ReporterIdentity } from "@khabardar/shared";
 import { getIdentity } from "../identity";
 import { loadAllReports, saveReport, deleteReport } from "../drafts";
 import { flushQueue, readQueue, type QueuedSubmission } from "../submissionQueue";
-import { i18n, setLocale } from "../i18n";
+import { i18n, LOCALES, setLocale, type Locale } from "../i18n";
 
 interface AppState {
   identity: ReporterIdentity | null;
@@ -15,13 +15,13 @@ interface AppState {
   /** Submissions waiting to be anchored, e.g. after a dropped connection. */
   queue: QueuedSubmission[];
   flushing: boolean;
-  locale: "en" | "hi";
+  locale: Locale;
   refreshIdentity: () => Promise<void>;
   refreshReports: () => Promise<void>;
   retryQueued: () => Promise<void>;
   upsertReport: (report: AnonymousReport) => Promise<void>;
   removeReport: (id: string) => Promise<void>;
-  switchLocale: (locale: "en" | "hi") => void;
+  switchLocale: (locale: Locale) => void;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -33,7 +33,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [reports, setReports] = useState<AnonymousReport[]>([]);
   const [queue, setQueue] = useState<QueuedSubmission[]>([]);
   const [flushing, setFlushing] = useState(false);
-  const [locale, setLocaleState] = useState<"en" | "hi">(i18n.locale === "hi" ? "hi" : "en");
+  const [locale, setLocaleState] = useState<Locale>(
+    LOCALES.includes(i18n.locale as Locale) ? (i18n.locale as Locale) : "en"
+  );
 
   /**
    * Load the identity, and always mark the attempt finished.
@@ -123,7 +125,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [refreshReports]
   );
 
-  const switchLocale = useCallback((next: "en" | "hi") => {
+  const switchLocale = useCallback((next: Locale) => {
     setLocale(next);
     setLocaleState(next);
   }, []);
