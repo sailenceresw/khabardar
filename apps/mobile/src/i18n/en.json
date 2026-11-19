@@ -49,6 +49,7 @@
     "more": "More"
   },
   "compose": {
+    "removeEvidence": "Remove this attachment",
     "title": "New report",
     "categoryLabel": "Category",
     "bodyLabel": "What happened?",
@@ -225,6 +226,7 @@
     "verifyKey": "Check against their domain"
   },
   "feed": {
+    "openReportHint": "Opens the full report",
     "title": "Public feed",
     "reportTitle": "Report",
     "subtitle": "Reports others chose to publish. Nothing here is proof — check the verification label before you believe it.",

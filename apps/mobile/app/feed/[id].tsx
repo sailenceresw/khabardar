@@ -167,7 +167,7 @@ export default function FeedReportScreen() {
 
       <Card>
         <Body dim>{t("feed.reporter")}</Body>
-        <Pressable onPress={() => router.push(`/profile/${report!.reporter}`)}>
+        <Pressable onPress={() => router.push(`/profile/${report!.reporter}`)} accessibilityRole="link" hitSlop={10}>
           <Text style={styles.link}>{report.reporterCodename}</Text>
         </Pressable>
         {!isOwn ? (
@@ -248,6 +248,8 @@ export default function FeedReportScreen() {
           {[ReactionKind.Important, ReactionKind.Support].map((kind) => (
             <Pressable
               key={kind}
+              accessibilityRole="button"
+              accessibilityState={{ selected: mine === kind }}
               onPress={async () => {
                 if (!identity) return;
                 await react(Number(id), identity.address, mine === kind ? null : kind);
@@ -280,6 +282,7 @@ export default function FeedReportScreen() {
 
         <TextInput
           style={styles.commentInput}
+          accessibilityLabel={t("social.commentPlaceholder")}
           multiline
           maxLength={MAX_COMMENT_LENGTH}
           placeholder={t("social.commentPlaceholder")}
@@ -346,6 +349,8 @@ function CommentRow({
           ].map((reason) => (
             <Pressable
               key={reason}
+              accessibilityRole="button"
+              hitSlop={8}
               onPress={async () => {
                 await reportComment(comment.id, reason);
                 setReporting(false);
@@ -360,7 +365,7 @@ function CommentRow({
           ))}
         </View>
       ) : (
-        <Pressable onPress={() => setReporting(true)}>
+        <Pressable onPress={() => setReporting(true)} accessibilityRole="button" hitSlop={10}>
           <Text style={styles.reportLink}>
             {isMine ? t("social.reportOwn") : t("social.reportComment")}
           </Text>
