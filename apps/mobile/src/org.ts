@@ -17,6 +17,7 @@ import {
   type OrgSeat,
 } from "@khabardar/shared";
 import { utf8ToBytes } from "./cryptoUtils";
+import { clearOrgRecipientKey } from "./orgRecipientKey";
 import { safeJsonParse } from "./safeJson";
 
 /**
@@ -222,6 +223,9 @@ export async function getEntitlements(): Promise<OrgEntitlements> {
 }
 
 export async function signOutOrg(): Promise<void> {
+  // The recipient key opens restricted reports, so it leaves with the org.
+  // Panic delete calls this, which is what wipes it from a seized device.
+  await clearOrgRecipientKey();
   await AsyncStorage.removeItem(ORG_KEY);
 }
 
