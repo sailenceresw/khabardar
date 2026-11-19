@@ -43,7 +43,6 @@ export default function AnalyticsScreen() {
 
   return (
     <Screen>
-      <Title>{t("analytics.title")}</Title>
 
       <Card style={{ borderColor: colors.info }}>
         <Body dim>{t("analytics.privacyNote", { n: MIN_BUCKET_SIZE })}</Body>
