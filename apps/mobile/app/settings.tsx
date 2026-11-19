@@ -56,6 +56,13 @@ export default function SettingsScreen() {
               onPress={() => switchLocale("hi")}
             />
           </View>
+          <View style={styles.flex}>
+            <Button
+              label={t("settings.nepali")}
+              variant={locale === "ne" ? "primary" : "secondary"}
+              onPress={() => switchLocale("ne")}
+            />
+          </View>
         </View>
       </Card>
 
