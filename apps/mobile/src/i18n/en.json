@@ -528,6 +528,31 @@
     "keyNone": "No recipient key on this device, so restricted reports stay locked.",
     "decryptedHere": "Decrypted on this device. The key and the text never left it."
   },
+  "plans": {
+    "title": "Plans",
+    "open": "See plans and pricing",
+    "reportersFree": "Reporting is free and always will be. Reporters never need an account.",
+    "intro": "Reports stay free and public for everyone. Organisations that act on them pay for the tools around them: export, analytics, case management and API access.",
+    "pilot": "Pilot pricing. There is no billing yet; plans are agreed directly during the pilot.",
+    "free": "Free",
+    "perMonth": "$%{price} / month",
+    "for": {
+      "community": "For nonprofit journalism, accredited watchdogs and transparency chapters.",
+      "pro": "For funded newsrooms and mid-size NGOs.",
+      "institutional": "For oversight bodies, universities, large NGOs and compliance teams."
+    },
+    "feature": {
+      "seats": { "one": "1 seat", "other": "%{count} seats" },
+      "search": "Advanced search across the public corpus",
+      "export": "Export and verifiable case files",
+      "analytics": "Analytics with small counts withheld",
+      "cases": "Case management with outcome tracking",
+      "api": "API access, %{count} calls a day"
+    },
+    "accreditation": "Paid features need accreditation first, so the tools reach organisations that are accountable for how they use them.",
+    "lapse": "If a plan lapses, features drop to Community after 30 days. Nothing is deleted.",
+    "openOrg": "Organisation workspace"
+  },
   "caseFile": {
     "title": "Case file",
     "mockMode": "Made in mock mode. Nothing in this file was read from or written to a blockchain. It is not evidence.",

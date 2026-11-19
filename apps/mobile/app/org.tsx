@@ -119,6 +119,7 @@ export default function OrgScreen() {
     <Screen>
       <Title>{t("org.title")}</Title>
       <Notice tone="info">{t("org.separationWarning")}</Notice>
+      <Button label={t("plans.open")} variant="ghost" onPress={() => router.push("/plans")} />
 
       {!org ? (
         <Card>
