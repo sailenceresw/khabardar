@@ -1,0 +1,160 @@
+{
+  "about": "Synthetic report texts for evaluating the leak detectors. Every person, number, plate, address and account is invented. Labels follow the guideline in docs/LEAK_CHECKER.md and mark what a careful reviewer would want the reporter to look at, whether or not the detectors catch it.",
+  "guideline": {
+    "email": "Any email address, including obfuscated ones.",
+    "phone": "Any phone number in any format, including numbers written in words.",
+    "national-id": "Citizenship, national ID, PAN, passport, licence or National Insurance numbers.",
+    "vehicle-plate": "Vehicle registration numbers in any script.",
+    "personal-url": "Links to personal social media accounts, and @handles.",
+    "street-address": "House, flat or plot numbers, numbered street addresses, and full postcodes. Not wards, areas or towns.",
+    "personal-name": "Names of individual people in any role, including the people being reported on. Not businesses, temples or places named after people.",
+    "quasi-identifier": "First-person details that narrow down the reporter (labelled with the closest rule), plus any exact day-level date or clock time."
+  },
+  "items": [
+    { "id": "clean-01", "text": "Staff at the land revenue office charge Rs 5,000 extra for every registration. Nobody gets a receipt.", "expected": [] },
+    { "id": "clean-02", "text": "The ward office has been asking for money to issue recommendation letters since last year.", "expected": [] },
+    { "id": "clean-03", "text": "Road contractors in the district used thinner asphalt than the tender required. The road broke within a month.", "expected": [] },
+    { "id": "clean-04", "text": "Teachers at the community school are paid for twelve months but the school only runs for nine.", "expected": [] },
+    { "id": "clean-05", "text": "Medicines delivered to the health post are sold at the private pharmacy across the road.", "expected": [] },
+    { "id": "clean-06", "text": "The municipality bought forty laptops last year. Only ten ever reached the schools.", "expected": [] },
+    { "id": "clean-07", "text": "Applicants for driving licences are told the written test is full unless they pay an agent.", "expected": [] },
+    { "id": "clean-08", "text": "Relief rice meant for flood victims was repackaged and sold in the market in 2080.", "expected": [] },
+    { "id": "clean-09", "text": "Contractors on the bridge project were paid twice for the same work, once in Shrawan and again in Kartik.", "expected": [] },
+    { "id": "clean-10", "text": "The council awarded the cleaning contract to a firm with no staff and no equipment.", "expected": [] },
+    { "id": "clean-11", "text": "At the passport office, files move faster if you pay the man at the gate.", "expected": [] },
+    { "id": "clean-12", "text": "Tax officials accept cash to reduce assessments for large shops in the bazaar.", "expected": [] },
+    { "id": "clean-13", "text": "The hospital charges patients for free government medicines. This happens every week.", "expected": [] },
+    { "id": "clean-14", "text": "Police at the checkpoint take Rs 500 from every truck that passes after dark.", "expected": [] },
+    { "id": "clean-15", "text": "Funds for the irrigation canal were spent, but the canal was never dug.", "expected": [] },
+    { "id": "clean-16", "text": "A local NGO received money for training sessions that never happened, according to several villagers.", "expected": [] },
+    { "id": "clean-17", "text": "Nobody at the office knows where the money went. Many of us have asked.", "expected": [] },
+    { "id": "clean-18", "text": "The audit report for 2079/80 was never published.", "expected": [] },
+
+    { "id": "pos-01", "text": "My name is Sunita Lama and I work in the finance section.", "expected": [
+      { "type": "personal-name", "text": "Sunita Lama" },
+      { "type": "quasi-identifier", "rule": "first-person-role", "text": "I work in the finance section" } ] },
+    { "id": "pos-02", "text": "Call me on 9841234567 if you need the documents.", "expected": [
+      { "type": "phone", "text": "9841234567" } ] },
+    { "id": "pos-03", "text": "You can reach me at +977-1-4412345 during office hours.", "expected": [
+      { "type": "phone", "text": "+977-1-4412345" } ] },
+    { "id": "pos-04", "text": "Email me at r.thapa77@gmail.com and I will send copies.", "expected": [
+      { "type": "email", "text": "r.thapa77@gmail.com" } ] },
+    { "id": "pos-05", "text": "I am the only accountant in the district office, so I saw every voucher.", "expected": [
+      { "type": "quasi-identifier", "rule": "unique-role", "text": "I am the only accountant in the district office" } ] },
+    { "id": "pos-06", "text": "The files were kept in my drawer and someone took them.", "expected": [
+      { "type": "quasi-identifier", "rule": "personal-workspace", "text": "my drawer" } ] },
+    { "id": "pos-07", "text": "I was asked to sign the false bills by the section officer.", "expected": [
+      { "type": "quasi-identifier", "rule": "personal-access", "text": "I was asked to sign" } ] },
+    { "id": "pos-08", "text": "It happened on 3 March at 4:15 in the afternoon.", "expected": [
+      { "type": "quasi-identifier", "rule": "exact-date", "text": "3 March" },
+      { "type": "quasi-identifier", "rule": "exact-time", "text": "4:15" } ] },
+    { "id": "pos-09", "text": "My citizenship number is 27-01-72-12345 and they copied it.", "expected": [
+      { "type": "national-id", "text": "27-01-72-12345" } ] },
+    { "id": "pos-10", "text": "The officer drives a jeep with plate Ba 2 Pa 1234 to his farm.", "expected": [
+      { "type": "vehicle-plate", "text": "Ba 2 Pa 1234" } ] },
+    { "id": "pos-11", "text": "Photos are on my page facebook.com/sita.thapa.88 if you want them.", "expected": [
+      { "type": "personal-url", "text": "facebook.com/sita.thapa.88" } ] },
+    { "id": "pos-12", "text": "I live at house no. 23 near the temple.", "expected": [
+      { "type": "street-address", "text": "house no. 23" } ] },
+    { "id": "pos-13", "text": "Only three of us work in that unit, and I am one of them.", "expected": [
+      { "type": "quasi-identifier", "rule": "small-group", "text": "Only three of us" } ] },
+    { "id": "pos-14", "text": "Hari Prasad Koirala, the chief engineer, approved the payment.", "expected": [
+      { "type": "personal-name", "text": "Hari Prasad Koirala" } ] },
+    { "id": "pos-15", "text": "Mr. Adhikari told me to keep quiet about the shortfall.", "expected": [
+      { "type": "personal-name", "text": "Mr. Adhikari" } ] },
+    { "id": "pos-16", "text": "I work as the cashier at the branch on the main road.", "expected": [
+      { "type": "quasi-identifier", "rule": "first-person-role", "text": "I work as the cashier" } ] },
+    { "id": "pos-17", "text": "Only I had the key to the store room that week.", "expected": [
+      { "type": "quasi-identifier", "rule": "only-i", "text": "Only I had the key" } ] },
+    { "id": "pos-18", "text": "Since I joined in 2079 the overtime claims have doubled.", "expected": [
+      { "type": "quasi-identifier", "rule": "small-group", "text": "Since I joined" } ] },
+    { "id": "pos-19", "text": "The meeting was on 15 Falgun and only the board attended.", "expected": [
+      { "type": "quasi-identifier", "rule": "exact-date", "text": "15 Falgun" } ] },
+    { "id": "pos-20", "text": "Write to me: ram.k@protonmail.com. My phone is 07700 900123.", "expected": [
+      { "type": "email", "text": "ram.k@protonmail.com" },
+      { "type": "phone", "text": "07700 900123" } ] },
+    { "id": "pos-21", "text": "I am in the UK now. My national insurance number is AB 12 34 56 C.", "expected": [
+      { "type": "national-id", "text": "AB 12 34 56 C" } ] },
+    { "id": "pos-22", "text": "The transfer was entered on 2081/05/12 in the main register.", "expected": [
+      { "type": "quasi-identifier", "rule": "exact-date", "text": "2081/05/12" } ] },
+    { "id": "pos-23", "text": "Follow @kiran_reports for the photos I took.", "expected": [
+      { "type": "personal-url", "text": "@kiran_reports" } ] },
+    { "id": "pos-24", "text": "The money was delivered to 12 Durbar Marg in a black bag.", "expected": [
+      { "type": "street-address", "text": "12 Durbar Marg" } ] },
+    { "id": "pos-25", "text": "John Smith from the contractor's office signed for the cement.", "expected": [
+      { "type": "personal-name", "text": "John Smith" } ] },
+    { "id": "pos-26", "text": "After my transfer to the store section, I noticed the missing stock.", "expected": [
+      { "type": "quasi-identifier", "rule": "small-group", "text": "my transfer" } ] },
+    { "id": "pos-27", "text": "I personally approved three of those payments before I understood.", "expected": [
+      { "type": "quasi-identifier", "rule": "personal-access", "text": "I personally approved" } ] },
+    { "id": "pos-28", "text": "My passport number PA1234567 was used to open the account.", "expected": [
+      { "type": "national-id", "text": "PA1234567" } ] },
+    { "id": "pos-29", "text": "Sita saw the cash being counted in the back room.", "expected": [
+      { "type": "personal-name", "text": "Sita" } ] },
+    { "id": "pos-30", "text": "I am a clerk in the land office and I see this every day.", "expected": [
+      { "type": "quasi-identifier", "rule": "first-person-role", "text": "I am a clerk" } ] },
+    { "id": "pos-31", "text": "Our office is at flat 3B, 221B Baker Street, London NW1 6XE.", "expected": [
+      { "type": "street-address", "text": "flat 3B" },
+      { "type": "street-address", "text": "221B Baker Street" },
+      { "type": "street-address", "text": "NW1 6XE" } ] },
+    { "id": "pos-32", "text": "The van, AB12 CDE, was parked outside the depot all night.", "expected": [
+      { "type": "vehicle-plate", "text": "AB12 CDE" } ] },
+
+    { "id": "multi-01", "text": "I am Gita Sharma, the only nurse at the health post. Call 9812345678.", "expected": [
+      { "type": "personal-name", "text": "Gita Sharma" },
+      { "type": "quasi-identifier", "rule": "unique-role", "text": "the only nurse at the health post" },
+      { "type": "phone", "text": "9812345678" } ] },
+    { "id": "multi-02", "text": "On 12/03/2024 at 10.30 a.m. I handled the cash myself.", "expected": [
+      { "type": "quasi-identifier", "rule": "exact-date", "text": "12/03/2024" },
+      { "type": "quasi-identifier", "rule": "exact-time", "text": "10.30 a.m." },
+      { "type": "quasi-identifier", "rule": "personal-access", "text": "I handled the cash" } ] },
+    { "id": "multi-03", "text": "My desk faces the director's office, so I saw who came in at 9 pm.", "expected": [
+      { "type": "quasi-identifier", "rule": "personal-workspace", "text": "My desk" },
+      { "type": "quasi-identifier", "rule": "exact-time", "text": "9 pm" } ] },
+    { "id": "multi-04", "text": "The district engineer, Rajesh Shrestha, keeps the forged bills at house no. 45.", "expected": [
+      { "type": "personal-name", "text": "Rajesh Shrestha" },
+      { "type": "street-address", "text": "house no. 45" } ] },
+    { "id": "multi-05", "text": "I was the only woman on the purchase committee in 2080.", "expected": [
+      { "type": "quasi-identifier", "rule": "unique-role", "text": "I was the only woman on the purchase committee" } ] },
+    { "id": "multi-06", "text": "Text me on WhatsApp at wa.me/9779841234567.", "expected": [
+      { "type": "personal-url", "text": "wa.me/9779841234567" } ] },
+    { "id": "multi-07", "text": "Just me and the storekeeper had access to the godown.", "expected": [
+      { "type": "quasi-identifier", "rule": "small-group", "text": "Just me and" } ] },
+    { "id": "multi-08", "text": "I'm the sole driver for the district chief, so I know where he goes.", "expected": [
+      { "type": "quasi-identifier", "rule": "unique-role", "text": "I'm the sole driver for the district chief" } ] },
+
+    { "id": "hard-01", "text": "My number is nine eight four one, two three four, five six seven.", "expected": [
+      { "type": "phone", "text": "nine eight four one, two three four, five six seven" } ] },
+    { "id": "hard-02", "text": "Contact me through sunita at gmail dot com.", "expected": [
+      { "type": "email", "text": "sunita at gmail dot com" } ] },
+    { "id": "hard-03", "text": "रमेश श्रेष्ठ ले पैसा लिनुभयो।", "expected": [
+      { "type": "personal-name", "text": "रमेश श्रेष्ठ" } ] },
+    { "id": "hard-04", "text": "Pemba Dorje Sherpa collected the fees.", "expected": [
+      { "type": "personal-name", "text": "Pemba Dorje Sherpa" } ] },
+    { "id": "hard-05", "text": "The person who runs the cash counter on the second floor saw everything, and that is me.", "expected": [
+      { "type": "quasi-identifier", "rule": "unique-role", "text": "The person who runs the cash counter on the second floor" } ] },
+    { "id": "hard-06", "text": "Bikram Gurung and Dawa Tamang signed the papers.", "expected": [
+      { "type": "personal-name", "text": "Bikram Gurung" },
+      { "type": "personal-name", "text": "Dawa Tamang" } ] },
+    { "id": "hard-07", "text": "I keep the attendance book, and I noticed the ghost names.", "expected": [
+      { "type": "quasi-identifier", "rule": "personal-access", "text": "I keep the attendance book" } ] },
+    { "id": "hard-08", "text": "Please call 98-41-23-45-67.", "expected": [
+      { "type": "phone", "text": "98-41-23-45-67" } ] },
+    { "id": "hard-09", "text": "Ring my office line, 061 523 456.", "expected": [
+      { "type": "phone", "text": "061 523 456" } ] },
+    { "id": "hard-10", "text": "My licence was issued in Kaski, number 03-06-00123456.", "expected": [
+      { "type": "national-id", "text": "03-06-00123456" } ] },
+    { "id": "hard-11", "text": "The truck बा ३ ख ४५६७ carries the stolen timber.", "expected": [
+      { "type": "vehicle-plate", "text": "बा ३ ख ४५६७" } ] },
+    { "id": "hard-12", "text": "Only my supervisor and I can open the safe.", "expected": [
+      { "type": "quasi-identifier", "rule": "only-i", "text": "Only my supervisor and I can open the safe" } ] },
+
+    { "id": "trap-01", "text": "The money was paid through Laxmi Bank and Sita Paints.", "expected": [] },
+    { "id": "trap-02", "text": "The road near Krishna Mandir was never repaired.", "expected": [] },
+    { "id": "trap-03", "text": "The Tamang community and the Gurung families both complained.", "expected": [] },
+    { "id": "trap-04", "text": "The fee was Rs 4.50 per page, and the ratio was 3:1.", "expected": [] },
+    { "id": "trap-05", "text": "The tender reference is 27-01-72-55555.", "expected": [] },
+    { "id": "trap-06", "text": "Prem was the reason they gave for the delay.", "expected": [] },
+    { "id": "trap-07", "text": "The school is near Sunita Cold Store in the bazaar.", "expected": [] }
+  ]
+}
