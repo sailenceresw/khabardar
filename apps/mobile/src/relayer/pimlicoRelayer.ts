@@ -99,7 +99,7 @@ const RECEIPT_POLL_MS = 2_500;
  * Required env (see .env.example):
  *  - EXPO_PUBLIC_PIMLICO_API_KEY
  *  - EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS
- *  - EXPO_PUBLIC_GASLESS_PROVIDER=pimlico
+ *  - EXPO_PUBLIC_KHABARDAR_MODE=live (see src/runtimeConfig.ts)
  *  - A Pimlico sponsorship policy scoped to ReportRegistry.submitReport
  */
 export class PimlicoRelayer implements GaslessRelayer {

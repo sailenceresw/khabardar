@@ -13,7 +13,7 @@ import type { ContentStore, PutResult, StoredBundle } from "./types";
  * (JournalistsOnly).
  *
  * What a real setup needs (see README "Content layer" / issue #6):
- *  - EXPO_PUBLIC_CONTENT_STORE=ipfs
+ *  - EXPO_PUBLIC_KHABARDAR_MODE=live (see src/runtimeConfig.ts)
  *  - EXPO_PUBLIC_IPFS_API_URL     — pinning endpoint, e.g. https://api.web3.storage/upload
  *  - EXPO_PUBLIC_IPFS_API_TOKEN   — service token for that endpoint
  *  - EXPO_PUBLIC_IPFS_GATEWAY_URL — read gateway, e.g. https://w3s.link/ipfs

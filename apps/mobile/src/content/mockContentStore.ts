@@ -11,7 +11,8 @@ const PREFIX = "khabardar.content.";
  * Local stand-in for IPFS. Content-addresses the bundle exactly the way a real
  * store does — the CID is derived from the bytes, so the same bundle always
  * yields the same CID and a tampered bundle yields a different one. Active
- * whenever EXPO_PUBLIC_CONTENT_STORE is unset or "mock".
+ * in mock mode, and in live mode when the IPFS variables are incomplete
+ * (see src/runtimeConfig.ts).
  *
  * The CID here is a keccak-derived stand-in, not a real multihash; swapping in
  * IpfsContentStore produces genuine CIDv1 values without any caller changes.
