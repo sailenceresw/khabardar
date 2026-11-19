@@ -167,6 +167,10 @@ export interface FeedReport {
   locked?: boolean;
   /** True when a restricted bundle was opened with a recipient key held on this device. */
   decryptedLocally?: boolean;
+  /** Hash of the transaction that anchored the report, when known. */
+  txHash?: string;
+  /** True when `txHash` came from the mock relayer and exists on no chain. */
+  txSimulated?: boolean;
   /** True for clearly-labelled sample rows shipped so the feed is not empty. */
   demo?: boolean;
   /** True once the fetched bundle's hash matched the on-chain anchor. */

@@ -11,7 +11,10 @@ import {
   type Organization,
 } from "@khabardar/shared";
 import { getNetworkIndex, resolveFeedReports, type FeedQuery } from "../src/feed";
-import { getOrg } from "../src/org";
+import { getEntitlements, getOrg } from "../src/org";
+import { exportableReports } from "../src/export";
+import { caseFileCsv, caseFileHtml } from "../src/caseFile";
+import { downloadTextFile } from "../src/download";
 import { loadOrgRecipientKey } from "../src/orgRecipientKey";
 import { getRuntimeConfig } from "../src/runtimeConfig";
 import {
@@ -59,6 +62,8 @@ export default function OrgFeedScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [keyName, setKeyName] = useState<string | null>(null);
+  const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
+  const [exportNote, setExportNote] = useState<string | null>(null);
 
   const [category, setCategory] = useState<ReportCategory | undefined>();
   const [tier, setTier] = useState<VerificationTier | undefined>();
@@ -92,6 +97,41 @@ export default function OrgFeedScreen() {
       load();
     }, [load])
   );
+
+  const exportable = exportableReports(reports);
+  const exportableIds = new Set(exportable.map((r) => r.onChainReportId));
+  const chosen = exportable.filter((r) => selected.has(r.onChainReportId));
+
+  function toggle(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function exportCase(kind: "html" | "csv") {
+    setExportNote(null);
+    if (!(await getEntitlements()).export) {
+      setExportNote(t("org.exportNotEntitled"));
+      return;
+    }
+    const input = {
+      orgName: org?.name ?? "",
+      reports: chosen,
+      generatedAt: new Date(),
+      chain: getRuntimeConfig().chain,
+      mode: getRuntimeConfig().mode,
+      t,
+    };
+    const stamp = new Date().toISOString().slice(0, 10);
+    const saved =
+      kind === "html"
+        ? downloadTextFile(`khabardar-case-file-${stamp}.html`, "text/html", caseFileHtml(input))
+        : downloadTextFile(`khabardar-case-file-${stamp}.csv`, "text/csv", caseFileCsv(input));
+    setExportNote(saved ? t("caseFile.saved", { count: chosen.length }) : t("caseFile.webOnly"));
+  }
 
   if (org === undefined) return <Screen><LoadingBlock label={t("common.loading")} /></Screen>;
 
@@ -184,6 +224,24 @@ export default function OrgFeedScreen() {
       ) : (
         <>
           <SectionHeader title={t("feed.resultCount", { count: reports.length })} />
+          <Card>
+            <Body dim>{t("caseFile.selectHint")}</Body>
+            <Caption>{t("caseFile.selectedCount", { count: chosen.length })}</Caption>
+            <Button
+              label={t("caseFile.selectAll")}
+              variant="ghost"
+              onPress={() => setSelected(new Set(exportableIds))}
+              disabled={exportable.length === 0}
+            />
+            <Button label={t("caseFile.exportHtml")} onPress={() => exportCase("html")} disabled={chosen.length === 0} />
+            <Button
+              label={t("caseFile.exportCsv")}
+              variant="secondary"
+              onPress={() => exportCase("csv")}
+              disabled={chosen.length === 0}
+            />
+            {exportNote ? <Notice tone="info">{exportNote}</Notice> : null}
+          </Card>
           {reports.map((r) => (
             <Pressable key={r.onChainReportId} onPress={() => router.push(`/feed/${r.onChainReportId}`)}>
               <Card>
@@ -207,6 +265,15 @@ export default function OrgFeedScreen() {
                   {r.integrityVerified ? t("orgFeed.integrityOk") : t("orgFeed.integrityUnchecked")}
                   {r.demo ? ` · ${t("feed.sample")}` : ""}
                 </Text>
+                {exportableIds.has(r.onChainReportId) ? (
+                  <View style={styles.selectRow}>
+                    <Chip
+                      label={selected.has(r.onChainReportId) ? t("caseFile.selected") : t("caseFile.select")}
+                      active={selected.has(r.onChainReportId)}
+                      onPress={() => toggle(r.onChainReportId)}
+                    />
+                  </View>
+                ) : null}
               </Card>
             </Pressable>
           ))}
@@ -227,4 +294,5 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.sm },
   meta: { color: colors.textMuted, fontSize: 12 },
   decrypted: { color: colors.success, fontSize: 13 },
+  selectRow: { flexDirection: "row", marginTop: spacing.xs },
 });

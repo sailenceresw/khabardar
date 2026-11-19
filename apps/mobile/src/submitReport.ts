@@ -154,6 +154,10 @@ export async function publishReport(
       timestamp: Date.now(),
       reporter: signer.address,
       corroborations: 0,
+      // Kept so a case file can cite it, and flagged so nothing presents a
+      // fabricated mock hash as a real transaction.
+      txHash: relay.txHash,
+      txSimulated: true,
     });
   }
 

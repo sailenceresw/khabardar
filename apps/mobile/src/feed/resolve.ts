@@ -36,6 +36,8 @@ export async function resolveFeedReport(
     reporterCodename: codenameFromAddress(row.reporter),
     corroborations: row.corroborations,
     demo: row.demo,
+    txHash: row.txHash,
+    txSimulated: row.txSimulated,
   };
 
   // Sample rows carry their text inline and never touch the content layer.
