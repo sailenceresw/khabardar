@@ -1,4 +1,5 @@
 import { AMBIGUOUS_ALONE, GIVEN_NAMES, SURNAMES, TITLES } from "./names";
+import { detectQuasiIdentifiers } from "./quasi";
 import type { LeakFinding, LeakSeverity, LeakType } from "./types";
 
 /*
@@ -23,6 +24,8 @@ const REASONS: Record<LeakType, string> = {
   "street-address": "An exact address narrows the report down to one household.",
   "personal-name":
     "This looks like a person's name. If it is you, a relative or someone close to you, it can identify you. Names of the people you are reporting on are expected.",
+  // Each quasi-identifier rule has its own reason in quasi.ts; this one is the fallback.
+  "quasi-identifier": "This detail could narrow down who wrote the report.",
 };
 
 function finding(type: LeakType, start: number, text: string, severity: LeakSeverity): LeakFinding {
@@ -223,7 +226,7 @@ export function detectPersonalNames(text: string): LeakFinding[] {
 
 // All detectors
 
-const SEVERITY_RANK: Record<LeakSeverity, number> = { high: 2, medium: 1 };
+const SEVERITY_RANK: Record<LeakSeverity, number> = { high: 2, medium: 1, low: 0 };
 
 /**
  * Keep one finding per stretch of text. Where two overlap, the more severe one
@@ -254,5 +257,6 @@ export function detectLeaks(text: string): LeakFinding[] {
     ...detectPersonalUrls(text),
     ...detectStreetAddresses(text),
     ...detectPersonalNames(text),
+    ...detectQuasiIdentifiers(text),
   ]);
 }

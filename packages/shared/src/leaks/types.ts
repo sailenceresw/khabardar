@@ -6,7 +6,22 @@ export type LeakType =
   | "vehicle-plate"
   | "personal-url"
   | "street-address"
-  | "personal-name";
+  | "personal-name"
+  | "quasi-identifier";
+
+/**
+ * Which quasi-identifier rule produced a finding. Quasi-identifiers do not
+ * name anyone; they narrow the field until one person is left.
+ */
+export type QuasiRule =
+  | "unique-role"
+  | "only-i"
+  | "first-person-role"
+  | "personal-workspace"
+  | "personal-access"
+  | "small-group"
+  | "exact-time"
+  | "exact-date";
 
 /**
  * How directly the detail points at a person.
@@ -14,8 +29,10 @@ export type LeakType =
  * - `high`: identifies someone on its own (an email, a phone number, an ID).
  * - `medium`: narrows things a lot, or identifies someone only some of the time
  *   (a name that may be the accused's rather than the reporter's, a plate).
+ * - `low`: worth a second look. Often needed in a report (a date), but it can
+ *   narrow things down when combined with other details.
  */
-export type LeakSeverity = "high" | "medium";
+export type LeakSeverity = "high" | "medium" | "low";
 
 export interface LeakFinding {
   type: LeakType;
@@ -26,6 +43,8 @@ export interface LeakFinding {
   /** The flagged span, copied out so a caller does not need the original text. */
   text: string;
   severity: LeakSeverity;
+  /** Set only on `quasi-identifier` findings. */
+  rule?: QuasiRule;
   /**
    * Plain English for the reporter. The app shows a translated string keyed on
    * `type`; this one is for logs-free contexts such as the evaluation output.
