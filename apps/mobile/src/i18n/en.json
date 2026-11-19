@@ -236,6 +236,8 @@
       "30d": "Last 30 days"
     },
     "clearFilters": "Clear all filters",
+    "filters": "Filters",
+    "filtersA11y": { "one": "Filters, 1 active", "other": "Filters, %{count} active" },
     "resultCount": "%{count} reports",
     "empty": "No reports match these filters yet.",
     "restricted": "Restricted to journalists and NGOs",
