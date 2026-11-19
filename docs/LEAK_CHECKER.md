@@ -37,7 +37,7 @@ Images carry their own risks:
 
 Text is checked by small rule-based detectors in `packages/shared`. Each finding has a type, the exact span of text, a severity, and a plain-language reason the reporter can read. The detectors cover emails, Nepali (+977) and UK phone numbers, ID and citizenship number patterns, vehicle plates, URLs that contain a personal handle, street addresses, and personal names from a small on-device list of Nepali and English names plus capitalisation rules.
 
-Quasi-identifiers are caught by a short list of first-person phrases and patterns, such as "I am the only", "my desk" and exact clock times. Every rule has a test for a sentence it must not flag, because a checker that flags everything gets ignored.
+Quasi-identifiers are caught by a short list of first-person phrases and patterns, such as "I am the only", "my desk" and exact clock times. Every rule has a test for a sentence it must not flag, because a checker that flags everything gets ignored. Exact dates and times are marked low severity: most reports need some, and they only become a risk when few people were there.
 
 Images are checked for the things above where the device can do it:
 

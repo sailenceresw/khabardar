@@ -1,4 +1,4 @@
-export type { LeakFinding, LeakSeverity, LeakType } from "./types";
+export type { LeakFinding, LeakSeverity, LeakType, QuasiRule } from "./types";
 export {
   detectEmails,
   detectLeaks,
@@ -10,3 +10,4 @@ export {
   detectVehiclePlates,
   resolveOverlaps,
 } from "./detectors";
+export { detectQuasiIdentifiers } from "./quasi";
