@@ -10,6 +10,7 @@ import {
   type FeedReport,
 } from "@khabardar/shared";
 import { getNetworkIndex, resolveFeedReports, type FeedQuery } from "../../src/feed";
+import { classifySubmitError, deviceSaysOffline, type SubmitErrorKind } from "../../src/submitErrors";
 import { commentCount, following, FollowKind, type Follow } from "../../src/social";
 import {
   Badge,
@@ -65,9 +66,11 @@ export default function FeedScreen() {
   const [region, setRegion] = useState("");
   const [search, setSearch] = useState("");
   const [since, setSince] = useState<number | undefined>();
+  const [loadError, setLoadError] = useState<SubmitErrorKind | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const query: FeedQuery = { category, tier, region: region.trim() || undefined, since };
       const rows = await getNetworkIndex().list(query);
@@ -79,6 +82,9 @@ export default function FeedScreen() {
         resolved.map(async (r) => [r.onChainReportId, await commentCount(r.onChainReportId)] as const)
       );
       setCommentCounts(Object.fromEntries(counts));
+    } catch (e) {
+      // A failed load used to leave an empty list, which reads as "no reports".
+      setLoadError(classifySubmitError(e, deviceSaysOffline()));
     } finally {
       setLoading(false);
     }
@@ -241,6 +247,12 @@ export default function FeedScreen() {
 
       {loading ? (
         <LoadingBlock label={t("common.loading")} />
+      ) : loadError ? (
+        <EmptyState
+          title={t("feedError.title")}
+          body={t(`feedError.${loadError === "content" || loadError === "relayer" ? "unknown" : loadError}`)}
+          action={{ label: t("common.retry"), onPress: load }}
+        />
       ) : visible.length === 0 ? (
         <EmptyState title={t("feed.empty")} />
       ) : (

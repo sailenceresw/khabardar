@@ -817,6 +817,68 @@ async function main() {
   assert(!!openedV1 && Buffer.from(openedV1).equals(Buffer.from(ck)), "a v1 wrap must still open");
   console.log("18. recipient anonymity         : wraps unnamed, trial-opened, v1 still readable (OK)");
 
+  // 19. A failed submission says which part failed, in a way the review screen
+  // can explain, and still lands in the offline queue with its reason.
+  const { classifySubmitError, SubmitError } = require("../src/submitErrors");
+  const queueMod = require("../src/submissionQueue");
+  const relayerMod = require("../src/relayer");
+  const draft = {
+    id: "rep_fail",
+    status: "draft",
+    category: 0,
+    visibility: 0,
+    body: "a submission that fails on purpose",
+    coarseGeohash: "tsj9",
+    entityName: "",
+    evidence: [],
+    createdAt: Date.now(),
+  };
+  /** Run publishReport with one dependency broken, and return what it threw. */
+  const failWith = async (patch: () => () => void): Promise<(Error & { stage?: string }) | null> => {
+    const restore = patch();
+    try {
+      await publishReport(draft);
+      return null;
+    } catch (e) {
+      return e as Error & { stage?: string };
+    } finally {
+      restore();
+    }
+  };
+  const store = getContentStore();
+  const storePut = store.put.bind(store);
+  const storeDown = await failWith(() => {
+    store.put = async () => {
+      throw new Error("IPFS put failed: 503 Service Unavailable");
+    };
+    return () => (store.put = storePut);
+  });
+  assert(storeDown instanceof SubmitError && storeDown?.stage === "content", "a storage failure must be tagged as the content stage");
+  assert(classifySubmitError(storeDown) === "content", "a storage failure must read as the storage service being down");
+  assert(classifySubmitError(storeDown, true) === "offline", "an offline device must be told it is offline, not that storage is down");
+  const noSignal = await failWith(() => {
+    store.put = async () => {
+      throw new TypeError("Network request failed");
+    };
+    return () => (store.put = storePut);
+  });
+  assert(classifySubmitError(noSignal) === "offline", "a request that never got an answer must read as offline");
+  const relayer = relayerMod.getRelayer();
+  const relaySubmit = relayer.submitReport.bind(relayer);
+  const relayDown = await failWith(() => {
+    relayer.submitReport = async () => {
+      throw new Error("bundler rejected the user operation");
+    };
+    return () => (relayer.submitReport = relaySubmit);
+  });
+  assert(classifySubmitError(relayDown) === "relayer", "a relayer failure must read as the relayer being down");
+  await queueMod.enqueue(draft.id, relayDown?.message);
+  const queued = (await queueMod.readQueue()).find((q: { reportId: string }) => q.reportId === draft.id);
+  assert(!!queued && /bundler rejected/.test(queued.lastError), "a failed submission must stay queued with its reason");
+  await queueMod.clearQueue();
+  await require("../src/feed/localChainMirror").clearMirror();
+  console.log("19. failure states              : storage, offline, relayer told apart; queued (OK)");
+
   console.log("\n✅ ALL SLICE STEPS PASSED — compose → encrypt → hash → encode → sign → gasless submit\n");
 }
 

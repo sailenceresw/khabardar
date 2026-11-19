@@ -12,6 +12,7 @@ import { Body, Button, Card, Caption, Notice, Screen, Title } from "../../src/ui
 import { colors, spacing } from "../../src/theme";
 import { t } from "../../src/i18n";
 import { probeAnonymity } from "../../src/net/transport";
+import { classifySubmitError, deviceSaysOffline, type SubmitErrorKind } from "../../src/submitErrors";
 
 export default function ReviewScreen() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function ReviewScreen() {
   const [report, setReport] = useState<AnonymousReport | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ kind: SubmitErrorKind; detail: string } | null>(null);
   const [queued, setQueued] = useState(false);
   const [sponsor, setSponsor] = useState<string | null>(null);
   const [anonymity, setAnonymity] = useState(() => probeAnonymity());
@@ -91,9 +92,10 @@ export default function ReviewScreen() {
       // office with no signal should not have to remember to try again later
       // from somewhere else, having already taken the risk of writing it down.
       await upsertReport({ ...report, status: "failed" });
-      await enqueue(report.id, e instanceof Error ? e.message : String(e));
+      const detail = e instanceof Error ? e.message : String(e);
+      await enqueue(report.id, detail);
       setQueued(true);
-      setError(e instanceof Error ? e.message : String(e));
+      setError({ kind: classifySubmitError(e, deviceSaysOffline()), detail });
       setSubmitting(false);
       setProgressLabel(null);
     }
@@ -162,8 +164,10 @@ export default function ReviewScreen() {
 
       {error ? (
         <Card style={{ borderColor: colors.danger }}>
-          <Body>{error}</Body>
+          <Title>{t(`submitError.${error.kind}.title`)}</Title>
+          <Body>{t(`submitError.${error.kind}.body`)}</Body>
           {queued ? <Body dim>{t("queue.queuedNotice")}</Body> : null}
+          <Caption>{t("submitError.detail", { detail: error.detail })}</Caption>
         </Card>
       ) : null}
 

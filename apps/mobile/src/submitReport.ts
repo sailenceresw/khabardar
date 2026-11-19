@@ -10,6 +10,7 @@ import { bytesToHex } from "@noble/ciphers/utils";
 import { evidenceKey, uploadAllEvidence, type UploadProgress } from "./evidence";
 import { appendMirrorRow } from "./feed/localChainMirror";
 import { isolateNextRequests } from "./net/transport";
+import { atStage } from "./submitErrors";
 import { getRelayer, type RelayResult } from "./relayer";
 import { getActiveSigner } from "./signer";
 import { recordSponsoredSubmission, resolveSponsor } from "./sponsorPools";
@@ -70,7 +71,7 @@ export async function publishReport(
   // can point at them. Their bytes were already ciphertext before this call.
   // Sequential + progress so large photos on bad connections stay visible to the user,
   // and so a single failure never silently drops evidence from the submitted report.
-  const evidence = await uploadAllEvidence(report.evidence, options.onEvidenceProgress);
+  const evidence = await atStage("evidence", () => uploadAllEvidence(report.evidence, options.onEvidenceProgress));
 
   // 2. Canonical bundle. Evidence contributes its hash, pointer and key —
   // never its bytes. The key rides inside the encrypted bundle, so evidence is
@@ -116,7 +117,7 @@ export async function publishReport(
     createdAt: report.createdAt,
   });
 
-  const put = await getContentStore().put(stored);
+  const put = await atStage("content", () => getContentStore().put(stored));
 
   // 6. Anchor on-chain, gas sponsored.
   // The entity name itself never leaves the device — only its blinded tag.
@@ -126,16 +127,18 @@ export async function publishReport(
   // never pays either way — this only decides who reimburses the paymaster.
   const sponsor = await resolveSponsor(report.coarseGeohash, report.category);
 
-  const relay = await getRelayer().submitReport({
-    reportHash,
-    cid: put.cid,
-    category: report.category,
-    visibility: report.visibility,
-    coarseGeohash: report.coarseGeohash,
-    entityTag,
-    sponsorPoolId: sponsor?.poolId,
-    signer,
-  });
+  const relay = await atStage("relay", () =>
+    getRelayer().submitReport({
+      reportHash,
+      cid: put.cid,
+      category: report.category,
+      visibility: report.visibility,
+      coarseGeohash: report.coarseGeohash,
+      entityTag,
+      sponsorPoolId: sponsor?.poolId,
+      signer,
+    })
+  );
 
   if (sponsor) await recordSponsoredSubmission(sponsor.poolId);
 
