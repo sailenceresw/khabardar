@@ -7,7 +7,9 @@ Deep detail on how Khabardar works. For the short version, see the
 ## Contents
 
 - [Anonymity model](#anonymity-model)
+- [Leak checker](#leak-checker)
 - [Why React Native (Expo) and not Flutter](#why-react-native-expo-and-not-flutter)
+- [Mock and live mode](#mock-and-live-mode)
 - [Blockchain layer (Linea)](#blockchain-layer-linea)
 - [Content layer](#content-layer-how-reports-become-readable)
 - [Linking reports without deanonymizing anyone](#linking-reports-without-deanonymizing-anyone)
@@ -43,13 +45,24 @@ Concrete guarantees in this scaffold:
 | Threat | Mitigation |
 |---|---|
 | Identity leakage at signup | No PII collected, device keypair only (`src/identity.ts`) |
-| EXIF/GPS in evidence | Re-encode pipeline (`src/evidence.ts`) |
+| EXIF/GPS in evidence | Re-encode pipeline (`src/evidence.ts`), then the result is parsed and refused if any identifying metadata survived (`src/photoMetadata.ts`) |
+| Identifying details in the report text | On-device leak checker and a privacy check step before review (`packages/shared/src/leaks/`, `app/compose/privacy.tsx`); measured in [LEAK_CHECKER.md](./LEAK_CHECKER.md) |
 | Precise location in report | Geohash hard-capped at 4 chars ≈ city level (`src/geo.ts`) |
 | Device seizure | AES-256-GCM at rest + **panic delete** wipes drafts, evidence, keys, identity (`src/panic.ts`) |
 | Content on a public chain | Only `keccak256` fingerprints go on-chain, never content |
 | Network observation | Embedded Tor (Arti) in `modules/expo-tor`, reached through the single egress seam in `src/net/` |
 | Device inspected while unlocked | Stealth mode: PIN, duress PIN, disguise, screenshot blocking (`src/stealth.ts`) |
 | Sybil corroboration | Semaphore personhood gate (`SemaphorePersonhoodGate.sol`, `src/personhood.ts`) |
+
+## Leak checker
+
+Encryption hides a report from the wrong readers. It does nothing about a report that names its own author to the right ones: "as the only accountant in the district office" is enough for anyone who works there. The leak checker reads the draft on the device and points those details out before submission.
+
+- In text, rule-based detectors in `packages/shared/src/leaks/` find emails, phone numbers, ID numbers, vehicle plates, personal links and handles, street addresses and personal names, plus first-person details that narrow the field (a unique role, "my desk", exact times and dates). `detectLeaks()` returns each finding with its span, a severity and a reason.
+- For photos, after the re-encode, `assertPhotoMetadataRemoved` parses the JPEG or PNG and refuses to store it if GPS, an identifying Exif field, XMP, IPTC or a comment survived, or if the file cannot be read. Face and visible-text detection need native modules and are not in any build yet; `src/imageChecks.ts` reports them as unavailable, and the privacy check says so.
+- The privacy check step (`app/compose/privacy.tsx`) sits between compose and review. It highlights each finding in the report and offers Fix, Redact or Keep anyway. It advises and never blocks.
+
+It is pure TypeScript and a few word lists, so it makes no network requests and runs offline; the draft is the most sensitive thing the app holds, and sending it anywhere to be checked would create the copy the rest of the design avoids. Coverage, limits and the measured precision and recall are in [LEAK_CHECKER.md](./LEAK_CHECKER.md); `npm run eval:leaks` reproduces the numbers.
 
 ## Why React Native (Expo) and not Flutter
 
@@ -64,6 +77,25 @@ Both are fine cross-platform frameworks; the deciding factor is the **blockchain
 3. **Expo's security-relevant modules** (SecureStore → Keychain/Keystore, expo-crypto,
    ImageManipulator for EXIF-free re-encode) cover our anonymity primitives out of the
    box, plus EAS OTA updates let us ship security fixes without store review delays.
+
+## Mock and live mode
+
+One switch decides whether the app talks to real infrastructure: `EXPO_PUBLIC_KHABARDAR_MODE` in the app, or `KHABARDAR_MODE`, which wins when both are set so a one-off script run can override `.env`. `apps/mobile/src/runtimeConfig.ts` is the only place that reads it, and the relayer, content store, feed source and karma read all come from its result.
+
+- Mock, the default, uses the mock relayer, the mock content store and the mock feed. Nothing leaves the device and no credentials are needed.
+- Live turns each piece on once its variables are complete: the relayer with a key and a registry address, the IPFS store with its three `EXPO_PUBLIC_IPFS_*` values, the feed from an indexer or directly from the registry. A piece with missing or malformed variables stays on its mock, and the reason is logged once, never the values. Live mode refuses to run against Linea mainnet (59144).
+
+What live mode exposes, and to whom, beyond what the chain itself publishes:
+
+| Service | Sees |
+|---|---|
+| Relayer or bundler | The signed submission and the connecting IP address |
+| IPFS pinning service | Encrypted bundles and evidence blobs (never plaintext) and the connecting IP address |
+| RPC endpoint and indexer | Which reports and blocks are read, and the connecting IP address |
+
+The IP address is the reason the egress seam exists: with Tor running, each of these sees an exit relay instead (see [Egress](#egress-one-seam-for-everything)). Secrets live only in a local `.env`, which is gitignored; `.env.example` documents every variable with placeholders.
+
+When a live piece fails, `src/submitErrors.ts` tells the reporter which: no connection, storage down, relayer down, wrong network, or the fail-closed anonymity switch refusing to send. The report is queued on the device either way and retried when the reporter chooses.
 
 ## Blockchain layer (Linea)
 
@@ -246,6 +278,12 @@ selected plan until a human verifies it, because analytics over a whistleblower 
 should never be one signup form away. Plans and entitlements gate corpus export
 (`apps/mobile/src/export.ts`), which excludes restricted reports and never exports
 reporter addresses.
+
+The organisation side of the app has three pieces built on that separation:
+
+- Reports (`app/org-feed.tsx`) filters the corpus by category, district, verification tier and corroboration count, from whichever source the mode switch picked, and says whether that is mock data or Linea Sepolia.
+- Recipient keys (`src/orgRecipientKey.ts`): a restricted report's content key is wrapped to each recipient pinned in the app. An organisation that holds the private half of one of those keys can store it on its own device, and restricted reports sealed to it open there, marked as decrypted on this device. A key is accepted only if it matches a pinned recipient, it is re-checked on every load, it never leaves the device, and it is removed on sign-out, which panic delete calls. Pinning is unchanged: this cannot open anything the reporter did not seal to that organisation.
+- Case files (`src/caseFile.ts`) export selected reports as CSV and as an HTML document that prints to PDF. Each report carries its on-chain fingerprint, content address, transaction hash and an explorer link, with the steps to check it has not changed. Report text is escaped, CSV formula cells are neutralised, reporter addresses are left out, and a file made in mock mode says it is not evidence.
 
 ## Verification and moderation
 
