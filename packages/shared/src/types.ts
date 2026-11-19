@@ -165,6 +165,8 @@ export interface FeedReport {
   evidenceCount?: number;
   /** True when the bundle is JournalistsOnly and we hold no unwrapping key. */
   locked?: boolean;
+  /** True when a restricted bundle was opened with a recipient key held on this device. */
+  decryptedLocally?: boolean;
   /** True for clearly-labelled sample rows shipped so the feed is not empty. */
   demo?: boolean;
   /** True once the fetched bundle's hash matched the on-chain anchor. */

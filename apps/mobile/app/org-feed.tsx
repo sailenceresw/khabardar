@@ -12,6 +12,7 @@ import {
 } from "@khabardar/shared";
 import { getNetworkIndex, resolveFeedReports, type FeedQuery } from "../src/feed";
 import { getOrg } from "../src/org";
+import { loadOrgRecipientKey } from "../src/orgRecipientKey";
 import { getRuntimeConfig } from "../src/runtimeConfig";
 import {
   Body,
@@ -57,6 +58,7 @@ export default function OrgFeedScreen() {
   const [reports, setReports] = useState<FeedReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [keyName, setKeyName] = useState<string | null>(null);
 
   const [category, setCategory] = useState<ReportCategory | undefined>();
   const [tier, setTier] = useState<VerificationTier | undefined>();
@@ -70,9 +72,12 @@ export default function OrgFeedScreen() {
       const current = await getOrg();
       setOrg(current);
       if (!current) return;
+      const recipientKey = await loadOrgRecipientKey();
+      setKeyName(recipientKey?.recipient.name ?? null);
       const query: FeedQuery = { category, tier, region: region.trim() || undefined, minCorroborations };
       const rows = await getNetworkIndex().list(query);
-      const resolved = await resolveFeedReports(rows);
+      // The key is used here, on this device, and nowhere else.
+      const resolved = await resolveFeedReports(rows, recipientKey?.privKeyHex);
       // Most corroborated first: that is the order an investigator triages in.
       setReports(resolved.sort((a, b) => b.corroborations - a.corroborations || b.timestamp - a.timestamp));
     } catch {
@@ -113,6 +118,7 @@ export default function OrgFeedScreen() {
         <Notice tone={live ? "success" : "info"}>
           {live ? t("orgFeed.sourceLive", { source }) : t("orgFeed.sourceMock")}
         </Notice>
+        <Caption>{keyName ? t("orgFeed.keyActive", { name: keyName }) : t("orgFeed.keyNone")}</Caption>
       </Card>
 
       <Card>
@@ -192,6 +198,7 @@ export default function OrgFeedScreen() {
                 ) : (
                   <Body>{truncate(r.body ?? "", 160)}</Body>
                 )}
+                {r.decryptedLocally ? <Text style={styles.decrypted}>🔓 {t("orgFeed.decryptedHere")}</Text> : null}
                 <Text style={styles.meta}>
                   #{r.onChainReportId} · {r.coarseGeohash || "—"} · {new Date(r.timestamp).toISOString().slice(0, 10)} ·{" "}
                   {t("feed.corroborations", { count: r.corroborations })}
@@ -219,4 +226,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.sm },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.sm },
   meta: { color: colors.textMuted, fontSize: 12 },
+  decrypted: { color: colors.success, fontSize: 13 },
 });

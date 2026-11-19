@@ -9,6 +9,7 @@ import {
   type FeedReport,
 } from "@khabardar/shared";
 import { getNetworkIndex, resolveFeedReport } from "../../src/feed";
+import { loadOrgRecipientKey } from "../../src/orgRecipientKey";
 import {
   hasCorroboratedLocally,
   markCorroboratedLocally,
@@ -75,7 +76,10 @@ export default function FeedReportScreen() {
     try {
     const reportId = Number(id);
     const row = await getNetworkIndex().get(reportId);
-    const resolved = row ? await resolveFeedReport(row) : null;
+    // An organisation's recipient key, if one is stored, opens restricted
+    // reports sealed to it. It is used here and never leaves the device.
+    const recipientKey = await loadOrgRecipientKey();
+    const resolved = row ? await resolveFeedReport(row, recipientKey?.privKeyHex) : null;
     setReport(resolved);
     setAlreadyCorroborated(await hasCorroboratedLocally(reportId));
 
@@ -158,6 +162,7 @@ export default function FeedReportScreen() {
         ) : (
           <Body>{report.body}</Body>
         )}
+        {report.decryptedLocally ? <Notice tone="success">{t("orgFeed.decryptedHere")}</Notice> : null}
       </Card>
 
       <Card>

@@ -75,6 +75,9 @@ export async function resolveFeedReport(
     body: bundle.body,
     evidenceCount: bundle.evidence.length,
     integrityVerified: recomputed.toLowerCase() === row.reportHash.toLowerCase(),
+    // A wrapped keyring only opens with a recipient key held here, so the
+    // screen can say the report was decrypted on this device.
+    decryptedLocally: stored.keyring.mode === "wrapped",
   };
 }
 
