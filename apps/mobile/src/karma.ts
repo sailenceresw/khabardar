@@ -2,6 +2,7 @@ import { createPublicClient, type Address } from "viem";
 import { lineaSepolia } from "viem/chains";
 import { ACTIVE_CHAIN, REPORT_REGISTRY_ABI } from "@khabardar/shared";
 import { anonymisingRpcTransport } from "./net/transport";
+import { getRuntimeConfig } from "./runtimeConfig";
 
 /**
  * Read a reporter's karma from the registry.
@@ -22,7 +23,8 @@ import { anonymisingRpcTransport } from "./net/transport";
  * switch off, this is a direct RPC like the feed, and it is logged as one.
  */
 export async function readKarma(address: Address): Promise<bigint | null> {
-  const registry = process.env.EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS as Address | undefined;
+  // Only set in live mode, so mock mode never makes this RPC.
+  const registry = getRuntimeConfig().registryAddress;
   if (!registry) return null;
 
   try {

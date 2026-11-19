@@ -1,4 +1,5 @@
 import type { Address } from "viem";
+import { getRuntimeConfig } from "../runtimeConfig";
 import { ChainNetworkIndex } from "./chainNetworkIndex";
 import { IndexerNetworkIndex } from "./indexerNetworkIndex";
 import { MockNetworkIndex } from "./mockNetworkIndex";
@@ -12,26 +13,23 @@ export { IndexerNetworkIndex } from "./indexerNetworkIndex";
 let instance: NetworkIndex | null = null;
 
 /**
- * Pick the feed source. Preference order, most scalable first:
+ * Pick the feed source. In mock mode this is always the mock: local mirror
+ * plus labelled sample rows, no network. In live mode, most scalable first:
  *
  *  1. **Indexer** when `EXPO_PUBLIC_INDEXER_URL` is set — the only option that
  *     survives real volume.
  *  2. **Direct chain reads** when a registry address is configured — correct,
  *     no infrastructure, does not scale.
- *  3. **Mock** otherwise — local mirror plus labelled sample rows, no network.
+ *  3. **Mock** when neither is configured.
  */
 export function getNetworkIndex(): NetworkIndex {
   if (instance) return instance;
 
-  const indexerUrl = process.env.EXPO_PUBLIC_INDEXER_URL;
-  const registry = process.env.EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS as Address | undefined;
-  const provider = process.env.EXPO_PUBLIC_GASLESS_PROVIDER ?? "mock";
-
-  if (indexerUrl) {
-    instance = new IndexerNetworkIndex(indexerUrl);
-  } else if (provider !== "mock" && registry) {
-    // Only read from chain when we are actually writing to it.
-    instance = new ChainNetworkIndex(registry);
+  const { feed } = getRuntimeConfig();
+  if (feed.kind === "indexer") {
+    instance = new IndexerNetworkIndex(feed.url);
+  } else if (feed.kind === "chain") {
+    instance = new ChainNetworkIndex(feed.registryAddress as Address);
   } else {
     instance = new MockNetworkIndex();
   }

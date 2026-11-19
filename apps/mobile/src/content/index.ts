@@ -1,3 +1,4 @@
+import { getRuntimeConfig } from "../runtimeConfig";
 import { IpfsContentStore } from "./ipfsContentStore";
 import { MockContentStore } from "./mockContentStore";
 import type { ContentStore } from "./types";
@@ -8,23 +9,18 @@ export { IpfsContentStore } from "./ipfsContentStore";
 
 let instance: ContentStore | null = null;
 
+/** The content store `KHABARDAR_MODE` selects. See `runtimeConfig.ts` for when live falls back to mock. */
 export function getContentStore(): ContentStore {
   if (instance) return instance;
 
-  const provider = process.env.EXPO_PUBLIC_CONTENT_STORE ?? "mock";
-  const apiUrl = process.env.EXPO_PUBLIC_IPFS_API_URL;
-  const apiToken = process.env.EXPO_PUBLIC_IPFS_API_TOKEN;
-  const gatewayUrl = process.env.EXPO_PUBLIC_IPFS_GATEWAY_URL;
-
-  if (provider === "ipfs" && apiUrl && apiToken && gatewayUrl) {
-    instance = new IpfsContentStore({ apiUrl, apiToken, gatewayUrl });
-  } else {
-    if (provider === "ipfs") {
-      console.warn(
-        "[content] EXPO_PUBLIC_CONTENT_STORE=ipfs but API url/token/gateway missing — falling back to mock"
-      );
-    }
-    instance = new MockContentStore();
-  }
+  const { content } = getRuntimeConfig();
+  instance =
+    content.kind === "ipfs"
+      ? new IpfsContentStore({
+          apiUrl: content.apiUrl,
+          apiToken: content.apiToken,
+          gatewayUrl: content.gatewayUrl,
+        })
+      : new MockContentStore();
   return instance;
 }
