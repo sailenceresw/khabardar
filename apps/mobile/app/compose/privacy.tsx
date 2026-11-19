@@ -6,7 +6,7 @@ import { useApp } from "../../src/state/AppContext";
 import { loadReport } from "../../src/drafts";
 import { imageCheckCapabilities } from "../../src/imageChecks";
 import { findingKey, openFindings, reasonKey, redactFinding, replaceFinding, segmentBody } from "../../src/privacyCheck";
-import { Body, Button, Card, Caption, Field, Notice, Screen } from "../../src/ui";
+import { Body, Button, Card, Caption, Field, Notice, Screen, StepIndicator } from "../../src/ui";
 import { colors, radius, spacing } from "../../src/theme";
 import { t } from "../../src/i18n";
 
@@ -79,7 +79,21 @@ export default function PrivacyCheckScreen() {
   }
 
   return (
-    <Screen>
+    <Screen
+      footer={
+        <Button
+          label={
+            findings.length === 0
+              ? t("privacy.continue")
+              : t("privacy.continueWithWarnings", { count: findings.length })
+          }
+          onPress={next}
+          loading={saving}
+        />
+      }
+    >
+      <StepIndicator current={1} />
+
       {/* The stack header already shows the title, so the card carries only the explanation. */}
       <Card>
         <Body dim>{t("privacy.intro")}</Body>
@@ -164,16 +178,6 @@ export default function PrivacyCheckScreen() {
           {hasFiles ? <Body dim>{t("compose.documentMetadataWarning")}</Body> : null}
         </Card>
       ) : null}
-
-      <Button
-        label={
-          findings.length === 0
-            ? t("privacy.continue")
-            : t("privacy.continueWithWarnings", { count: findings.length })
-        }
-        onPress={next}
-        loading={saving}
-      />
     </Screen>
   );
 }
