@@ -41,9 +41,8 @@ Quasi-identifiers are caught by a short list of first-person phrases and pattern
 
 Images are checked for the things above where the device can do it:
 
-- Photos are already re-encoded before storage (`apps/mobile/src/evidence.ts`), which drops EXIF, IPTC and XMP metadata including GPS. The checker confirms that step ran.
-- Faces are detected and can be blurred with one tap.
-- Visible text is flagged where an on-device text recogniser is available. The web preview has no native modules, so there the checker says it could not look rather than implying the image is clean.
+- Photos are re-encoded before storage (`apps/mobile/src/evidence.ts`), which drops EXIF, IPTC and XMP metadata including GPS. The app then parses the re-encoded file and refuses to store it if GPS, an identifying Exif field (camera make or model, dates, owner, serial numbers), XMP, IPTC or a comment block survived, or if the file cannot be read (`apps/mobile/src/photoMetadata.ts`). An Exif block with only technical fields such as orientation or colour space is allowed, because some platform encoders write one on every image.
+- Faces are to be detected and blurred with one tap, and visible text flagged, using an on-device recogniser. Neither is in any build yet: both need native modules that have not been tested on a phone. Until then the privacy check says it could not look, rather than implying the image is clean. The web preview cannot load native modules at all, so this will stay true there.
 
 The results appear as a privacy check step between Review and Submit. Each finding is highlighted in the text with three choices: fix it, redact it, or keep it anyway. The reporter can always submit.
 
