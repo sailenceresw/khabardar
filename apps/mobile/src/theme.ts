@@ -17,6 +17,8 @@ export const colors = {
   successMuted: "#1a2e1f",
   info: "#4c8dd6",
   infoMuted: "#1a2738",
+  /** Behind the phone-width app column on a wide web screen. */
+  backdrop: "#07090c",
 };
 
 export const spacing = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 };

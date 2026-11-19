@@ -1,5 +1,8 @@
 import React, { useEffect } from "react";
+import { View } from "react-native";
 import { Stack } from "expo-router";
+import { AppFrame } from "../src/AppFrame";
+import { TabBar } from "../src/TabBar";
 import { StatusBar } from "expo-status-bar";
 import * as ScreenCapture from "expo-screen-capture";
 import { ErrorBoundary } from "../src/ErrorBoundary";
@@ -14,38 +17,41 @@ function RootStack() {
   // Re-render titles when locale changes.
   useApp();
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.surface },
-        headerTintColor: colors.text,
-        headerTitleStyle: { fontWeight: "700" },
-        contentStyle: { backgroundColor: colors.bg },
-        headerShadowVisible: false,
-      }}
-    >
-      <Stack.Screen name="index" options={{ title: t("appName") }} />
-      <Stack.Screen name="onboarding" options={{ title: t("onboarding.title"), headerBackVisible: false }} />
-      <Stack.Screen name="compose/index" options={{ title: t("compose.title") }} />
-      <Stack.Screen name="compose/privacy" options={{ title: t("privacy.title") }} />
-      <Stack.Screen name="compose/review" options={{ title: t("review.title") }} />
-      <Stack.Screen name="report/[id]" options={{ title: t("status.title") }} />
-      <Stack.Screen name="settings" options={{ title: t("settings.title") }} />
-      <Stack.Screen name="moderation" options={{ title: t("moderation.title") }} />
-      <Stack.Screen name="tips" options={{ title: t("tips.title") }} />
-      <Stack.Screen name="org" options={{ title: t("org.title") }} />
-      <Stack.Screen name="feed/index" options={{ title: t("feed.title") }} />
-      <Stack.Screen name="feed/[id]" options={{ title: t("feed.reportTitle") }} />
-      <Stack.Screen name="profile/[address]" options={{ title: t("social.title") }} />
-      <Stack.Screen name="recovery" options={{ title: t("recovery.title") }} />
-      <Stack.Screen name="wallet" options={{ title: t("wallet.title") }} />
-      <Stack.Screen name="org" options={{ title: t("org.title") }} />
-      <Stack.Screen name="stealth" options={{ title: t("stealth.title") }} />
-      <Stack.Screen name="network" options={{ title: t("net.title") }} />
-      <Stack.Screen name="analytics" options={{ title: t("analytics.title") }} />
-      <Stack.Screen name="cases" options={{ title: t("cases.title") }} />
-      <Stack.Screen name="org-feed" options={{ title: t("orgFeed.title") }} />
-      <Stack.Screen name="plans" options={{ title: t("plans.title") }} />
-    </Stack>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.text,
+          headerTitleStyle: { fontWeight: "700" },
+          contentStyle: { backgroundColor: colors.bg },
+          headerShadowVisible: false,
+        }}
+      >
+        <Stack.Screen name="index" options={{ title: t("appName") }} />
+        {/* Onboarding has its own large title, so the header would repeat it. */}
+        <Stack.Screen name="onboarding" options={{ title: t("onboarding.title"), headerShown: false }} />
+        <Stack.Screen name="compose/index" options={{ title: t("compose.title") }} />
+        <Stack.Screen name="compose/privacy" options={{ title: t("privacy.title") }} />
+        <Stack.Screen name="compose/review" options={{ title: t("review.title") }} />
+        <Stack.Screen name="report/[id]" options={{ title: t("status.title") }} />
+        <Stack.Screen name="settings" options={{ title: t("settings.title") }} />
+        <Stack.Screen name="moderation" options={{ title: t("moderation.title") }} />
+        <Stack.Screen name="tips" options={{ title: t("tips.title") }} />
+        <Stack.Screen name="org" options={{ title: t("org.title") }} />
+        <Stack.Screen name="feed/index" options={{ title: t("feed.title") }} />
+        <Stack.Screen name="feed/[id]" options={{ title: t("feed.reportTitle") }} />
+        <Stack.Screen name="profile/[address]" options={{ title: t("social.title") }} />
+        <Stack.Screen name="recovery" options={{ title: t("recovery.title") }} />
+        <Stack.Screen name="wallet" options={{ title: t("wallet.title") }} />
+        <Stack.Screen name="stealth" options={{ title: t("stealth.title") }} />
+        <Stack.Screen name="network" options={{ title: t("net.title") }} />
+        <Stack.Screen name="analytics" options={{ title: t("analytics.title") }} />
+        <Stack.Screen name="cases" options={{ title: t("cases.title") }} />
+        <Stack.Screen name="org-feed" options={{ title: t("orgFeed.title") }} />
+        <Stack.Screen name="plans" options={{ title: t("plans.title") }} />
+      </Stack>
+      <TabBar />
+    </View>
   );
 }
 
@@ -93,11 +99,13 @@ export default function Layout() {
         {/* Outermost on purpose: on web the disclosure has to come before the
             PIN screen, because a lock screen implies protection this build
             cannot provide. No-op on native. */}
-        <WebDemoGate>
-          <LockGate>
-            <RootStack />
-          </LockGate>
-        </WebDemoGate>
+        <AppFrame>
+          <WebDemoGate>
+            <LockGate>
+              <RootStack />
+            </LockGate>
+          </WebDemoGate>
+        </AppFrame>
       </AppProvider>
     </ErrorBoundary>
   );

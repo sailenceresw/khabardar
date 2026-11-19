@@ -72,7 +72,6 @@ export default function TipsScreen() {
 
   return (
     <Screen>
-      <Title>{t("tips.title")}</Title>
 
       <Card>
         <Body dim>{t("tips.intro")}</Body>

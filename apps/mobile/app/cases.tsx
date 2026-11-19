@@ -91,7 +91,6 @@ export default function CasesScreen() {
 
   return (
     <Screen>
-      <Title>{t("cases.title")}</Title>
 
       <Card style={{ borderColor: colors.info }}>
         <Body dim>{t("cases.intro")}</Body>

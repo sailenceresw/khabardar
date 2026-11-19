@@ -31,7 +31,7 @@ import {
   type JurorRecord,
 } from "../src/moderation";
 import { useApp } from "../src/state/AppContext";
-import { Badge, Body, Button, Card, Screen, TierBadge, Title } from "../src/ui";
+import { Badge, Body, Button, Card, Screen, TierBadge } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
@@ -180,7 +180,6 @@ export default function ModerationScreen() {
 
   return (
     <Screen>
-      <Title>{t("moderation.title")}</Title>
 
       <Card>
         <Body dim>{t("jury.intro")}</Body>

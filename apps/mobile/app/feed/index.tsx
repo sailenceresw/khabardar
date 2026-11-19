@@ -23,7 +23,6 @@ import {
   Screen,
   SectionHeader,
   TierBadge,
-  Title,
 } from "../../src/ui";
 import { colors, radius, spacing } from "../../src/theme";
 import { t } from "../../src/i18n";
@@ -157,7 +156,6 @@ export default function FeedScreen() {
 
   return (
     <Screen>
-      <Title>{t("feed.title")}</Title>
       <Body dim>{t("feed.subtitle")}</Body>
 
       <View style={styles.tabs}>
