@@ -22,9 +22,12 @@
 
 ## Checks
 
-- [ ] `npm run mobile:typecheck`
+- [ ] `npm run typecheck`
 - [ ] `npm run contracts:test`
+- [ ] `npm test`
+- [ ] `npm run check:i18n`
 - [ ] `npm run verify:slice --workspace apps/mobile`
+- [ ] `npm run eval:leaks` (and `-- --write` if a detector changed)
 - [ ] New user-facing strings added to **both** English and Hindi
 
 ## Screenshots
