@@ -419,6 +419,40 @@
       "no-salt": "The key to your sealed ballot is missing from this device, so it cannot be opened."
     }
   },
+  "submitError": {
+    "detail": "Technical detail: %{detail}",
+    "offline": {
+      "title": "No connection",
+      "body": "This device is offline, so the report was not sent. It is saved and encrypted on this device."
+    },
+    "anonymity": {
+      "title": "Not sent without protection",
+      "body": "You chose never to send without an anonymising connection, and none is active. Turn on Tor in Settings, Network, then try again."
+    },
+    "content": {
+      "title": "Storage service unavailable",
+      "body": "The encrypted report or its evidence could not be stored. The storage service may be down or refused the upload. Nothing was anchored on the chain."
+    },
+    "relayer": {
+      "title": "Relayer unavailable",
+      "body": "The encrypted report was stored, but the service that anchors it on the chain did not accept it. Nothing was anchored yet."
+    },
+    "network": {
+      "title": "Wrong network",
+      "body": "A wallet or service answered from a different blockchain network than the app uses, so nothing was sent. If you use a wallet, switch it to Linea Sepolia and try again."
+    },
+    "unknown": {
+      "title": "Not sent",
+      "body": "Something went wrong while sending. The report is saved on this device."
+    }
+  },
+  "feedError": {
+    "title": "Reports could not be loaded",
+    "offline": "This device is offline. Connect and try again.",
+    "anonymity": "You chose never to connect without an anonymising connection, and none is active. Turn on Tor in Settings, Network.",
+    "network": "The feed answered from a different blockchain network than the app uses, so nothing is shown.",
+    "unknown": "The report list or the storage service did not respond. Try again later."
+  },
   "queue": {
     "pending": "%{count} report(s) waiting to be sent",
     "explainer": "These could not be anchored, usually because there is no connection. They stay encrypted on this device and are retried when you open the app. Nothing is sent in the background.",
