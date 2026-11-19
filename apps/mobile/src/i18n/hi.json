@@ -1,5 +1,11 @@
 {
   "appName": "खबरदार",
+  "steps": {
+    "write": "लिखें",
+    "privacy": "निजता जाँच",
+    "review": "समीक्षा और भेजें",
+    "a11y": "चरण %{current} / %{total}: %{label}"
+  },
   "tabs": {
     "home": "होम",
     "feed": "फ़ीड",

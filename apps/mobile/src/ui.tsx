@@ -17,12 +17,16 @@ import { t } from "./i18n";
 export function Screen({
   children,
   scroll = true,
+  footer,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
+  /** Pinned below the scrolling content, for a screen's main action. */
+  footer?: React.ReactNode;
 }) {
-  if (!scroll) return <View style={styles.screen}>{children}</View>;
-  return (
+  const body = !scroll ? (
+    <View style={styles.screen}>{children}</View>
+  ) : (
     <ScrollView
       style={styles.screen}
       contentContainerStyle={styles.screenContent}
@@ -30,6 +34,46 @@ export function Screen({
     >
       {children}
     </ScrollView>
+  );
+  if (!footer) return body;
+  return (
+    <View style={styles.screen}>
+      {body}
+      <View style={styles.footer}>{footer}</View>
+    </View>
+  );
+}
+
+/**
+ * Where the reporter is in the write, privacy check, review sequence. Three
+ * screens that used to feel unrelated now read as one flow.
+ */
+export function StepIndicator({ current }: { current: 0 | 1 | 2 }) {
+  const steps = [t("steps.write"), t("steps.privacy"), t("steps.review")];
+  return (
+    <View
+      style={styles.steps}
+      accessibilityRole="progressbar"
+      accessibilityLabel={t("steps.a11y", { current: current + 1, total: steps.length, label: steps[current] })}
+    >
+      {steps.map((label, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <React.Fragment key={label}>
+            {i > 0 ? <View style={[styles.stepLine, i <= current && styles.stepLineDone]} /> : null}
+            <View style={styles.step}>
+              <View style={[styles.stepDot, (done || active) && styles.stepDotOn]}>
+                <Text style={[styles.stepNumber, (done || active) && styles.stepNumberOn]}>{done ? "✓" : i + 1}</Text>
+              </View>
+              <Text style={[styles.stepLabel, active && styles.stepLabelActive]} numberOfLines={1}>
+                {label}
+              </Text>
+            </View>
+          </React.Fragment>
+        );
+      })}
+    </View>
   );
 }
 
@@ -278,6 +322,32 @@ export function Badge({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   screenContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
+  footer: {
+    padding: spacing.md,
+    gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  steps: { flexDirection: "row", alignItems: "flex-start", paddingVertical: spacing.xs },
+  step: { alignItems: "center", gap: 4, width: 84 },
+  stepDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+  },
+  stepDotOn: { borderColor: colors.accent, backgroundColor: colors.accent },
+  stepNumber: { color: colors.textDim, fontSize: 13, fontWeight: "700" },
+  stepNumberOn: { color: colors.accentText },
+  stepLine: { flex: 1, height: 2, backgroundColor: colors.borderStrong, marginTop: 13 },
+  stepLineDone: { backgroundColor: colors.accent },
+  stepLabel: { color: colors.textDim, fontSize: 12, textAlign: "center" },
+  stepLabelActive: { color: colors.text, fontWeight: "700" },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,

@@ -1,5 +1,11 @@
 {
   "appName": "Khabardar",
+  "steps": {
+    "write": "Write",
+    "privacy": "Privacy check",
+    "review": "Review & send",
+    "a11y": "Step %{current} of %{total}: %{label}"
+  },
   "tabs": {
     "home": "Home",
     "feed": "Feed",
