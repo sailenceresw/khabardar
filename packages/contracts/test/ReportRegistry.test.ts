@@ -24,7 +24,7 @@ describe("ReportRegistry", () => {
     const [admin, reporterA, reporterB, witnessA, witnessB, jurorA, jurorB, jurorC] =
       await ethers.getSigners();
     const Factory = await ethers.getContractFactory("ReportRegistry");
-    const registry = await Factory.deploy(admin.address);
+    const registry = await Factory.deploy(admin.address, ethers.ZeroAddress);
     await registry.waitForDeployment();
 
     // A real jury, seated. The admin is auto-seated by the constructor so a

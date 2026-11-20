@@ -4,11 +4,20 @@ import { ethers } from "hardhat";
 
 async function main() {
   const [deployer] = await ethers.getSigners();
-  console.log("Deploying ReportRegistry");
+  console.log("Deploying KhabardarForwarder and ReportRegistry");
   console.log("  deployer / initial admin + first juror:", deployer.address);
 
+  // The forwarder goes first because the registry takes its address as an
+  // immutable constructor argument: it is the only contract allowed to relay a
+  // reporter's signed submission.
+  const Forwarder = await ethers.getContractFactory("KhabardarForwarder");
+  const forwarder = await Forwarder.deploy();
+  await forwarder.waitForDeployment();
+  const forwarderAddress = await forwarder.getAddress();
+  console.log("  KhabardarForwarder deployed to:", forwarderAddress);
+
   const ReportRegistry = await ethers.getContractFactory("ReportRegistry");
-  const registry = await ReportRegistry.deploy(deployer.address);
+  const registry = await ReportRegistry.deploy(deployer.address, forwarderAddress);
   await registry.waitForDeployment();
 
   const address = await registry.getAddress();
@@ -33,6 +42,7 @@ async function main() {
     JSON.stringify(
       {
         address,
+        forwarder: forwarderAddress,
         chainId: Number(network.chainId),
         deployer: deployer.address,
         deployedAt: new Date().toISOString(),
@@ -44,6 +54,7 @@ async function main() {
 
   console.log("\nAdd this to your .env:");
   console.log(`EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS=${address}`);
+  console.log(`EXPO_PUBLIC_FORWARDER_ADDRESS=${forwarderAddress}`);
 }
 
 main().catch((error) => {

@@ -253,7 +253,7 @@ describe("SemaphorePersonhoodGate", () => {
     const { gate, operator, alice, bob } = await deployFixture();
 
     const Registry = await ethers.getContractFactory("ReportRegistry");
-    const registry = await Registry.deploy(operator.address);
+    const registry = await Registry.deploy(operator.address, ethers.ZeroAddress);
     await registry.waitForDeployment();
     await (await registry.connect(operator).setPersonhoodGate(await gate.getAddress())).wait();
 

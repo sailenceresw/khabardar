@@ -244,6 +244,33 @@ Biconomy, or self-hosted [Arka](https://github.com/etherspot/arka) if operator
 independence from a commercial paymaster is required, likely the right endgame for an
 anti-corruption tool.
 
+### Signed forwarding (self-hosted relayer)
+
+The second gasless path needs no bundler or paymaster. `ReportRegistry` trusts one
+ERC-2771 forwarder, `KhabardarForwarder`, which is OpenZeppelin's `ERC2771Forwarder`
+unchanged. The phone signs an EIP-712 `ForwardRequest` for a `submitReport` call with
+its device key, and a relayer the operator runs submits it and pays the gas. The
+forwarder checks the signature, nonce and deadline, then calls the registry with the
+signer's address appended, and the registry reads the reporter from `_msgSender()`.
+
+```
+device key ──signs──▶ ForwardRequest{ from, to: registry, data: submitReport(...) }
+      │
+      ▼
+relayer (pays gas) ──execute()──▶ KhabardarForwarder ──call + sender──▶ ReportRegistry
+                                                                       reporter = device key
+```
+
+What this guarantees, tested in `packages/contracts/test/ForwardedSubmission.test.ts`:
+the signer is the reporter and the per-epoch cap counts against the signer; a relayer
+cannot change a signed request, replay it, use it after its deadline, or sign one in
+someone else's name. The forwarder address is an immutable constructor argument of the
+registry, so it cannot be swapped later. The deploy script deploys the forwarder first
+and prints both addresses.
+
+Only `submitReport` is meant to go this way. Corroboration and jury votes stay direct
+calls, and the personhood gates still read `msg.sender`.
+
 ### Privacy note on sponsored gas
 
 A paymaster sees the UserOperations it sponsors (sender address, calldata, IP of the
