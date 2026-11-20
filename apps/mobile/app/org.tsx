@@ -233,6 +233,9 @@ export default function OrgScreen() {
                   {s.email} · {s.role}
                 </Body>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("org.revokeSeatA11y", { email: s.email })}
+                  hitSlop={14}
                   onPress={async () => {
                     await revokeSeat(s.id);
                     await load();
@@ -243,6 +246,7 @@ export default function OrgScreen() {
               </View>
             ))}
             <TextInput
+              accessibilityLabel={t("org.seatEmailPlaceholder")}
               style={styles.input}
               placeholder={t("org.seatEmailPlaceholder")}
               placeholderTextColor={colors.textDim}
@@ -292,6 +296,9 @@ export default function OrgScreen() {
                     {k.label} · {k.prefix}…
                   </Body>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t("org.revokeKeyA11y", { label: k.label })}
+                    hitSlop={14}
                     onPress={async () => {
                       await revokeApiKey(k.id);
                       setNewKey(null);
@@ -303,6 +310,7 @@ export default function OrgScreen() {
                 </View>
               ))}
               <TextInput
+                accessibilityLabel={t("org.apiLabelPlaceholder")}
                 style={styles.input}
                 placeholder={t("org.apiLabelPlaceholder")}
                 placeholderTextColor={colors.textDim}

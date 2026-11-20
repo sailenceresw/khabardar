@@ -145,6 +145,7 @@ export default function NetworkScreen() {
           <Body dim>{t("net.bridgesTitle")}</Body>
           <Body dim>{t("net.bridgesExplainer")}</Body>
           <TextInput
+            accessibilityLabel={t("net.bridgesPlaceholder")}
             style={styles.bridges}
             multiline
             autoCapitalize="none"

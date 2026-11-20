@@ -49,7 +49,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
           <Text style={styles.detail} selectable>
             {error.message || String(error)}
           </Text>
-          <Pressable style={styles.retry} onPress={this.reset}>
+          <Pressable style={styles.retry} onPress={this.reset} accessibilityRole="button">
             <Text style={styles.retryLabel}>{t("common.retry")}</Text>
           </Pressable>
         </View>

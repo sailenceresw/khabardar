@@ -295,6 +295,7 @@ export default function ModerationScreen() {
                   <>
                     <Body dim>{t("jury.revealPrompt")}</Body>
                     <TextInput
+                      accessibilityLabel={t("jury.reasonPlaceholder")}
                       style={styles.input}
                       placeholder={t("jury.reasonPlaceholder")}
                       placeholderTextColor={colors.textDim}
@@ -373,7 +374,7 @@ export default function ModerationScreen() {
         </Card>
       ) : null}
 
-      <Pressable onPress={() => router.push("/")}>
+      <Pressable onPress={() => router.push("/")} accessibilityRole="link" hitSlop={10}>
         <Text style={styles.link}>{t("feed.backHome")}</Text>
       </Pressable>
     </Screen>
