@@ -26,7 +26,8 @@ and without the app ever learning your name, phone number, or email.
 
 > [!WARNING]
 > **Do not use this for real reports yet.** Khabardar is a v0 prototype. It has not been
-> audited, and it has no anonymising network transport, so a targeted user could be
+> audited, and its built-in Tor client has not yet carried a report from a real phone.
+> The web preview has no Tor at all. Until that is proven, a targeted user could be
 > deanonymized at the network layer no matter how good the cryptography is. If you are
 > genuinely at risk, use [SecureDrop](https://securedrop.org) or
 > [GlobaLeaks](https://www.globaleaks.org). See [SECURITY.md](./SECURITY.md).
@@ -36,16 +37,16 @@ and without the app ever learning your name, phone number, or email.
 <div align="center">
 <table>
 <tr>
-<td width="25%"><img src="./docs/media/onboarding.png" alt="Onboarding: no name, phone, or email is ever requested"></td>
-<td width="25%"><img src="./docs/media/home.png" alt="Home screen showing a derived codename instead of an address"></td>
-<td width="25%"><img src="./docs/media/compose.png" alt="Composing a report with category and visibility controls"></td>
-<td width="25%"><img src="./docs/media/moderation.png" alt="Moderation review queue"></td>
+<td width="25%"><img src="./docs/media/onboarding.png" alt="Welcome screen: no name, phone, or email is ever requested"></td>
+<td width="25%"><img src="./docs/media/privacy.png" alt="Privacy check highlighting a phone number, an email, a unique role, a date and a time in a draft report"></td>
+<td width="25%"><img src="./docs/media/home.png" alt="Home screen showing a derived codename and the connection status"></td>
+<td width="25%"><img src="./docs/media/feed.png" alt="Public feed with the redacted report and its verification tier"></td>
 </tr>
 <tr>
 <td align="center"><sub><b>No signup</b><br>A device key is the whole identity</sub></td>
-<td align="center"><sub><b>Codename, not address</b><br>Karma is earned, never bought</sub></td>
-<td align="center"><sub><b>Compose</b><br>Entity name never leaves the device</sub></td>
-<td align="center"><sub><b>Moderation</b><br>Tier can change; content cannot</sub></td>
+<td align="center"><sub><b>Privacy check</b><br>Finds what would identify you, on the phone</sub></td>
+<td align="center"><sub><b>Codename, not address</b><br>Says plainly when the connection is direct</sub></td>
+<td align="center"><sub><b>Public feed</b><br>Every report shows its verification tier</sub></td>
 </tr>
 </table>
 
@@ -58,8 +59,9 @@ honest answer to "can I use my own wallet?" is "yes, and it will weaken you."</s
 
 ## Status
 
-Working end-to-end today: compose → encrypt → upload to the content layer → anchor hash
-+ CID via a gasless transaction → read back in a public feed with an integrity check.
+Working end-to-end today: compose → privacy check → encrypt → upload to the content layer →
+anchor hash + CID via a gasless transaction → read back in a public feed with an integrity
+check → a newsroom exports a case file anyone can verify.
 Also wired: embedded Tor, a secret-ballot jury, zero-knowledge personhood, stealth mode,
 an offline submission queue, entity clustering, an encrypted tip channel, BIP-39
 recovery, and an optional WalletConnect identity.
@@ -69,8 +71,9 @@ credentials**.
 
 | | |
 |---|---|
-| ✅ **Built and verified** | Anonymity core, chain layer (73 contract tests), content layer, public feed, secret-ballot jury, tips, gasless abstraction, evidence upload with progress, stealth mode, offline queue, mobile design system, i18n (EN + HI) |
-| ✅ **Embedded Tor** | Arti compiled in (`modules/expo-tor`), loopback SOCKS5, hostnames resolved at the exit so there is no local DNS leak, a fresh circuit per submission, and a fail-closed switch that refuses to send rather than leak |
+| ✅ **Built and verified** | Anonymity core, chain layer (75 contract tests), content layer, public feed, secret-ballot jury, tips, gasless abstraction, evidence upload with progress, stealth mode, offline queue, mobile design system, i18n (EN + HI) |
+| ✅ **Privacy check** | On-device leak checker for phone numbers, emails, IDs, names, addresses and quieter details such as a unique role or an exact time. 92% precision and 77% recall on its own evaluation set, with the limits of that set in [docs/LEAK_CHECKER.md](./docs/LEAK_CHECKER.md). Photo metadata is checked after re-encoding; faces and visible text are not checked yet |
+| 🟡 **Embedded Tor, not yet proven on a device** | Arti compiled in (`modules/expo-tor`), loopback SOCKS5, hostnames resolved at the exit so there is no local DNS leak, a fresh circuit per submission, and a fail-closed switch that refuses to send rather than leak. The SOCKS layer is tested, but no report has yet travelled over the live Tor network from a phone |
 | 🟡 **Built, never run on real infrastructure** | Pimlico SimpleAccount + receipt polling, IPFS pinning, the indexer endpoint contract. Needs a Sepolia deploy (#2), a funded sponsorship policy (#5), a live pin provider (#6), and an indexer (#15) |
 | 🟡 **Built, not yet proven on a device** | On-device Groth16 proving (`modules/expo-zkprove`). The Android library builds and the core is verified against the reference implementation, but it has not run on real hardware |
 | ❌ **Not started** | C2PA provenance, billing and accreditation backend, independent security audit |
@@ -90,14 +93,17 @@ git clone https://github.com/sailenceresw/khabardar.git
 cd khabardar
 npm install
 
-npm run contracts:test                        # 23 passing
+npm run contracts:test                        # 75 passing
+npm test                                      # 344 unit tests
+npm run eval:leaks                            # privacy check precision and recall
 npm run verify:slice --workspace apps/mobile  # headless end-to-end slice
 npm run mobile:web                            # dev server with hot reload
 ```
 
-Then walk the slice: create identity → **New report** → fill category/body/area →
-**Review & submit** → watch it anchor (simulated tx via `MockRelayer`) → the status
-screen shows the report fingerprint and tx hash.
+Then walk the slice: create identity → **New report** → write the report → **Review &
+submit** → the privacy check → **Continue to review** → **Submit anonymously** → the status
+screen shows the report fingerprint and a simulated transaction from `MockRelayer`. For a
+timed, click-by-click version, see [docs/pitch/DEMO_SCRIPT.md](./docs/pitch/DEMO_SCRIPT.md).
 
 <details>
 <summary><b>Other ways to run it</b></summary>
@@ -179,6 +185,7 @@ payment step.
 | Threat | Mitigation |
 |---|---|
 | Identity leakage at signup | No PII collected, device keypair only (`src/identity.ts`) |
+| Identifying details in the report text | On-device privacy check before review; nothing is sent to be checked (`packages/shared/src/leaks/`, `app/compose/privacy.tsx`) |
 | EXIF/GPS in evidence | Client-side re-encode before anything is stored (`src/evidence.ts`) |
 | Precise location in report | Geohash hard-capped at 4 chars ≈ city level (`src/geo.ts`) |
 | Device seizure | AES-256-GCM at rest + **panic delete** wipes drafts, evidence, keys, identity (`src/panic.ts`) |
@@ -220,7 +227,9 @@ khabardar/
 │   ├── contracts/         # Hardhat + Solidity (ReportRegistry.sol) → Linea
 │   └── shared/            # chain config, ABI, TypeScript types shared app↔contracts
 ├── docs/
-│   └── ARCHITECTURE.md    # anonymity model, chain, content, gasless, moderation
+│   ├── ARCHITECTURE.md    # anonymity model, chain, content, gasless, moderation
+│   ├── LEAK_CHECKER.md    # what the privacy check finds, misses, and how it scores
+│   └── pitch/             # demo script, deck outline, Q&A prep
 ├── BUSINESS.md            # revenue model, unit economics, honest build status
 └── .env.example           # every env var documented
 ```
@@ -231,7 +240,7 @@ Tracked as [issues](https://github.com/sailenceresw/khabardar/issues), grouped b
 
 | Phase | Focus |
 |---|---|
-| [`v0.1-testnet`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.1-testnet) | Stop being a mock: deploy to Linea Sepolia, real sponsored gas, real IPFS; UI polish remaining (#33, #34) |
+| [`v0.1-testnet`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.1-testnet) | Stop being a mock: deploy to Linea Sepolia, real sponsored gas, real IPFS |
 | [`v0.2-anonymity`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.2-anonymity) | Tor transport, proof-of-personhood, tip padding and forward secrecy, verifiable recipient keys, stealth mode |
 | [`v0.3-scale`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av0.3-scale) | Real indexer, karma-weighted jury, publicly auditable moderation log, large/audio/document evidence |
 | [`v1.0-launch`](https://github.com/sailenceresw/khabardar/issues?q=is%3Aissue+is%3Aopen+label%3Av1.0-launch) | Demo data removed, external audit, org billing backend, C2PA provenance, more languages |
@@ -273,6 +282,10 @@ does not exist:
   the web preview cannot load it, and there the app is unprotected and says so.
 - On-device zero-knowledge proving has never run on real hardware.
 - Entity tags are reversible by dictionary attack, which is an accepted trade-off.
+- The privacy check matches patterns. It misses paraphrased roles, names outside its
+  lists, Devanagari script and numbers written as words, and does not look at faces or
+  text inside photos.
+- Only vanilla Tor bridges are supported, so where Tor is censored bootstrap may fail.
 - The jury's decision log is device-local, so verdicts are not yet publicly auditable.
 - The web build's SecureStore fallback is localStorage, which is **dev preview only**.
 - Demo recipient keys, sample feed rows, and demo sponsor pools ship in this build and

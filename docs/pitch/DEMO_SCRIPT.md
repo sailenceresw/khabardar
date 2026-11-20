@@ -25,7 +25,7 @@ The demo runs in mock mode. Nothing is sent to a blockchain or to IPFS, and both
 | 0:45 | On Home, click **New report**. Paste the text into the report box. | Here is a report written the way a real person writes it. It is honest, and it would get them identified. |
 | 1:00 | Click **Review & submit**. | Before review, the privacy check runs. It runs on the phone and sends nothing anywhere. |
 | 1:05 | Point at the five highlighted findings. | It found the phone number and the email, and also the quieter things: "the only accountant in the office" narrows it to one person, and an exact date and time do the same. |
-| 1:20 | On the phone number and the email, click **Redact**. On "the only accountant", click **Fix** and change it to "a staff member", then **Save**. On the date and time, click **Keep anyway**. | The reporter decides. Nothing is blocked; some details are part of the story. |
+| 1:20 | On the phone number and the email, click **Redact**. On "the only accountant", click **Fix** and change it to "I work in the office", then **Save**. On the date and time, click **Keep anyway**. | The reporter decides. Nothing is blocked; some details are part of the story. |
 | 1:40 | Click **Continue to review**. | |
 | 1:45 | On **Your connection is not protected**, click **Send unprotected anyway**. | The phone app routes everything through Tor. The browser cannot, so the app says so and makes you choose. |
 | 1:55 | Click **Submit anonymously**. Point at **Report fingerprint**, then at the yellow note under it that starts "Simulated". | The report is encrypted, and only this fingerprint goes on the chain. This build is in mock mode, so the app says plainly that nothing went to a chain. |
