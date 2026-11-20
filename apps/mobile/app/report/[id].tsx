@@ -4,6 +4,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import type { AnonymousReport } from "@khabardar/shared";
 import { ACTIVE_CHAIN, REPORT_CATEGORY_KEYS } from "@khabardar/shared";
 import { loadReport } from "../../src/drafts";
+import { getRuntimeConfig } from "../../src/runtimeConfig";
 import {
   Badge,
   Body,
@@ -53,6 +54,9 @@ export default function ReportStatusScreen() {
       </Screen>
     );
   }
+
+  // Mock mode fabricates the transaction, so an "anchored" report there was never on a chain.
+  const simulated = getRuntimeConfig().mode !== "live";
 
   const tone = {
     draft: "dim" as const,
@@ -128,7 +132,13 @@ export default function ReportStatusScreen() {
             </>
           ) : null}
 
-          {report.txHash && report.status === "anchored" ? (
+          {/* A mock anchor's hash was made up on this device. Linking it to Lineascan would
+              show a missing transaction and suggest something was anchored when nothing was. */}
+          {report.txHash && report.status === "anchored" && simulated ? (
+            <Notice tone="warn">{t("status.simulated")}</Notice>
+          ) : null}
+
+          {report.txHash && report.status === "anchored" && !simulated ? (
             <Button
               label={t("status.viewOnExplorer")}
               variant="secondary"
@@ -167,7 +177,9 @@ export default function ReportStatusScreen() {
         />
       ) : null}
 
-      <Button label={t("common.back")} onPress={() => router.back()} variant="ghost" />
+      {/* Going back after a submit would land on the privacy check of a report that has
+          already been sent, so this always returns to Home. */}
+      <Button label={t("status.backHome")} onPress={() => router.dismissTo("/")} variant="ghost" />
     </Screen>
   );
 }
