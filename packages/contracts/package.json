@@ -7,7 +7,8 @@
     "test": "hardhat test",
     "deploy:sepolia": "hardhat run scripts/deploy.ts --network lineaSepolia",
     "deploy:mainnet": "hardhat run scripts/deploy.ts --network lineaMainnet",
-    "node": "hardhat node"
+    "node": "hardhat node",
+    "relayer": "ts-node relayer/server.ts"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
