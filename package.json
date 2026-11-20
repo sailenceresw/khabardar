@@ -12,6 +12,7 @@
     "contracts:compile": "npm run compile --workspace packages/contracts",
     "contracts:test": "npm run test --workspace packages/contracts",
     "contracts:deploy:sepolia": "npm run deploy:sepolia --workspace packages/contracts",
+    "relayer:start": "npm run relayer --workspace packages/contracts",
     "mobile:start": "npm run start --workspace apps/mobile",
     "mobile:web": "npm run web --workspace apps/mobile",
     "mobile:typecheck": "npm run typecheck --workspace apps/mobile",

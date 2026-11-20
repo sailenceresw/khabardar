@@ -271,6 +271,14 @@ and prints both addresses.
 Only `submitReport` is meant to go this way. Corroboration and jury votes stay direct
 calls, and the personhood gates still read `msg.sender`.
 
+The relayer lives in `packages/contracts/relayer/` and runs with `npm run relayer:start`
+(`POST /relay`, `GET /health`). Before paying for anything it checks that the request
+calls `submitReport` on the registry with no value, a capped gas limit and a deadline
+under an hour away, then verifies the signature and simulates the call, so a forged or
+failing request costs it nothing. A global per-minute limit and a daily spend cap stop
+one caller from draining the wallet. It keeps no per-IP state and logs no request
+bodies, addresses or IPs. It refuses to start on Linea mainnet.
+
 ### Privacy note on sponsored gas
 
 A paymaster sees the UserOperations it sponsors (sender address, calldata, IP of the
