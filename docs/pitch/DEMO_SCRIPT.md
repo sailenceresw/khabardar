@@ -10,7 +10,7 @@ The demo runs in mock mode. Nothing is sent to a blockchain or to IPFS, and both
 2. Set the window to phone width, or open it on a phone. The app keeps itself to a phone-sized column on wide screens.
 3. Copy this text so you can paste it in step 3:
 
-   > I am the only accountant in the office. On 3 March at 4:15 the officer asked me to sign a false voucher. Call me on 9841234567 or email sunita.lama@gmail.com.
+   > I am the only accountant in the office. On 3 March at 4:15 the officer asked me to sign a false voucher. Call me on 9800000000 or email sunita.lama@example.com.
 
 4. Have the offline copy ready (see the last section) and the recorded video open in another tab.
 

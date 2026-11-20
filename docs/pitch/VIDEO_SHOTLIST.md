@@ -26,7 +26,7 @@ A two minute recording of the same walkthrough as [DEMO_SCRIPT.md](./DEMO_SCRIPT
 
 ## Checks before publishing
 
-- No real names, phone numbers or emails appear anywhere. The sample report uses made-up details.
+- No real phone numbers or emails appear anywhere. The sample report uses 9800000000 and an address at example.com, a domain reserved for examples.
 - The "Simulated" note is visible in shot 5, so nobody mistakes the demo for a live anchor.
 - Captions match the voice-over.
 - Once the testnet deploy is done, a second cut can replace shot 5 with a live anchor and the Lineascan page.
