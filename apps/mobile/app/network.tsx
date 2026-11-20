@@ -18,7 +18,7 @@ import {
   type TorAvailability,
 } from "../src/net/torTransport";
 import type { TorStatus } from "expo-tor";
-import { Badge, Body, Button, Card, Mono, Screen, Title } from "../src/ui";
+import { Badge, Body, Button, Card, Mono, Screen } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
@@ -89,7 +89,6 @@ export default function NetworkScreen() {
 
   return (
     <Screen>
-      <Title>{t("net.title")}</Title>
 
       <Card style={{ borderColor: probe.verified ? colors.success : colors.danger }}>
         <Body dim>{t("net.transport")}</Body>
