@@ -2,7 +2,7 @@
 
 Ten slides for a five minute pitch, with the live demo from [DEMO_SCRIPT.md](./DEMO_SCRIPT.md) between slides 4 and 5. Each slide has a headline, what goes on it, and what to say. Every number comes from the repo and has its source next to it, so a judge who asks can be shown where it came from. Answers to the likely follow-up questions are in [QA_PREP.md](./QA_PREP.md).
 
-The images in `docs/media/` predate the redesigned screens. Take fresh screenshots from the web build at phone width before building the deck.
+Screenshots of the current screens at phone size are in `docs/media/`.
 
 ## 1. Khabardar
 
