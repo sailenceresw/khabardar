@@ -150,6 +150,8 @@
     "continueWithWarnings": { "one": "Continue with 1 detail unchanged", "other": "Continue with %{count} details unchanged" }
   },
   "status": {
+    "simulated": "Simulated. This build runs in mock mode, so nothing was sent to a blockchain and this transaction hash was made up on this device.",
+    "backHome": "Back to home",
     "title": "Report status",
     "draft": "Draft — stored encrypted on this device",
     "submitting": "Submitting…",
