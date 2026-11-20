@@ -16,7 +16,7 @@ import {
   type InvestigationCase,
   type OutcomeSummary,
 } from "../src/cases";
-import { Badge, Body, Button, Card, Screen, Title } from "../src/ui";
+import { Badge, Body, Button, Card, Screen, Title, toggleState } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
@@ -126,6 +126,7 @@ export default function CasesScreen() {
         <Card>
           <Body dim>{t("cases.newCase")}</Body>
           <TextInput
+            accessibilityLabel={t("cases.titlePlaceholder")}
             style={styles.input}
             placeholder={t("cases.titlePlaceholder")}
             placeholderTextColor={colors.textDim}
@@ -165,6 +166,7 @@ export default function CasesScreen() {
 
           {c.status === CaseStatus.Closed || closeReasons[c.id] !== undefined ? (
             <TextInput
+              accessibilityLabel={t("cases.closeReasonPlaceholder")}
               style={styles.input}
               placeholder={t("cases.closeReasonPlaceholder")}
               placeholderTextColor={colors.textDim}
@@ -186,6 +188,7 @@ export default function CasesScreen() {
           </View>
 
           <TextInput
+            accessibilityLabel={t("cases.notePlaceholder")}
             style={styles.input}
             placeholder={t("cases.notePlaceholder")}
             placeholderTextColor={colors.textDim}
@@ -219,7 +222,7 @@ export default function CasesScreen() {
 
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress}>
+    <Pressable onPress={onPress} accessibilityRole="button" hitSlop={6} {...toggleState(active)}>
       <View style={[styles.chip, active && styles.chipActive]}>
         <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
       </View>

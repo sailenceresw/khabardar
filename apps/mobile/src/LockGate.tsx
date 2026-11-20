@@ -90,7 +90,7 @@ export function LockGate({ children }: { children: React.ReactNode }) {
         <Text style={styles.lockTitle}>{t("common.error")}</Text>
         <Text style={styles.failureBody}>{t("stealth.lockUnreadable")}</Text>
         <Text style={styles.failureDetail}>{failure}</Text>
-        <Pressable style={styles.retry} onPress={() => setAttempt((n) => n + 1)}>
+        <Pressable style={styles.retry} onPress={() => setAttempt((n) => n + 1)} accessibilityRole="button">
           <Text style={styles.retryLabel}>{t("common.retry")}</Text>
         </Pressable>
       </View>
@@ -256,6 +256,8 @@ function Key({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
       style={({ pressed }) => [styles.key, { backgroundColor: bg, opacity: pressed ? 0.7 : 1 }]}
     >
       <Text style={[styles.keyLabel, { color: fg }]}>{label}</Text>

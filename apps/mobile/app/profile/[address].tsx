@@ -115,6 +115,7 @@ export default function ProfileScreen() {
           <Card>
             <Body dim>{t("social.bioLabel")}</Body>
             <TextInput
+              accessibilityLabel={t("social.bioPlaceholder")}
               style={styles.input}
               multiline
               maxLength={MAX_BIO_LENGTH}
@@ -220,7 +221,7 @@ function ProfileReportRow({
 
   return (
     <View style={styles.reportRow}>
-      <Pressable onPress={onOpen}>
+      <Pressable onPress={onOpen} accessibilityRole="button" accessibilityHint={t("feed.openReportHint")}>
         <View style={styles.row}>
           <Body>{t(REPORT_CATEGORY_KEYS[report.category])}</Body>
           <TierBadge tier={report.tier} />
@@ -232,6 +233,8 @@ function ProfileReportRow({
         <View style={styles.row}>
           {!listed ? <Badge label={t("social.unlisted")} tone="dim" /> : <View />}
           <Pressable
+            accessibilityRole="button"
+            hitSlop={10}
             onPress={async () => {
               await setReportListed(report.onChainReportId, !listed);
               setListed(!listed);

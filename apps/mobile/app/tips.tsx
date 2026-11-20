@@ -9,7 +9,7 @@ import {
   type KeyCheck,
 } from "../src/content/recipients";
 import { listRecipients, listTips, sendTip, type TipRecord } from "../src/tips";
-import { Body, Button, Card, Mono, Screen, Title } from "../src/ui";
+import { Body, Button, Card, Mono, Screen, Title, toggleState } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
@@ -91,7 +91,13 @@ export default function TipsScreen() {
         <Body dim>{t("tips.recipientLabel")}</Body>
         <View style={styles.chips}>
           {recipients.map((r) => (
-            <Pressable key={r.id} onPress={() => setRecipientId(r.id)}>
+            <Pressable
+              key={r.id}
+              onPress={() => setRecipientId(r.id)}
+              accessibilityRole="button"
+              hitSlop={6}
+              {...toggleState(recipientId === r.id)}
+            >
               <View style={[styles.chip, recipientId === r.id && styles.chipActive]}>
                 <Text style={[styles.chipText, recipientId === r.id && styles.chipTextActive]}>
                   {r.name}
@@ -154,6 +160,7 @@ export default function TipsScreen() {
       <Card>
         <Body dim>{t("tips.messageLabel")}</Body>
         <TextInput
+          accessibilityLabel={t("tips.messagePlaceholder")}
           style={styles.textArea}
           multiline
           numberOfLines={6}
@@ -183,7 +190,7 @@ export default function TipsScreen() {
         </Card>
       ) : null}
 
-      <Pressable onPress={() => router.push("/")}>
+      <Pressable onPress={() => router.push("/")} accessibilityRole="link" hitSlop={10}>
         <Text style={styles.link}>{t("feed.backHome")}</Text>
       </Pressable>
     </Screen>

@@ -243,7 +243,12 @@ export default function OrgFeedScreen() {
             {exportNote ? <Notice tone="info">{exportNote}</Notice> : null}
           </Card>
           {reports.map((r) => (
-            <Pressable key={r.onChainReportId} onPress={() => router.push(`/feed/${r.onChainReportId}`)}>
+            <Pressable
+              key={r.onChainReportId}
+              onPress={() => router.push(`/feed/${r.onChainReportId}`)}
+              accessibilityRole="button"
+              accessibilityHint={t("feed.openReportHint")}
+            >
               <Card>
                 <View style={styles.row}>
                   <Body>{t(REPORT_CATEGORY_KEYS[r.category])}</Body>

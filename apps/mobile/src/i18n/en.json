@@ -284,6 +284,8 @@
     "journalists": "Journalists only"
   },
   "org": {
+    "revokeSeatA11y": "Revoke the seat for %{email}",
+    "revokeKeyA11y": "Revoke the API key %{label}",
     "title": "Organization workspace",
     "separationWarning": "This is a named, accountable account for newsrooms, NGOs, oversight bodies and funders. It is completely separate from anonymous reporting. If you also want to report something, do it from a different device or install — never from an account that identifies you.",
     "registerTitle": "Register your organization",

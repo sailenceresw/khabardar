@@ -13,7 +13,7 @@ import {
   StealthPinRejected,
   type StealthConfig,
 } from "../src/stealth";
-import { Body, Button, Card, Screen, Title } from "../src/ui";
+import { Body, Button, Card, Screen, Title, toggleState } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
@@ -143,6 +143,7 @@ export default function StealthScreen() {
         <Body dim>{t("stealth.lockExplainer")}</Body>
         <TextInput
           style={styles.input}
+          accessibilityLabel={t("stealth.lockTitle")}
           placeholder={t("stealth.pinPlaceholder")}
           placeholderTextColor={colors.textDim}
           keyboardType="number-pad"
@@ -164,6 +165,7 @@ export default function StealthScreen() {
         <Body>{t("stealth.duressExplainer")}</Body>
         <TextInput
           style={styles.input}
+          accessibilityLabel={t("stealth.duressTitle")}
           placeholder={t("stealth.pinPlaceholder")}
           placeholderTextColor={colors.textDim}
           keyboardType="number-pad"
@@ -186,7 +188,13 @@ export default function StealthScreen() {
         <Body dim>{t("stealth.disguiseExplainer")}</Body>
         <View style={styles.chips}>
           {DISGUISES.map((d) => (
-            <Pressable key={d.mode} onPress={() => chooseDisguise(d.mode)}>
+            <Pressable
+              key={d.mode}
+              onPress={() => chooseDisguise(d.mode)}
+              accessibilityRole="button"
+              hitSlop={6}
+              {...toggleState(config.disguise === d.mode)}
+            >
               <View style={[styles.chip, config.disguise === d.mode && styles.chipActive]}>
                 <Text
                   style={[styles.chipText, config.disguise === d.mode && styles.chipTextActive]}
