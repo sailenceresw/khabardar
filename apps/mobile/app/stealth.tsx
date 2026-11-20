@@ -13,7 +13,7 @@ import {
   StealthPinRejected,
   type StealthConfig,
 } from "../src/stealth";
-import { Body, Button, Card, Screen, Title, toggleState } from "../src/ui";
+import { Body, Button, Card, Screen, toggleState } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
 
@@ -124,7 +124,6 @@ export default function StealthScreen() {
 
   return (
     <Screen>
-      <Title>{t("stealth.title")}</Title>
 
       <Card style={{ borderColor: colors.info }}>
         <Body dim>{t("stealth.intro")}</Body>

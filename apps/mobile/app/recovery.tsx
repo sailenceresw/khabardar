@@ -13,7 +13,6 @@ import {
   Notice,
   Screen,
   SectionHeader,
-  Title,
 } from "../src/ui";
 import { colors, radius, spacing } from "../src/theme";
 import { t } from "../src/i18n";
@@ -60,7 +59,6 @@ export default function RecoveryScreen() {
 
   return (
     <Screen>
-      <Title>{t("recovery.title")}</Title>
       <Body dim>{t("recovery.explainer")}</Body>
 
       <Notice tone="danger">{t("recovery.warning")}</Notice>

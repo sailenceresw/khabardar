@@ -255,7 +255,10 @@
     "unavailable": "Content unavailable — the encrypted bundle could not be fetched.",
     "sample": "sample",
     "sampleNotice": "This is a fictional sample report included so the feed is not empty. It describes no real person or incident.",
-    "corroborations": "%{count} corroborations",
+    "corroborations": {
+      "one": "%{count} corroboration",
+      "other": "%{count} corroborations"
+    },
     "threshold": "%{n} needed for community corroboration",
     "corroborate": "I witnessed this too",
     "corroborateHelp": "Only corroborate if you independently saw or experienced this. False corroboration destroys the signal that makes this feed useful.",

@@ -66,7 +66,6 @@ export default function WalletScreen() {
 
   return (
     <Screen>
-      <Title>{t("wallet.title")}</Title>
       <Body dim>{t("wallet.intro")}</Body>
 
       {/* Warning stays ABOVE any connect control — anonymity trade-off, not a convenience toggle. */}
