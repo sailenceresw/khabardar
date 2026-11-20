@@ -6,10 +6,12 @@ we will too.
 
 ## Do not use this for real reports yet
 
-**Khabardar is a v0 prototype. It has not been audited, and its network transport does
-not protect you on its own.** There is now a transport layer that prefers onion
-endpoints, but requests still leave over plain `fetch`: anonymity depends entirely on
-Orbot routing the whole device, and the app cannot verify that it is. A targeted user
+**Khabardar is a v0 prototype. It has not been audited, and its network protection
+has not been proven on a real device.** Native builds embed a Tor client (Arti) and
+can refuse to send anything that would not go through it, but no dev build has yet
+run Tor on a phone and landed a report. The web preview and Expo Go cannot load Tor
+at all, and there every request leaves from your IP address unless the build is pointed
+at an anonymising proxy, which then sees every destination you contact. A targeted user
 could be deanonymized at the network layer regardless of how well the cryptography
 works.
 
@@ -77,28 +79,36 @@ Ranked by how much we care, which is not the same as how severe a scanner would 
 These are real weaknesses, and we already know. Reports are welcome if you can show a
 worse impact than we have described, but they are not news:
 
-- **The transport does not anonymise by itself.** The transport layer prefers onion
-  endpoints where they are configured, but it calls plain `fetch`, so without Orbot
-  active the IP address still reaches the relayer, RPC, and content gateway directly.
-  `isProtected()` reports what the caller asserted, not a verified circuit. The relayer
-  now sends its bundler and paymaster JSON-RPC through the same layer, but viem's chain
-  client still drives its own fetch, so onion selection applies to it while the request
-  itself does not pass through the wrapper.
+- **Embedded Tor is unproven on a device.** Every request goes through `netFetch` in
+  `apps/mobile/src/net/`, and the viem chain clients use the same path. In a native
+  build with Arti running, that path is Tor; the SOCKS5 layer has unit tests, but
+  nothing yet tests Arti against the live network. Without Arti (the web preview,
+  Expo Go, or Tor not started) requests go direct, or through
+  `EXPO_PUBLIC_ANONYMISING_PROXY_URL` when it is set, unless the fail-closed setting is
+  on, and that setting is off by default. A system-wide VPN such as Orbot cannot be
+  seen from inside the app, so it is never reported as verified.
   Tracked in [#9](https://github.com/sailenceresw/khabardar/issues/9).
+- **Only vanilla Tor bridges are supported.** obfs4, snowflake and other pluggable
+  transports are not in the build, so where Tor is censored bootstrap may fail.
 - **Corroboration and karma are not sybil-resistant.** Tracked in
   [#10](https://github.com/sailenceresw/khabardar/issues/10).
 - **Entity tags are reversible by dictionary attack.** The set of public offices is
   enumerable. This is an accepted trade-off: the accused is not the secret, the
   reporter is.
-- **Single moderator address.** Centralization point, testnet only. Tracked in
-  [#16](https://github.com/sailenceresw/khabardar/issues/16).
+- **The moderation jury is only as independent as its seats.** The single moderator
+  address was replaced by an equal-weight secret-ballot jury with a quorum of three
+  ([#16](https://github.com/sailenceresw/khabardar/issues/16)). A deployment that seats
+  fewer than three unrelated jurors brings the centralization back. The jury's decision
+  log is kept on the device, so verdicts are not yet publicly auditable. Tracked in
+  [#17](https://github.com/sailenceresw/khabardar/issues/17).
 - **Demo recipient keys and sample feed rows ship in the current build.** Tracked in
   [#21](https://github.com/sailenceresw/khabardar/issues/21).
 - **Web build's SecureStore falls back to localStorage.** Dev preview only, never a
   release path.
-- **Tip length leaks; tips lack forward secrecy.** Tracked in
-  [#11](https://github.com/sailenceresw/khabardar/issues/11) and
-  [#12](https://github.com/sailenceresw/khabardar/issues/12).
+- **Tips lack forward secrecy.** A recipient key stolen later opens every tip sealed
+  to it. Tracked in [#12](https://github.com/sailenceresw/khabardar/issues/12). Tip
+  length is padded to fixed buckets ([#11](https://github.com/sailenceresw/khabardar/issues/11)),
+  so only the bucket leaks, not the exact length.
 - **The leak checker matches patterns and misses things.** Paraphrased roles, names
   outside its lists, Devanagari script and numbers written as words all get through.
   Its measured precision and recall come from a small synthetic set written by the same
