@@ -27,7 +27,7 @@ export function TabBar() {
             onPress={() => (tab.primary ? router.push(tab.href as Href) : router.navigate(tab.href as Href))}
             style={styles.item}
             accessibilityRole={tab.primary ? "button" : "tab"}
-            accessibilityState={{ selected: active }}
+            aria-selected={active}
             accessibilityLabel={label}
           >
             {tab.primary ? (

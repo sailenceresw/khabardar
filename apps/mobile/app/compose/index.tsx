@@ -175,6 +175,7 @@ export default function ComposeScreen() {
         </View>
         <TextInput
           style={styles.textArea}
+          accessibilityLabel={t("compose.bodyLabel")}
           multiline
           numberOfLines={6}
           placeholder={t("compose.bodyPlaceholder")}
@@ -224,6 +225,7 @@ export default function ComposeScreen() {
         <Body dim>{t("compose.entityLabel")}</Body>
         <TextInput
           style={styles.input}
+          accessibilityLabel={t("compose.entityLabel")}
           placeholder={t("compose.entityPlaceholder")}
           placeholderTextColor={colors.textMuted}
           value={entityName}
@@ -236,6 +238,7 @@ export default function ComposeScreen() {
         <Body dim>{t("compose.locationLabel")}</Body>
         <TextInput
           style={styles.input}
+          accessibilityLabel={t("compose.locationLabel")}
           placeholder={t("compose.locationPlaceholder")}
           placeholderTextColor={colors.textMuted}
           autoCapitalize="none"
@@ -258,7 +261,12 @@ export default function ComposeScreen() {
               {EVIDENCE_ICON[item.kind]} {(item.sizeBytes / 1024).toFixed(0)} KB —{" "}
               {item.sha256.slice(0, 12)}…
             </Body>
-            <Pressable onPress={() => removePhoto(item)} hitSlop={8}>
+            <Pressable
+              onPress={() => removePhoto(item)}
+              hitSlop={14}
+              accessibilityRole="button"
+              accessibilityLabel={t("compose.removeEvidence")}
+            >
               <Text style={{ color: colors.danger, fontWeight: "700" }}>✕</Text>
             </Pressable>
           </View>

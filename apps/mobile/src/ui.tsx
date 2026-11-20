@@ -1,6 +1,7 @@
 import React from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,19 @@ import {
 import { VerificationTier } from "@khabardar/shared";
 import { colors, radius, spacing, typography } from "./theme";
 import { t } from "./i18n";
+
+/**
+ * State props for a control that is switched on or off, such as a filter chip.
+ *
+ * react-native-web reads only the aria-* props, not accessibilityState, and
+ * React Native maps aria-selected to the native "selected" state. On the web a
+ * toggle button is described with aria-pressed, so that is added there.
+ */
+export function toggleState(on: boolean) {
+  return Platform.OS === "web"
+    ? ({ "aria-selected": on, "aria-pressed": on } as { "aria-selected": boolean })
+    : { "aria-selected": on };
+}
 
 export function Screen({
   children,
@@ -82,7 +96,11 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
 }
 
 export function Title({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.title}>{children}</Text>;
+  return (
+    <Text style={styles.title} accessibilityRole="header">
+      {children}
+    </Text>
+  );
 }
 
 export function Subtitle({ children }: { children: React.ReactNode }) {
@@ -116,7 +134,7 @@ export function SectionHeader({
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
       {action ? (
-        <Pressable onPress={action.onPress} hitSlop={8}>
+        <Pressable onPress={action.onPress} hitSlop={12} accessibilityRole="button" accessibilityLabel={action.label}>
           <Text style={styles.sectionAction}>{action.label}</Text>
         </Pressable>
       ) : null}
@@ -198,8 +216,17 @@ export function Chip({
   active?: boolean;
   onPress?: () => void;
 }) {
+  // A chip without onPress is a plain label, so it only gets a role when it can be pressed.
+  // The hit slop brings the touch target to 44 px without making the chip look bigger.
   return (
-    <Pressable onPress={onPress} disabled={!onPress}>
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      hitSlop={onPress ? { top: 6, bottom: 6, left: 2, right: 2 } : undefined}
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={label}
+      {...(onPress ? toggleState(!!active) : null)}
+    >
       <View style={[styles.chip, active && styles.chipActive]}>
         <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
       </View>
@@ -222,6 +249,9 @@ export function Field({
       {label ? <Caption>{label}</Caption> : null}
       <TextInput
         placeholderTextColor={colors.textMuted}
+        // The caption above is only visual; screen readers need the label on the input itself.
+        accessibilityLabel={inputProps.accessibilityLabel ?? label ?? inputProps.placeholder}
+        accessibilityHint={error ?? help}
         style={[styles.input, error ? styles.inputError : null, inputProps.multiline && styles.inputMultiline]}
         {...inputProps}
       />
@@ -262,6 +292,11 @@ export function Button({
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      // The label stays readable while the spinner replaces it on screen.
+      accessibilityLabel={label}
+      aria-disabled={disabled || loading}
+      aria-busy={loading}
       style={({ pressed }) => [
         styles.button,
         variant === "ghost" && styles.buttonGhost,
@@ -397,7 +432,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
-    paddingVertical: 6,
+    paddingVertical: 8,
+    minHeight: 34,
+    justifyContent: "center",
   },
   chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   chipText: { color: colors.textDim, fontSize: 13 },

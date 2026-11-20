@@ -160,9 +160,15 @@ export default function FeedScreen() {
     <Screen>
       <Body dim>{t("feed.subtitle")}</Body>
 
-      <View style={styles.tabs}>
+      <View style={styles.tabs} accessibilityRole="tablist">
         {(["following", "all", "trending"] as FeedTab[]).map((key) => (
-          <Pressable key={key} onPress={() => setTab(key)} style={styles.tabFlex}>
+          <Pressable
+            key={key}
+            onPress={() => setTab(key)}
+            style={styles.tabFlex}
+            accessibilityRole="tab"
+            aria-selected={tab === key}
+          >
             <View style={[styles.tab, tab === key && styles.tabActive]}>
               <Text style={[styles.tabText, tab === key && styles.tabTextActive]}>
                 {t(`social.tab.${key}`)}
@@ -192,7 +198,7 @@ export default function FeedScreen() {
           onPress={() => setFiltersOpen((open) => !open)}
           style={[styles.filterButton, (filtersOpen || activeFilters > 0) && styles.filterButtonActive]}
           accessibilityRole="button"
-          accessibilityState={{ expanded: filtersOpen }}
+          aria-expanded={filtersOpen}
           accessibilityLabel={t("feed.filtersA11y", { count: activeFilters })}
         >
           <Ionicons name="options-outline" size={20} color={activeFilters > 0 ? colors.accent : colors.text} />
@@ -281,7 +287,12 @@ export default function FeedScreen() {
         <>
           <SectionHeader title={t("feed.resultCount", { count: visible.length })} />
           {visible.map((r) => (
-            <Pressable key={r.onChainReportId} onPress={() => router.push(`/feed/${r.onChainReportId}`)}>
+            <Pressable
+              key={r.onChainReportId}
+              onPress={() => router.push(`/feed/${r.onChainReportId}`)}
+              accessibilityRole="button"
+              accessibilityHint={t("feed.openReportHint")}
+            >
               <Card>
                 <View style={styles.row}>
                   <Body>{t(REPORT_CATEGORY_KEYS[r.category])}</Body>
