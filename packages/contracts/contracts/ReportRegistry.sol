@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {IPersonhoodGate} from "./IPersonhoodGate.sol";
 
 /// @title ReportRegistry
@@ -11,9 +12,18 @@ import {IPersonhoodGate} from "./IPersonhoodGate.sol";
 /// What never goes on-chain: report text, evidence bytes, precise location,
 /// or anything identifying the reporter.
 ///
-/// `msg.sender` is a pseudonymous, device-bound account (a counterfactual
-/// ERC-4337 smart account or a 7702-delegated EOA), submitted through a
-/// sponsoring relayer so the reporter never needs to hold ETH.
+/// The caller, read through {_msgSender}, is a pseudonymous, device-bound
+/// account. It reaches the contract in one of two ways, and both leave the
+/// reporter's own key as the caller:
+///
+/// - as a counterfactual ERC-4337 smart account or a 7702-delegated EOA,
+///   through a sponsoring bundler, or
+/// - as the device key itself, through the trusted ERC-2771 forwarder: the
+///   phone signs the request, a relayer pays the gas, and the forwarder
+///   appends the signer's address, which {_msgSender} returns.
+///
+/// Either way the reporter never needs to hold ETH, and a relayer can never
+/// become the reporter of a report it did not sign.
 ///
 /// ## Three defences, applied at different points
 ///
@@ -33,7 +43,7 @@ import {IPersonhoodGate} from "./IPersonhoodGate.sol";
 /// to remove, and would silence exactly the people least able to obtain
 /// credentials. Reporting stays open to any address; only *vouching for someone
 /// else* is gated, because that is where sybils actually buy something.
-contract ReportRegistry {
+contract ReportRegistry is ERC2771Context {
     enum Category {
         Bribery,
         Embezzlement,
@@ -291,19 +301,22 @@ contract ReportRegistry {
     mapping(bytes32 => uint256[]) private entityReports;
 
     modifier onlyAdmin() {
-        require(msg.sender == admin, "ReportRegistry: not admin");
+        require(_msgSender() == admin, "ReportRegistry: not admin");
         _;
     }
 
     modifier onlyJuror() {
-        require(isJuror[msg.sender], "ReportRegistry: not juror");
+        require(isJuror[_msgSender()], "ReportRegistry: not juror");
         _;
     }
 
     /// @param initialAdmin Manages the juror set. Also seated as the first
     /// juror so a fresh deployment has a functioning (if not yet decentralized)
     /// review path; add more before relying on any verdict.
-    constructor(address initialAdmin) {
+    /// @param trustedForwarder The ERC-2771 forwarder allowed to relay signed
+    /// calls, or the zero address for none. It is immutable: a forwarder that
+    /// could be swapped later could be swapped for one that forges senders.
+    constructor(address initialAdmin, address trustedForwarder) ERC2771Context(trustedForwarder) {
         require(initialAdmin != address(0), "ReportRegistry: zero admin");
         admin = initialAdmin;
         _setJuror(initialAdmin, true);
@@ -341,9 +354,9 @@ contract ReportRegistry {
 
         // Rate limit, not identity check. See the contract-level table.
         uint256 epoch = currentEpoch();
-        uint256 used = epochSubmissions[msg.sender][epoch];
+        uint256 used = epochSubmissions[_msgSender()][epoch];
         require(used < MAX_REPORTS_PER_EPOCH, "ReportRegistry: epoch limit");
-        epochSubmissions[msg.sender][epoch] = used + 1;
+        epochSubmissions[_msgSender()][epoch] = used + 1;
 
         reportId = reportCount++;
         reports[reportId] = ReportRecord({
@@ -355,7 +368,7 @@ contract ReportRegistry {
             visibility: visibility,
             tier: uint8(VerificationTier.Unverified),
             timestamp: uint64(block.timestamp),
-            reporter: msg.sender
+            reporter: _msgSender()
         });
 
         if (entityTag != bytes32(0)) {
@@ -364,7 +377,7 @@ contract ReportRegistry {
 
         emit ReportSubmitted(
             reportId,
-            msg.sender,
+            _msgSender(),
             entityTag,
             reportHash,
             cid,
@@ -407,11 +420,11 @@ contract ReportRegistry {
     /// enforces when one is configured.
     function corroborate(uint256 reportId) external {
         require(reportId < reportCount, "ReportRegistry: unknown report");
-        require(reports[reportId].reporter != msg.sender, "ReportRegistry: self corroboration");
-        require(!hasCorroborated[reportId][msg.sender], "ReportRegistry: already corroborated");
-        require(_isPerson(msg.sender), "ReportRegistry: personhood required");
+        require(reports[reportId].reporter != _msgSender(), "ReportRegistry: self corroboration");
+        require(!hasCorroborated[reportId][_msgSender()], "ReportRegistry: already corroborated");
+        require(_isPerson(_msgSender()), "ReportRegistry: personhood required");
 
-        hasCorroborated[reportId][msg.sender] = true;
+        hasCorroborated[reportId][_msgSender()] = true;
         uint256 count = ++corroborationCount[reportId];
 
         // Auto-promote, but never overwrite a jury verdict.
@@ -424,7 +437,7 @@ contract ReportRegistry {
             emit ReportTierChanged(reportId, uint8(VerificationTier.CommunityCorroborated), address(0));
         }
 
-        emit ReportCorroborated(reportId, msg.sender, count);
+        emit ReportCorroborated(reportId, _msgSender(), count);
     }
 
     /// @notice Whether `account` may corroborate right now. An unset gate means
@@ -506,7 +519,7 @@ contract ReportRegistry {
     function commitVote(uint256 reportId, bytes32 commitment) external onlyJuror {
         require(reportId < reportCount, "ReportRegistry: unknown report");
         require(commitment != bytes32(0), "ReportRegistry: empty commitment");
-        require(reports[reportId].reporter != msg.sender, "ReportRegistry: self review");
+        require(reports[reportId].reporter != _msgSender(), "ReportRegistry: self review");
 
         JuryRound storage round = rounds[reportId];
 
@@ -522,15 +535,15 @@ contract ReportRegistry {
         require(round.phase == RoundPhase.Committing, "ReportRegistry: not committing");
         require(block.timestamp <= round.commitDeadline, "ReportRegistry: commit window closed");
         require(
-            commitmentOf[reportId][round.index][msg.sender] == bytes32(0),
+            commitmentOf[reportId][round.index][_msgSender()] == bytes32(0),
             "ReportRegistry: already committed"
         );
 
-        commitmentOf[reportId][round.index][msg.sender] = commitment;
-        panel[reportId][round.index].push(msg.sender);
+        commitmentOf[reportId][round.index][_msgSender()] = commitment;
+        panel[reportId][round.index].push(_msgSender());
         round.commits += 1;
 
-        emit JuryVoteCommitted(reportId, msg.sender, round.index);
+        emit JuryVoteCommitted(reportId, _msgSender(), round.index);
     }
 
     /// @notice Close the commit phase once its window has expired.
@@ -592,23 +605,23 @@ contract ReportRegistry {
         require(round.phase == RoundPhase.Revealing, "ReportRegistry: not revealing");
         require(block.timestamp <= round.revealDeadline, "ReportRegistry: reveal window closed");
 
-        bytes32 expected = commitmentOf[reportId][round.index][msg.sender];
+        bytes32 expected = commitmentOf[reportId][round.index][_msgSender()];
         require(expected != bytes32(0), "ReportRegistry: nothing committed");
         require(
-            revealedPlusOne[reportId][round.index][msg.sender] == 0,
+            revealedPlusOne[reportId][round.index][_msgSender()] == 0,
             "ReportRegistry: already revealed"
         );
         require(
-            commitmentFor(reportId, round.index, tier, salt, msg.sender) == expected,
+            commitmentFor(reportId, round.index, tier, salt, _msgSender()) == expected,
             "ReportRegistry: commitment mismatch"
         );
 
-        revealedPlusOne[reportId][round.index][msg.sender] = tier + 1;
+        revealedPlusOne[reportId][round.index][_msgSender()] = tier + 1;
         tierVotes[reportId][round.index][tier] += 1;
         round.reveals += 1;
-        jurorBallotsCompleted[msg.sender] += 1;
+        jurorBallotsCompleted[_msgSender()] += 1;
 
-        emit JuryVoteRevealed(reportId, msg.sender, tier, reason);
+        emit JuryVoteRevealed(reportId, _msgSender(), tier, reason);
 
         // Everyone who committed has now spoken; no reason to wait out the clock.
         if (round.reveals == round.commits) _closeRound(reportId, round);
@@ -646,7 +659,7 @@ contract ReportRegistry {
     /// a report is never punished twice for a decision that gets overturned.
     function appealVerdict(uint256 reportId) external {
         require(reportId < reportCount, "ReportRegistry: unknown report");
-        require(reports[reportId].reporter == msg.sender, "ReportRegistry: not the reporter");
+        require(reports[reportId].reporter == _msgSender(), "ReportRegistry: not the reporter");
 
         JuryRound storage round = rounds[reportId];
         require(round.phase == RoundPhase.Decided, "ReportRegistry: no verdict to appeal");
