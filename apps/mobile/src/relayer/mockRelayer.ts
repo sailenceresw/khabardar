@@ -8,8 +8,8 @@ import type { GaslessRelayer, RelayResult, SubmitReportParams } from "./types";
  * Simulates the full gasless path locally with no network access. It performs
  * the same encoding and signing steps as the real relayer — builds calldata,
  * signs a digest with the active signer — then fabricates a plausible tx hash
- * instead of broadcasting. Active in mock mode, and in live mode when the
- * Pimlico key or registry address is missing (see src/runtimeConfig.ts).
+ * instead of broadcasting. Active in mock mode, and in live mode when no
+ * relayer is configured or the registry address is missing (see src/runtimeConfig.ts).
  */
 export class MockRelayer implements GaslessRelayer {
   readonly name = "mock";

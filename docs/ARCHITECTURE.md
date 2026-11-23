@@ -279,6 +279,13 @@ failing request costs it nothing. A global per-minute limit and a daily spend ca
 one caller from draining the wallet. It keeps no per-IP state and logs no request
 bodies, addresses or IPs. It refuses to start on Linea mainnet.
 
+In the app, `ForwarderRelayer` (`src/relayer/forwarderRelayer.ts`) builds the request: it
+reads the signer's nonce from the forwarder through the anonymising transport, signs
+the EIP-712 request with the device key (or a connected wallet, over
+`eth_signTypedData_v4`), and posts it through `netFetch`. It is used in live mode when
+`EXPO_PUBLIC_RELAYER_URL`, `EXPO_PUBLIC_FORWARDER_ADDRESS` and the registry address are
+all set, and is preferred over Pimlico when both are configured.
+
 ### Privacy note on sponsored gas
 
 A paymaster sees the UserOperations it sponsors (sender address, calldata, IP of the

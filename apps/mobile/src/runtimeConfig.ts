@@ -18,6 +18,13 @@ export type Mode = "mock" | "live";
 export type RelayerConfig =
   | { kind: "mock" }
   | {
+      /** The self-hosted relayer: the device signs, the relayer pays, the forwarder relays. */
+      kind: "forwarder";
+      relayerUrl: string;
+      forwarderAddress: `0x${string}`;
+      registryAddress: `0x${string}`;
+    }
+  | {
       kind: "pimlico";
       apiKey: string;
       bundlerUrl: string;
@@ -51,6 +58,8 @@ export interface EnvSnapshot {
   KHABARDAR_MODE?: string;
   EXPO_PUBLIC_KHABARDAR_MODE?: string;
   EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS?: string;
+  EXPO_PUBLIC_FORWARDER_ADDRESS?: string;
+  EXPO_PUBLIC_RELAYER_URL?: string;
   EXPO_PUBLIC_PIMLICO_API_KEY?: string;
   EXPO_PUBLIC_PIMLICO_BUNDLER_URL?: string;
   EXPO_PUBLIC_PIMLICO_PAYMASTER_URL?: string;
@@ -131,10 +140,29 @@ export function resolveRuntimeConfig(env: EnvSnapshot, chain: ChainConfig = ACTI
     registryAddress = rawRegistry as `0x${string}`;
   }
 
+  // The self-hosted relayer comes first: it is the path this deployment runs.
+  // Pimlico stays as the alternative for anyone with an API key instead.
   let relayer: RelayerConfig = { kind: "mock" };
+  const relayerUrl = clean(env.EXPO_PUBLIC_RELAYER_URL);
+  const rawForwarder = clean(env.EXPO_PUBLIC_FORWARDER_ADDRESS);
   const apiKey = clean(env.EXPO_PUBLIC_PIMLICO_API_KEY);
-  if (!apiKey) {
-    problems.push("EXPO_PUBLIC_PIMLICO_API_KEY is not set, so submissions use the mock relayer.");
+  if (relayerUrl) {
+    if (!rawForwarder || !ADDRESS_RE.test(rawForwarder)) {
+      problems.push(
+        "EXPO_PUBLIC_RELAYER_URL is set but EXPO_PUBLIC_FORWARDER_ADDRESS is missing or not a 0x address, so submissions use the mock relayer."
+      );
+    } else if (registryAddress) {
+      relayer = {
+        kind: "forwarder",
+        relayerUrl: relayerUrl.replace(/\/+$/, ""),
+        forwarderAddress: rawForwarder as `0x${string}`,
+        registryAddress,
+      };
+    }
+  } else if (!apiKey) {
+    problems.push(
+      "Neither EXPO_PUBLIC_RELAYER_URL nor EXPO_PUBLIC_PIMLICO_API_KEY is set, so submissions use the mock relayer."
+    );
   } else if (registryAddress) {
     relayer = {
       kind: "pimlico",
@@ -184,6 +212,8 @@ export function readEnv(): EnvSnapshot {
     KHABARDAR_MODE: process.env.KHABARDAR_MODE,
     EXPO_PUBLIC_KHABARDAR_MODE: process.env.EXPO_PUBLIC_KHABARDAR_MODE,
     EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS: process.env.EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS,
+    EXPO_PUBLIC_FORWARDER_ADDRESS: process.env.EXPO_PUBLIC_FORWARDER_ADDRESS,
+    EXPO_PUBLIC_RELAYER_URL: process.env.EXPO_PUBLIC_RELAYER_URL,
     EXPO_PUBLIC_PIMLICO_API_KEY: process.env.EXPO_PUBLIC_PIMLICO_API_KEY,
     EXPO_PUBLIC_PIMLICO_BUNDLER_URL: process.env.EXPO_PUBLIC_PIMLICO_BUNDLER_URL,
     EXPO_PUBLIC_PIMLICO_PAYMASTER_URL: process.env.EXPO_PUBLIC_PIMLICO_PAYMASTER_URL,

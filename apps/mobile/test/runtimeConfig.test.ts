@@ -204,3 +204,53 @@ describe("getRuntimeConfig", () => {
     expect(warn).toHaveBeenCalledTimes(second.problems.length);
   });
 });
+
+describe("self-hosted relayer selection", () => {
+  const FORWARDER = "0x2222222222222222222222222222222222222222";
+
+  it("uses the self-hosted relayer when its URL and the forwarder address are set", () => {
+    const cfg = resolveRuntimeConfig(
+      fullLive({ EXPO_PUBLIC_RELAYER_URL: "https://relay.example/", EXPO_PUBLIC_FORWARDER_ADDRESS: FORWARDER })
+    );
+    expect(cfg.relayer).toEqual({
+      kind: "forwarder",
+      relayerUrl: "https://relay.example",
+      forwarderAddress: FORWARDER,
+      registryAddress: REGISTRY,
+    });
+    expect(cfg.problems).toEqual([]);
+  });
+
+  it("prefers the self-hosted relayer over Pimlico when both are configured", () => {
+    const cfg = resolveRuntimeConfig(
+      fullLive({ EXPO_PUBLIC_RELAYER_URL: "https://relay.example", EXPO_PUBLIC_FORWARDER_ADDRESS: FORWARDER })
+    );
+    expect(cfg.relayer.kind).toBe("forwarder");
+  });
+
+  it("stays on mock and says why when the forwarder address is missing or malformed", () => {
+    for (const forwarder of [undefined, "0x1234"]) {
+      const cfg = resolveRuntimeConfig(
+        fullLive({ EXPO_PUBLIC_RELAYER_URL: "https://relay.example", EXPO_PUBLIC_FORWARDER_ADDRESS: forwarder })
+      );
+      expect(cfg.relayer.kind).toBe("mock");
+      expect(cfg.problems).toEqual([expect.stringContaining("EXPO_PUBLIC_FORWARDER_ADDRESS")]);
+    }
+  });
+
+  it("stays on mock without a registry address", () => {
+    const cfg = resolveRuntimeConfig(
+      fullLive({
+        EXPO_PUBLIC_REPORT_REGISTRY_ADDRESS: "",
+        EXPO_PUBLIC_RELAYER_URL: "https://relay.example",
+        EXPO_PUBLIC_FORWARDER_ADDRESS: FORWARDER,
+      })
+    );
+    expect(cfg.relayer.kind).toBe("mock");
+  });
+
+  it("names both relayer options when neither is set", () => {
+    const cfg = resolveRuntimeConfig(fullLive({ EXPO_PUBLIC_PIMLICO_API_KEY: "" }));
+    expect(cfg.problems).toEqual([expect.stringContaining("Neither EXPO_PUBLIC_RELAYER_URL nor EXPO_PUBLIC_PIMLICO_API_KEY")]);
+  });
+});
