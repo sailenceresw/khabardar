@@ -1,7 +1,7 @@
-import type { Hex } from "viem";
+import type { Hex, TypedDataDefinition } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { getPrivateKey } from "./identity";
-import { getWalletSession, signWithWallet } from "./wallet";
+import { getWalletSession, signTypedDataWithWallet, signWithWallet } from "./wallet";
 
 /**
  * Whatever is currently authorised to sign a report submission.
@@ -19,6 +19,8 @@ export interface ReportSigner {
   address: string;
   kind: "device" | "wallet";
   signMessage(message: { raw: Hex }): Promise<Hex>;
+  /** EIP-712 signing, used for the forwarder's ForwardRequest. */
+  signTypedData(data: TypedDataDefinition): Promise<Hex>;
 }
 
 export async function getDeviceSigner(): Promise<ReportSigner | null> {
@@ -30,6 +32,7 @@ export async function getDeviceSigner(): Promise<ReportSigner | null> {
     address: account.address,
     kind: "device",
     signMessage: (message) => account.signMessage({ message }),
+    signTypedData: (data) => account.signTypedData(data),
   };
 }
 
@@ -41,6 +44,7 @@ export async function getWalletSigner(): Promise<ReportSigner | null> {
     address: session.address,
     kind: "wallet",
     signMessage: ({ raw }) => signWithWallet(session, raw),
+    signTypedData: (data) => signTypedDataWithWallet(session, data),
   };
 }
 

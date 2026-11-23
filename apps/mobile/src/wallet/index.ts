@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { Hex } from "viem";
+import type { Hex, TypedDataDefinition } from "viem";
 import { ACTIVE_CHAIN } from "@khabardar/shared";
 import type { ConnectHandle, WalletSession } from "./types";
 import { safeJsonParse } from "../safeJson";
@@ -70,6 +70,15 @@ export async function beginConnect(): Promise<ConnectHandle> {
         events: ["accountsChanged", "chainChanged"],
       },
     },
+    // Asked for, not required, so a wallet without typed-data signing can still
+    // connect. Only the self-hosted relayer path needs it.
+    optionalNamespaces: {
+      eip155: {
+        methods: ["eth_signTypedData_v4"],
+        chains: [chain],
+        events: [],
+      },
+    },
   });
 
   if (!uri) throw new Error("WalletConnect did not return a pairing URI");
@@ -109,6 +118,32 @@ export async function signWithWallet(session: WalletSession, message: Hex): Prom
     topic: session.topic,
     chainId: `eip155:${session.chainId}`,
     request: { method: "personal_sign", params: [message, session.address] },
+  }) as Promise<Hex>;
+}
+
+/**
+ * EIP-712 signing through the connected wallet (`eth_signTypedData_v4`).
+ *
+ * The payload is JSON, so bigints become decimal strings, and the domain type
+ * is spelled out because some wallets do not derive it.
+ */
+export async function signTypedDataWithWallet(session: WalletSession, data: TypedDataDefinition): Promise<Hex> {
+  const client = await getClient();
+  const domain = (data.domain ?? {}) as Record<string, unknown>;
+  const domainType = (["name", "version", "chainId", "verifyingContract", "salt"] as const)
+    .filter((k) => domain[k] !== undefined)
+    .map((k) => ({
+      name: k,
+      type: k === "chainId" ? "uint256" : k === "verifyingContract" ? "address" : k === "salt" ? "bytes32" : "string",
+    }));
+  const payload = JSON.stringify(
+    { ...data, types: { EIP712Domain: domainType, ...(data.types as object) } },
+    (_key, value) => (typeof value === "bigint" ? value.toString() : value)
+  );
+  return client.request({
+    topic: session.topic,
+    chainId: `eip155:${session.chainId}`,
+    request: { method: "eth_signTypedData_v4", params: [session.address, payload] },
   }) as Promise<Hex>;
 }
 

@@ -1,4 +1,5 @@
 import { getRuntimeConfig } from "../runtimeConfig";
+import { ForwarderRelayer } from "./forwarderRelayer";
 import { MockRelayer } from "./mockRelayer";
 import { PimlicoRelayer } from "./pimlicoRelayer";
 import type { GaslessRelayer } from "./types";
@@ -15,13 +16,19 @@ export function getRelayer(): GaslessRelayer {
 
   const { relayer } = getRuntimeConfig();
   instance =
-    relayer.kind === "pimlico"
-      ? new PimlicoRelayer({
-          apiKey: relayer.apiKey,
-          bundlerUrl: relayer.bundlerUrl,
-          paymasterUrl: relayer.paymasterUrl,
+    relayer.kind === "forwarder"
+      ? new ForwarderRelayer({
+          relayerUrl: relayer.relayerUrl,
+          forwarderAddress: relayer.forwarderAddress,
           registryAddress: relayer.registryAddress,
         })
-      : new MockRelayer();
+      : relayer.kind === "pimlico"
+        ? new PimlicoRelayer({
+            apiKey: relayer.apiKey,
+            bundlerUrl: relayer.bundlerUrl,
+            paymasterUrl: relayer.paymasterUrl,
+            registryAddress: relayer.registryAddress,
+          })
+        : new MockRelayer();
   return instance;
 }
